@@ -1,1 +1,1 @@
-{"version":"0.40.34","date":"2026-04-14","notes":"Zero bets from grid side: left edge of cells 1/2/3 for splits with zeros. Corners for zero streets. Bottom-left for basket. Zero cells only do splits and straights."}
+{"version":"0.40.35","date":"2026-05-03","notes":"Stable phone deployment at nexus-foundry.ai/roulette with a fresh PWA cache and location-relative updater."}
