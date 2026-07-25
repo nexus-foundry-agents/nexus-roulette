@@ -1,1 +1,1 @@
-{"version":"0.42.0","date":"2026-07-25","notes":"Auto-chase mode (bets the most-missed dozen/column, locked until hit or stop loss, ties random), free-entry min-drought field with 1-unit steps for 12-number targets, onboarding preset buttons fixed."}
+{"version":"0.43.0","date":"2026-07-25","notes":"Session Explorer in Experimental results: per-session P&L, sequence wins/losses, win rate, stop-loss count, low/high water marks, with filters (Won/Lost/Hit Stop) and sorting. Win-rate definition shown in the header."}

@@ -50,6 +50,7 @@ function simNewResults(strategyCount) {
 function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop) {
   const sState = strategies.map(strat=>({
     level:0, pnl:0, wins:0, losses:0, seqLosses:0, stopLossHits:0,
+    trough:0, peak:0, // deepest drawdown / highest running P&L within this session
     waitingForWin: !!(strat.config.parkRules&&strat.config.parkRules.waitForWin),
     parkedAfterLoss:false,
     activeBets:[], // solution: [{number, level}] — one progression per number, like live play
@@ -181,6 +182,11 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       }
     });
 
+    sState.forEach(st=>{
+      if(st.pnl<st.trough)st.trough=st.pnl;
+      if(st.pnl>st.peak)st.peak=st.pnl;
+    });
+
     // Droughts update AFTER every strategy has bet against this spin
     Object.keys(droughts).forEach(k=>droughts[k]++);
     droughts[val]=0;
@@ -189,6 +195,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
   return sState.map(st=>({
     pnl:Math.round(st.pnl*100)/100,
     wins:st.wins, losses:st.losses, seqLosses:st.seqLosses, stopLossHits:st.stopLossHits,
+    trough:Math.round(st.trough*100)/100, peak:Math.round(st.peak*100)/100,
   }));
 }
 

@@ -56,6 +56,76 @@ function StatContextBar({simResults, simCfg, sess, cur, pnlVal}) {
   );
 }
 
+// -- Per-Session Explorer (Results view) --
+// Filterable, sortable drill-down into every simulated session.
+function SessionExplorer({sessions, cur}) {
+  const [filter, setFilter] = useState("all");   // all | won | lost | stoploss
+  const [sort, setSort] = useState("order");     // order | best | worst
+  const [shown, setShown] = useState(50);
+
+  const indexed = sessions.map((s,i)=>({...s, idx:i+1}));
+  const filtered = indexed.filter(s=>{
+    if(filter==="won") return s.pnl>0;
+    if(filter==="lost") return s.pnl<0;
+    if(filter==="stoploss") return (s.stopLossHits||0)>0;
+    return true;
+  });
+  const sorted = sort==="order" ? filtered
+    : [...filtered].sort((a,b)=>sort==="best" ? b.pnl-a.pnl : a.pnl-b.pnl);
+  const visible = sorted.slice(0, shown);
+
+  const filterChips = [
+    ["all","All ("+sessions.length+")"],
+    ["won","Won ("+indexed.filter(s=>s.pnl>0).length+")"],
+    ["lost","Lost ("+indexed.filter(s=>s.pnl<0).length+")"],
+    ["stoploss","Hit Stop ("+indexed.filter(s=>(s.stopLossHits||0)>0).length+")"],
+  ];
+  const sortChips = [["order","# Order"],["best","Best P&L"],["worst","Worst P&L"]];
+
+  function chipStyle(selected, color){
+    return {padding:"5px 9px",borderRadius:8,border:"1px solid "+(selected?color:"#2d4057"),background:selected?"#0f1923":"transparent",color:selected?color:"#64748b",fontSize:10,fontWeight:700,cursor:"pointer"};
+  }
+
+  return (
+    <div style={{marginTop:12,borderTop:"1px solid #1e2d3d",paddingTop:10}}>
+      <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Session Explorer</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:4}}>
+        {filterChips.map(([key,label])=>(
+          <button key={key} onClick={()=>{setFilter(key);setShown(50);}} style={chipStyle(filter===key,"#a78bfa")}>{label}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:4,marginBottom:6}}>
+        {sortChips.map(([key,label])=>(
+          <button key={key} onClick={()=>setSort(key)} style={chipStyle(sort===key,"#60a5fa")}>{label}</button>
+        ))}
+      </div>
+      {visible.length===0 && <div style={{fontSize:11,color:"#475569",textAlign:"center",padding:"10px 0"}}>No sessions match this filter.</div>}
+      <div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:"46vh",overflowY:"auto"}}>
+        {visible.map(s=>{
+          const completedSequences=(s.wins||0)+(s.seqLosses||0);
+          const rate=completedSequences>0?((s.wins||0)/completedSequences*100).toFixed(0)+"%":"—";
+          return (
+            <div key={s.idx} style={{display:"flex",alignItems:"center",gap:6,background:"#0f1923",border:"1px solid #1e2d3d",borderRadius:7,padding:"5px 8px"}}>
+              <span style={{fontSize:9,color:"#475569",width:34,flexShrink:0}}>#{s.idx}</span>
+              <span style={{fontSize:11,fontWeight:800,color:s.pnl>=0?"#4ade80":"#f87171",width:64,flexShrink:0}}>{s.pnl>=0?"+":"-"}{cur.symbol}{Math.abs(s.pnl).toFixed(2)}</span>
+              <span style={{fontSize:9,color:"#94a3b8",flex:1}}>{s.wins||0}W/{s.seqLosses||0}L seq · {rate}</span>
+              <span style={{fontSize:9,color:(s.stopLossHits||0)>0?"#fbbf24":"#374151",flexShrink:0}}>SL {s.stopLossHits||0}</span>
+              <span style={{fontSize:9,color:"#64748b",flexShrink:0}}>
+                ⤓{s.trough!==undefined?(s.trough<0?"-":"")+cur.symbol+Math.abs(s.trough||0).toFixed(0):"—"} ⤒{s.peak!==undefined?"+"+cur.symbol+Math.abs(s.peak||0).toFixed(0):"—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {sorted.length>visible.length && (
+        <button onClick={()=>setShown(n=>n+100)} style={{width:"100%",marginTop:6,padding:"8px 0",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:"#64748b",fontSize:11,cursor:"pointer"}}>
+          Show more ({sorted.length-visible.length} remaining)
+        </button>
+      )}
+    </div>
+  );
+}
+
 // -- Simulation Mode Page --
 function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress, setSimProgress, simResults, setSimResults, simDone, setSimDone, simStopRef, currency, cur}) {
   const [view, setView] = useState("setup"); // "setup" | "running" | "results"
@@ -100,7 +170,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
         if(!outcomes) break; // stopped mid-session — discard the partial session
         sessionIdx++;
         outcomes.forEach((o,si)=>{
-          results[si].sessions.push({pnl:o.pnl,wins:o.wins,losses:o.losses,stopLossHits:o.stopLossHits});
+          results[si].sessions.push({pnl:o.pnl,wins:o.wins,losses:o.losses,seqLosses:o.seqLosses,stopLossHits:o.stopLossHits,trough:o.trough,peak:o.peak});
           results[si].totalPnl+=o.pnl;
           results[si].totalWins+=o.wins;
           results[si].totalLosses+=o.losses;
@@ -305,6 +375,9 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
                 <div style={{fontSize:10,color:"#64748b",marginTop:2}}>
                   {(r.totalSequences||0).toLocaleString()} sequences · {(stats.winRate*100).toFixed(1)}% win rate
                 </div>
+                <div style={{fontSize:9,color:"#475569",marginTop:2,maxWidth:200}}>
+                  Win rate = completed progressions ending in a win; a stop-loss is the losing end of one progression
+                </div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:18,fontWeight:900,color:stats.totalPnl>=0?"#4ade80":"#f87171"}}>{stats.totalPnl>=0?"+":"-"}{cur.symbol}{Math.abs(stats.totalPnl).toFixed(2)}</div>
@@ -380,6 +453,8 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
                 </div>
               </div>
             )}
+
+            <SessionExplorer sessions={r.sessions} cur={cur}/>
           </Card>
         );
       })}
