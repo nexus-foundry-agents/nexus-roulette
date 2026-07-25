@@ -53,6 +53,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
     waitingForWin: !!(strat.config.parkRules&&strat.config.parkRules.waitForWin),
     parkedAfterLoss:false,
     activeBets:[], // solution: [{number, level}] — one progression per number, like live play
+    chaseTarget:null, // auto-chase: {kind:"dozen"|"column", index} locked for the current sequence
   }));
   const droughts={};
   wheelNums.forEach(n=>{droughts[n]=0;});
@@ -71,18 +72,41 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       if(rules.parkAfterLoss && st.parkedAfterLoss){ st.parkedAfterLoss=false; return; }
 
       if(strat.type==="fibonacci"){
-        const dts=cfg.dozenTargets||[], cts=cfg.colTargets||[], evts=cfg.evenTargets||[];
-        const numTargets=(evts.length||(dts.length+cts.length))||1;
+        const autoChase=!!cfg.autoChase;
+        const evts=autoChase?[]:(cfg.evenTargets||[]);
+        let dts=autoChase?[]:(cfg.dozenTargets||[]), cts=autoChase?[]:(cfg.colTargets||[]);
         const betMode=(cfg.betMode||"progression")==="flat"?"flat":(evts.length>0?"martingale":"progression");
+        const entering = betMode==="flat" || st.level===0;
 
-        // Min-drought-to-enter: park unless some configured target is overdue enough
-        if(rules.droughtThreshold){
+        // Min-drought-to-enter is an ENTRY rule: it parks new sequences only,
+        // never abandons a progression already in flight.
+        if(rules.droughtThreshold && entering && !st.chaseTarget){
           let maxD=0;
-          if(evts.length>0) evts.forEach(k=>{maxD=Math.max(maxD,evenMoneyGroupDrought(droughts,k));});
+          if(autoChase){
+            for(let d=0;d<3;d++)maxD=Math.max(maxD,dozenGroupDrought(droughts,d));
+            for(let c=0;c<3;c++)maxD=Math.max(maxD,columnGroupDrought(droughts,c));
+          }
+          else if(evts.length>0) evts.forEach(k=>{maxD=Math.max(maxD,evenMoneyGroupDrought(droughts,k));});
           else { dts.forEach(d=>{maxD=Math.max(maxD,dozenGroupDrought(droughts,d));}); cts.forEach(c=>{maxD=Math.max(maxD,columnGroupDrought(droughts,c));}); }
           if(maxD<rules.droughtThreshold)return;
         }
 
+        // Auto-chase: lock onto the most-missed dozen/column at sequence start and
+        // stay with it until it hits or the stop loss ends the sequence. Ties are
+        // broken at random (operator ruling 2026-07-25).
+        if(autoChase){
+          if(!st.chaseTarget){
+            const candidates=[];
+            for(let d=0;d<3;d++)candidates.push({kind:"dozen",index:d,drought:dozenGroupDrought(droughts,d)});
+            for(let c=0;c<3;c++)candidates.push({kind:"column",index:c,drought:columnGroupDrought(droughts,c)});
+            const deepest=Math.max(...candidates.map(x=>x.drought));
+            const tied=candidates.filter(x=>x.drought===deepest);
+            st.chaseTarget=tied[Math.floor(Math.random()*tied.length)];
+          }
+          if(st.chaseTarget.kind==="dozen")dts=[st.chaseTarget.index]; else cts=[st.chaseTarget.index];
+        }
+
+        const numTargets=(evts.length||(dts.length+cts.length))||1;
         const isZ=val==="0"||val==="00";
         let hitCount=0;
         if(!isZ){
@@ -104,15 +128,16 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
             pushStreak(results[si],false);
             if(rules.parkAfterLoss)st.parkedAfterLoss=true;
           }
+          st.chaseTarget=null; // flat has no sequence — re-pick the coldest group every spin
         } else {
           if(isHit){
             st.pnl+=(hitCount*payMult*(row?row.c:1)-(row?row.c:1)*numTargets)*unit;
-            st.wins++; st.level=0;
+            st.wins++; st.level=0; st.chaseTarget=null;
             pushStreak(results[si],true);
           } else {
             st.pnl-=(row?row.c:1)*numTargets*unit; st.losses++;
             if(st.level<tbl.length-1){ st.level++; }
-            else{ st.stopLossHits++; st.seqLosses++; st.level=0; if(rules.parkAfterStopLoss)st.waitingForWin=true; }
+            else{ st.stopLossHits++; st.seqLosses++; st.level=0; st.chaseTarget=null; if(rules.parkAfterStopLoss)st.waitingForWin=true; }
             pushStreak(results[si],false);
             if(rules.parkAfterLoss)st.parkedAfterLoss=true;
           }
@@ -121,13 +146,11 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
 
       if(strat.type==="solution"){
         const entry=cfg.entryThreshold||120;
+        // Min-drought-to-enter raises the ENROLLMENT bar; bets already on the
+        // table keep resolving normally.
+        const effectiveEntry=Math.max(entry, rules.droughtThreshold||0);
         const valInRange=val!=="0"&&val!=="00"&&(droughts[val]||0)>=entry;
 
-        if(rules.droughtThreshold){
-          let maxD=0;
-          Object.keys(droughts).forEach(k=>{if(k!=="0"&&k!=="00"&&droughts[k]>maxD)maxD=droughts[k];});
-          if(maxD<rules.droughtThreshold)return;
-        }
         if(rules.waitForWin && st.waitingForWin){
           if(valInRange) st.waitingForWin=false;
           return;
@@ -136,7 +159,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
         // Enroll every number that has crossed the entry threshold (bets for THIS spin,
         // decided from droughts as they stood after the previous spin)
         Object.keys(droughts).forEach(k=>{
-          if(k!=="0"&&k!=="00"&&droughts[k]>=entry&&!st.activeBets.find(b=>b.number===k)) st.activeBets.push({number:k,level:0});
+          if(k!=="0"&&k!=="00"&&droughts[k]>=effectiveEntry&&!st.activeBets.find(b=>b.number===k)) st.activeBets.push({number:k,level:0});
         });
 
         const resolved=[];

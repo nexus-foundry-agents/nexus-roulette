@@ -12,7 +12,7 @@ const COLUMN_TEXTS = ["#5eead4","#f9a8d4","#bef264"];
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.41.0";
+const APP_VERSION = "0.42.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -34,6 +34,12 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.42.0", date:"Jul 25, 2026", title:"Auto-Chase + Sharper Controls", changes:[
+    "🔄 Auto-chase mode for Experimental Progression Bets: automatically bets the dozen or column that has missed the most, stays locked on it until it hits or the stop loss ends the sequence, then re-picks (ties broken at random)",
+    "Min drought to enter is now a type-in field, and steps by 1 (not 5) when betting 12-number groups",
+    "Min drought to enter is now an entry rule — it never abandons a progression mid-sequence; for The Solution it raises the enrollment bar instead of freezing live bets",
+    "Onboarding preset buttons (bankroll, buy-in) now actually fill the amount field",
+  ]},
   { v:"0.41.0", date:"Jul 25, 2026", title:"Experimental Overhaul + $10 Chip", changes:[
     "New $10 chip (blue) in the chip selector, Game and Live modes",
     "Experimental mode rebuilt: The Solution now bets every overdue number with its own progression, matching live play (results were unwinnable before)",

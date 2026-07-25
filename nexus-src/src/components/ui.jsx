@@ -27,7 +27,13 @@ function Modal({children, onClose}) {
 
 function MoneyInput({value, onChange, currCode, label}) {
   const [raw, setRaw] = useState(String(value));
+  const [focused, setFocused] = useState(false);
   const cur = getCurrency(currCode);
+
+  // Reflect external value changes (preset buttons, steppers) while the field
+  // isn't being typed in — without this, preset clicks never update the display
+  // and a later blur commits the stale text right back over them.
+  useEffect(() => { if(!focused) setRaw(String(value)); }, [value, focused]);
 
   function commit(str) {
     const n = parseFloat(str.replace(/[^0-9.]/g,""));
@@ -45,8 +51,8 @@ function MoneyInput({value, onChange, currCode, label}) {
           inputMode="decimal"
           value={raw}
           onChange={e => setRaw(e.target.value)}
-          onBlur={e => commit(e.target.value)}
-          onFocus={e => e.target.select()}
+          onBlur={e => { setFocused(false); commit(e.target.value); }}
+          onFocus={e => { setFocused(true); e.target.select(); }}
           onKeyDown={e => e.key==="Enter" && commit(e.target.value)}
           style={{flex:1,padding:"14px 0",fontSize:22,fontWeight:800,color:"#86efac",background:"transparent",border:"none",outline:"none",WebkitAppearance:"none"}}
         />

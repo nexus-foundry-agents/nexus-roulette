@@ -77,7 +77,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
     if(!simCfg.strategies.length){setStartError("Add at least one strategy first.");return;}
     // A Progression Bet with no targets loses every spin by construction — the live
     // Add Track panel blocks this, so the Experimental section must block it too.
-    const untargeted=simCfg.strategies.filter(s=>s.type==="fibonacci"
+    const untargeted=simCfg.strategies.filter(s=>s.type==="fibonacci"&&!s.config.autoChase
       &&!(s.config.evenTargets||[]).length&&!(s.config.dozenTargets||[]).length&&!(s.config.colTargets||[]).length);
     if(untargeted.length){setStartError("Pick at least one target (✏️) for: "+untargeted.map(s=>s.label).join(", "));return;}
     setStartError(null);
@@ -203,9 +203,9 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
             </div>
             <div style={{fontSize:10,color:"#64748b"}}>
               {strat.type==="fibonacci"
-                ?`${strat.config.betMode||"progression"} · ${(strat.config.evenTargets||[]).length>0?(strat.config.evenTargets).join("+"):((strat.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")||"--")+(strat.config.colTargets?.length>0?" + "+(strat.config.colTargets.map(c=>COLUMN_LABELS[c]).join("+")):"")}`
+                ?`${strat.config.betMode||"progression"} · ${strat.config.autoChase?"🔄 Auto-chase most-missed dozen/col":(strat.config.evenTargets||[]).length>0?(strat.config.evenTargets).join("+"):((strat.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")||"--")+(strat.config.colTargets?.length>0?" + "+(strat.config.colTargets.map(c=>COLUMN_LABELS[c]).join("+")):"")}`
                 :`Solution · entry ${strat.config.entryThreshold}`
-              } · ROI {strat.config.roi}% · stop ${cur.symbol}{strat.config.stopLoss}
+              } · ROI {strat.config.roi}% · stop {cur.symbol}{strat.config.stopLoss}
             </div>
             {editStratIdx===i && (
               <SimStratEditor strat={strat} idx={i} simCfg={simCfg} setSimCfg={setSimCfg} cur={cur} onClose={()=>setEditStratIdx(null)}/>
@@ -428,6 +428,15 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
               })}
             </div>
           </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderRadius:8,border:"1px solid "+(cfg.autoChase?"#f59e0b":"#2d4057"),background:cfg.autoChase?"#1c1000":"#0f1923"}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:cfg.autoChase?"#fbbf24":"#94a3b8"}}>🔄 Auto-chase most-missed</div>
+              <div style={{fontSize:9,color:"#475569"}}>Locks onto the coldest dozen or column until it hits or the stop loss; ties picked at random</div>
+            </div>
+            <button onClick={()=>upCfg("autoChase",!cfg.autoChase)} style={{padding:"4px 12px",borderRadius:7,border:"none",background:cfg.autoChase?"#b45309":"#374151",color:"white",fontSize:10,fontWeight:700,cursor:"pointer"}}>{cfg.autoChase?"ON":"OFF"}</button>
+          </div>
+          {!cfg.autoChase && (
+          <>
           <div>
             <FieldLabel>Even Money</FieldLabel>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
@@ -454,6 +463,8 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
                 </div>
               </div>
             </>
+          )}
+          </>
           )}
         </>
       )}
@@ -483,20 +494,36 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
               <button onClick={()=>upRule(key,!rules[key])} style={{padding:"4px 12px",borderRadius:7,border:"none",background:rules[key]?"#7c3aed":"#374151",color:"white",fontSize:10,fontWeight:700,cursor:"pointer"}}>{rules[key]?"ON":"OFF"}</button>
             </div>
           ))}
-          <div style={{display:"flex",alignItems:"center",padding:"8px 10px",borderRadius:8,border:"1px solid "+(rules.droughtThreshold?"#a78bfa":"#2d4057"),background:rules.droughtThreshold?"#1a0a2e":"#0f1923",gap:8}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:11,fontWeight:700,color:rules.droughtThreshold?"#c4b5fd":"#94a3b8"}}>Min drought to enter</div>
-              <div style={{fontSize:9,color:"#475569"}}>Park if no target meets threshold</div>
-            </div>
-            <button onClick={()=>upRule("droughtThreshold",rules.droughtThreshold?null:Math.max(1,(cfg.entryThreshold||5)-10))} style={{padding:"4px 10px",borderRadius:7,border:"none",background:rules.droughtThreshold?"#7c3aed":"#374151",color:"white",fontSize:10,fontWeight:700,cursor:"pointer"}}>{rules.droughtThreshold?"ON":"OFF"}</button>
-            {rules.droughtThreshold&&(
-              <div style={{display:"flex",alignItems:"center",gap:2}}>
-                <button onClick={()=>upRule("droughtThreshold",Math.max(1,rules.droughtThreshold-5))} style={{padding:"3px 7px",borderRadius:5,border:"none",background:"#0f1923",color:"#60a5fa",fontSize:12,fontWeight:700,cursor:"pointer"}}>-</button>
-                <span style={{fontSize:12,fontWeight:700,color:"#c4b5fd",minWidth:28,textAlign:"center"}}>{rules.droughtThreshold}</span>
-                <button onClick={()=>upRule("droughtThreshold",rules.droughtThreshold+5)} style={{padding:"3px 7px",borderRadius:5,border:"none",background:"#0f1923",color:"#60a5fa",fontSize:12,fontWeight:700,cursor:"pointer"}}>+</button>
+          {(()=>{
+            // 12-number targets (dozens/columns/auto-chase) live on much shorter
+            // drought scales, so their steppers move by 1; single numbers by 5.
+            const twelveNumberTarget = strat.type==="fibonacci"&&(cfg.autoChase||(cfg.dozenTargets||[]).length>0||(cfg.colTargets||[]).length>0);
+            const droughtStep = twelveNumberTarget?1:5;
+            const defaultThreshold = twelveNumberTarget?3:Math.max(1,(cfg.entryThreshold||5)-10);
+            return (
+              <div style={{display:"flex",alignItems:"center",padding:"8px 10px",borderRadius:8,border:"1px solid "+(rules.droughtThreshold?"#a78bfa":"#2d4057"),background:rules.droughtThreshold?"#1a0a2e":"#0f1923",gap:8}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,fontWeight:700,color:rules.droughtThreshold?"#c4b5fd":"#94a3b8"}}>Min drought to enter</div>
+                  <div style={{fontSize:9,color:"#475569"}}>Park if no target meets threshold</div>
+                </div>
+                <button onClick={()=>upRule("droughtThreshold",rules.droughtThreshold?null:defaultThreshold)} style={{padding:"4px 10px",borderRadius:7,border:"none",background:rules.droughtThreshold?"#7c3aed":"#374151",color:"white",fontSize:10,fontWeight:700,cursor:"pointer"}}>{rules.droughtThreshold?"ON":"OFF"}</button>
+                {rules.droughtThreshold&&(
+                  <div style={{display:"flex",alignItems:"center",gap:2}}>
+                    <button onClick={()=>upRule("droughtThreshold",Math.max(1,rules.droughtThreshold-droughtStep))} style={{padding:"3px 7px",borderRadius:5,border:"none",background:"#0f1923",color:"#60a5fa",fontSize:12,fontWeight:700,cursor:"pointer"}}>-</button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      value={rules.droughtThreshold}
+                      onChange={e=>{const n=parseInt(e.target.value,10);upRule("droughtThreshold",isNaN(n)?1:Math.max(1,n));}}
+                      style={{width:46,textAlign:"center",fontSize:12,fontWeight:700,color:"#c4b5fd",background:"#0f1923",border:"1px solid #2d4057",borderRadius:5,padding:"3px 2px",outline:"none",WebkitAppearance:"none"}}
+                    />
+                    <button onClick={()=>upRule("droughtThreshold",rules.droughtThreshold+droughtStep)} style={{padding:"3px 7px",borderRadius:5,border:"none",background:"#0f1923",color:"#60a5fa",fontSize:12,fontWeight:700,cursor:"pointer"}}>+</button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
       </div>
 

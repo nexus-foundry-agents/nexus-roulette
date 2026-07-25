@@ -1,1 +1,1 @@
-{"version":"0.41.0","date":"2026-07-25","notes":"Experimental mode overhaul (per-number Solution bets, honest stop/win-rate, park rules enforced), new $10 blue chip, Net P&L cash-out fix, currency symbol fixes."}
+{"version":"0.42.0","date":"2026-07-25","notes":"Auto-chase mode (bets the most-missed dozen/column, locked until hit or stop loss, ties random), free-entry min-drought field with 1-unit steps for 12-number targets, onboarding preset buttons fixed."}
