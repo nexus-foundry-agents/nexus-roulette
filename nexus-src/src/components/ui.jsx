@@ -7,7 +7,7 @@ function Card({children, style}) {
   );
 }
 
-function Lbl({children}) {
+function FieldLabel({children}) {
   return (
     <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>
       {children}
@@ -27,7 +27,7 @@ function Modal({children, onClose}) {
 
 function MoneyInput({value, onChange, currCode, label}) {
   const [raw, setRaw] = useState(String(value));
-  const cur = getCur(currCode);
+  const cur = getCurrency(currCode);
 
   function commit(str) {
     const n = parseFloat(str.replace(/[^0-9.]/g,""));
@@ -37,7 +37,7 @@ function MoneyInput({value, onChange, currCode, label}) {
 
   return (
     <div>
-      {label && <Lbl>{label}</Lbl>}
+      {label && <FieldLabel>{label}</FieldLabel>}
       <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:12,border:"1px solid #2d4057",overflow:"hidden"}}>
         <div style={{padding:"0 14px",fontSize:20,color:"#64748b",fontWeight:700}}>{cur.symbol}</div>
         <input

@@ -1,7 +1,7 @@
 // -- Modal Dialogs --
 function CashOutModal({maxAmount, currency, currentBankroll, onCashOut, onClose}) {
   const [amount, setAmount] = useState(Math.min(100, maxAmount));
-  const cur = getCur(currency);
+  const cur = getCurrency(currency);
 
   function handleCashOut() {
     if(amount > 0 && amount <= maxAmount) { onCashOut(amount); onClose(); }
@@ -12,7 +12,7 @@ function CashOutModal({maxAmount, currency, currentBankroll, onCashOut, onClose}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div>
           <div style={{fontSize:17,fontWeight:800,color:"#e2e8f0"}}>💸 Cash Out</div>
-          <div style={{fontSize:11,color:"#64748b"}}>Available: {fmtMoney(currentBankroll,currency)}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>Available: {formatMoney(currentBankroll,currency)}</div>
         </div>
         <button onClick={onClose} style={{background:"transparent",border:"none",color:"#64748b",fontSize:22,cursor:"pointer"}}>×</button>
       </div>
@@ -29,12 +29,12 @@ function CashOutModal({maxAmount, currency, currentBankroll, onCashOut, onClose}
       <div style={{marginTop:16,background:"#0f1923",borderRadius:10,padding:"10px 14px",border:"1px solid #2d4057",marginBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
           <span style={{color:"#64748b"}}>Remaining after cash out:</span>
-          <span style={{color:"#f97316",fontWeight:700}}>{fmtMoney(currentBankroll-amount,currency)}</span>
+          <span style={{color:"#f97316",fontWeight:700}}>{formatMoney(currentBankroll-amount,currency)}</span>
         </div>
       </div>
 
       <button onClick={handleCashOut} style={{width:"100%",padding:"15px 0",borderRadius:12,border:"none",background:"#c2410c",color:"white",fontSize:16,fontWeight:800,cursor:"pointer"}}>
-        Cash Out {fmtMoney(amount,currency)}
+        Cash Out {formatMoney(amount,currency)}
       </button>
     </Modal>
   );
@@ -192,14 +192,14 @@ function BuyInModal({defaultAmount, currency, currentBankroll, onBuyIn, onClose}
     if(amount > 0) { onBuyIn(amount); onClose(); }
   }
 
-  const cur = getCur(currency);
+  const cur = getCurrency(currency);
 
   return (
     <Modal onClose={onClose}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div>
           <div style={{fontSize:17,fontWeight:800,color:"#e2e8f0"}}>💰 Buy In</div>
-          <div style={{fontSize:11,color:"#64748b"}}>Current: {fmtMoney(currentBankroll,currency)}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>Current: {formatMoney(currentBankroll,currency)}</div>
         </div>
         <button onClick={onClose} style={{background:"transparent",border:"none",color:"#64748b",fontSize:22,cursor:"pointer"}}>×</button>
       </div>
@@ -215,12 +215,12 @@ function BuyInModal({defaultAmount, currency, currentBankroll, onBuyIn, onClose}
       <div style={{marginTop:16,background:"#0f1923",borderRadius:10,padding:"10px 14px",border:"1px solid #2d4057",marginBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
           <span style={{color:"#64748b"}}>After buy in:</span>
-          <span style={{color:"#86efac",fontWeight:700}}>{fmtMoney(currentBankroll+amount,currency)}</span>
+          <span style={{color:"#86efac",fontWeight:700}}>{formatMoney(currentBankroll+amount,currency)}</span>
         </div>
       </div>
 
       <button onClick={handleBuyIn} style={{width:"100%",padding:"15px 0",borderRadius:12,border:"none",background:"#16a34a",color:"white",fontSize:16,fontWeight:800,cursor:"pointer"}}>
-        Buy In {fmtMoney(amount,currency)}
+        Buy In {formatMoney(amount,currency)}
       </button>
     </Modal>
   );
@@ -237,7 +237,7 @@ function CurrencyModal({current, bankroll, onSave, onClose}) {
   }
 
   const newBankroll = mode==="convert" ? convertAmount(bankroll, current, selected) : bankroll;
-  const curSym = getCur(selected).symbol;
+  const curSym = getCurrency(selected).symbol;
 
   return (
     <Modal onClose={onClose}>
@@ -261,15 +261,15 @@ function CurrencyModal({current, bankroll, onSave, onClose}) {
 
       {selected !== current && (
         <div style={{marginBottom:14}}>
-          <Lbl>Conversion Mode</Lbl>
+          <FieldLabel>Conversion Mode</FieldLabel>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <button onClick={()=>setMode("keep")} style={{padding:"12px",borderRadius:10,border:"2px solid "+(mode==="keep"?"#60a5fa":"#2d4057"),background:mode==="keep"?"#0c1a2e":"#1e2d3d",cursor:"pointer",textAlign:"left"}}>
               <div style={{fontSize:13,fontWeight:700,color:mode==="keep"?"#60a5fa":"#e2e8f0"}}>Keep same numbers</div>
-              <div style={{fontSize:11,color:"#475569"}}>{fmtMoney(bankroll,current)} → {curSym}{bankroll.toFixed(getCur(selected).dec)} (just change symbol)</div>
+              <div style={{fontSize:11,color:"#475569"}}>{formatMoney(bankroll,current)} → {curSym}{bankroll.toFixed(getCurrency(selected).dec)} (just change symbol)</div>
             </button>
             <button onClick={()=>setMode("convert")} style={{padding:"12px",borderRadius:10,border:"2px solid "+(mode==="convert"?"#fbbf24":"#2d4057"),background:mode==="convert"?"#1c1500":"#1e2d3d",cursor:"pointer",textAlign:"left"}}>
               <div style={{fontSize:13,fontWeight:700,color:mode==="convert"?"#fbbf24":"#e2e8f0"}}>True conversion</div>
-              <div style={{fontSize:11,color:"#475569"}}>{fmtMoney(bankroll,current)} → {fmtMoney(newBankroll,selected)} (exchange rate applied)</div>
+              <div style={{fontSize:11,color:"#475569"}}>{formatMoney(bankroll,current)} → {formatMoney(newBankroll,selected)} (exchange rate applied)</div>
             </button>
           </div>
         </div>

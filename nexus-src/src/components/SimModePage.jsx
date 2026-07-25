@@ -57,132 +57,59 @@ function StatContextBar({simResults, simCfg, sess, cur, pnlVal}) {
 }
 
 // -- Simulation Mode Page --
-function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, setSimPaused, simProgress, setSimProgress, simResults, setSimResults, simDone, setSimDone, simStopRef, currency, cur}) {
+function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress, setSimProgress, simResults, setSimResults, simDone, setSimDone, simStopRef, currency, cur}) {
   const [view, setView] = useState("setup"); // "setup" | "running" | "results"
   const [editStratIdx, setEditStratIdx] = useState(null);
+  const [startError, setStartError] = useState(null);
 
   function addStrategy(type) {
     const cfg = type==="fibonacci" ? defaultFibCfg() : defaultSolCfg();
+    setStartError(null);
     setSimCfg(c=>({...c, strategies:[...c.strategies, {type, config:cfg, label:(type==="fibonacci"?"Progression Bet":"The Solution")+" #"+(c.strategies.length+1)}]}));
   }
 
   function removeStrategy(i) {
+    setStartError(null);
     setSimCfg(c=>({...c, strategies:c.strategies.filter((_,idx)=>idx!==i)}));
   }
 
   function startSim() {
-    if(!simCfg.strategies.length){alert("Add at least one strategy.");return;}
+    if(!simCfg.strategies.length){setStartError("Add at least one strategy first.");return;}
+    // A Progression Bet with no targets loses every spin by construction — the live
+    // Add Track panel blocks this, so the Experimental section must block it too.
+    const untargeted=simCfg.strategies.filter(s=>s.type==="fibonacci"
+      &&!(s.config.evenTargets||[]).length&&!(s.config.dozenTargets||[]).length&&!(s.config.colTargets||[]).length);
+    if(untargeted.length){setStartError("Pick at least one target (✏️) for: "+untargeted.map(s=>s.label).join(", "));return;}
+    setStartError(null);
     simStopRef.current=false;
     setSimRunning(true);setSimDone(false);setSimResults(null);setSimProgress(0);setView("running");
 
-    // Run in chunks via setTimeout to not block UI
-    const results = simCfg.strategies.map(()=>({
-      sessions:[],totalPnl:0,totalWins:0,totalLosses:0,stopLossHits:0,
-      winStreaks:[],lossStreaks:[],currentStreak:{type:null,len:0},totalSequences:0,
-      pnlHistory:[], // per-session running total for chart
-    }));
+    // The math lives in simulation.js (simRunSession); this only chunks sessions
+    // across setTimeout ticks so the UI stays responsive.
+    const results = simNewResults(simCfg.strategies.length);
+    const wheelNums=getWheelNumbers(simCfg.roulette);
+    const tables=simCfg.strategies.map(s=>computeTableForTrack({type:s.type,config:s.config}));
 
     let sessionIdx=0;
-    const wheelNums=getWheelNums(simCfg.roulette);
 
     function runChunk(){
       const CHUNK=10;
-      for(let ci=0;ci<CHUNK&&sessionIdx<simCfg.sessions;ci++,sessionIdx++){
+      for(let ci=0;ci<CHUNK&&sessionIdx<simCfg.sessions;ci++){
         if(simStopRef.current) break;
-
-        const sState=simCfg.strategies.map((strat)=>({
-          level:0,pnl:0,wins:0,losses:0,stopLossHits:0,
-          waitingForWin:strat.config.parkRules?.waitForWin||false,
-          parkedAfterLoss:false,
-          droughts:initDroughts(simCfg.roulette),
-        }));
-
-        for(let sp=0;sp<simCfg.spinsPerSession;sp++){
-          if(simStopRef.current) break;
-          const val=wheelNums[Math.floor(Math.random()*wheelNums.length)];
-          const bonus={};
-
-          sState.forEach(st=>{Object.keys(st.droughts).forEach(k=>st.droughts[k]++);st.droughts[val]=0;});
-
-          simCfg.strategies.forEach((strat,si)=>{
-            const st=sState[si];
-            const cfg=strat.config;
-            const rules=cfg.parkRules||{};
-            const tbl=computeTableForTrack({type:strat.type,config:cfg});
-
-            if(rules.parkAfterLoss&&st.parkedAfterLoss){st.parkedAfterLoss=false;return;}
-
-            if(strat.type==="fibonacci"){
-              const dts=cfg.dozenTargets||[],cts=cfg.colTargets||[],evts=cfg.evenTargets||[];
-              const numTargets=(evts.length||(dts.length+cts.length))||1;
-              const betMode=cfg.betMode||"progression";
-              const em=betMode==="flat"?"flat":(evts.length>0?"martingale":"progression");
-              const isZ=val==="0"||val==="00";
-              let hitCount=0;
-              if(!isZ){
-                if(evts.length>0){evts.forEach(k=>{const e=EVEN_MONEY.find(x=>x.key===k);if(e&&e.pred(+val))hitCount++;});}
-                else{if(dts.includes(dozenOf(val)))hitCount++;if(cts.includes(colOf(val)))hitCount++;}
-              }
-              const payMult=evts.length>0?2:3;
-              const row=tbl[Math.min(st.level,tbl.length-1)];
-
-              if(em==="flat"){
-                if(hitCount>0){st.pnl+=(hitCount*payMult-numTargets)*(cfg.unit||1);st.wins++;pushStreak(results[si],true);}
-                else{st.pnl-=numTargets*(cfg.unit||1);st.losses++;pushStreak(results[si],false);if(rules.parkAfterLoss)st.parkedAfterLoss=true;}
-              } else {
-                const cat=isZ?"loss":getCategory(val,dts,cts,row,evts);
-                if(cat!=="loss"){
-                  const sd=hitCount*payMult*(row?row.c:1)-(row?row.c:1)*numTargets;
-                  const mult=bonus[val]||1;
-                  const bd=mult>1?(row?row.c:1)*(mult-35)*(cfg.unit||1):0;
-                  st.pnl+=sd*(cfg.unit||1)+bd;st.wins++;st.level=0;
-                  pushStreak(results[si],true);
-                  if(rules.waitForWin)st.waitingForWin=false;
-                } else {
-                  st.pnl-=(row?row.c:1)*numTargets*(cfg.unit||1);st.losses++;
-                  if(st.level<tbl.length-1){st.level++;}
-                  else{st.stopLossHits++;st.level=0;if(rules.parkAfterStopLoss)st.waitingForWin=true;}
-                  pushStreak(results[si],false);
-                  if(rules.parkAfterLoss)st.parkedAfterLoss=true;
-                }
-              }
-            }
-
-            if(strat.type==="solution"){
-              const entry=cfg.entryThreshold||120;
-              const inRange=wheelNums.filter(v=>v!=="0"&&v!=="00"&&(st.droughts[v]||0)>=entry);
-              if(rules.waitForWin&&st.waitingForWin){if(inRange.some(n=>n===val))st.waitingForWin=false;return;}
-              if(!inRange.length)return;
-              const targetNum=inRange.sort((a,b)=>(st.droughts[b]||0)-(st.droughts[a]||0))[0];
-              const row=tbl[Math.min(st.level,tbl.length-1)];
-              if(val===targetNum){
-                const mult=bonus[val]||1;
-                const profit=(row?row.profit:0)*(cfg.unit||1);
-                const bd=mult>1?(row?row.c:1)*(mult-35)*(cfg.unit||1):0;
-                st.pnl+=profit+bd;st.wins++;st.level=0;
-                pushStreak(results[si],true);
-                if(rules.waitForWin)st.waitingForWin=false;
-              } else {
-                st.pnl-=(row?row.c:1)*(cfg.unit||1);st.losses++;
-                if(st.level<tbl.length-1){st.level++;}
-                else{st.stopLossHits++;st.level=0;if(rules.parkAfterStopLoss)st.waitingForWin=true;}
-                pushStreak(results[si],false);
-                if(rules.parkAfterLoss)st.parkedAfterLoss=true;
-              }
-            }
-          });
-        }
-
-        simCfg.strategies.forEach((_,si)=>{
-          const st=sState[si];
-          results[si].sessions.push({pnl:st.pnl,wins:st.wins,losses:st.losses,stopLossHits:st.stopLossHits});
-          results[si].totalPnl+=st.pnl;
-          results[si].totalWins+=st.wins;
-          results[si].totalLosses+=st.losses;
-          results[si].stopLossHits+=st.stopLossHits;
+        const outcomes=simRunSession(simCfg.strategies,tables,wheelNums,simCfg.spinsPerSession,results,()=>simStopRef.current);
+        if(!outcomes) break; // stopped mid-session — discard the partial session
+        sessionIdx++;
+        outcomes.forEach((o,si)=>{
+          results[si].sessions.push({pnl:o.pnl,wins:o.wins,losses:o.losses,stopLossHits:o.stopLossHits});
+          results[si].totalPnl+=o.pnl;
+          results[si].totalWins+=o.wins;
+          results[si].totalLosses+=o.losses;
+          results[si].totalSeqLosses+=o.seqLosses;
+          results[si].stopLossHits+=o.stopLossHits;
           results[si].pnlHistory.push(results[si].totalPnl);
         });
       }
+
 
       setSimProgress(sessionIdx);
       setSimResults(results.map(r=>({...r})));
@@ -190,17 +117,19 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
       if(sessionIdx<simCfg.sessions&&!simStopRef.current){
         setTimeout(runChunk,0);
       } else {
-        // Finalize streaks
+        const completed=sessionIdx>=simCfg.sessions;
+        // Finalize streaks; a "sequence" is a resolved win or a completed losing
+        // progression (stop-loss), never a single intermediate losing spin.
         results.forEach(r=>{
           if(r.currentStreak.len>0){
             if(r.currentStreak.type)r.winStreaks.push(r.currentStreak.len);
             else r.lossStreaks.push(r.currentStreak.len);
           }
-          r.totalSequences=r.totalWins+r.totalLosses;
+          r.totalSequences=r.totalWins+r.totalSeqLosses;
         });
         setSimResults([...results]);
         setSimRunning(false);setSimDone(true);
-        if('Notification' in window&&Notification.permission==='granted'){
+        if(completed&&'Notification' in window&&Notification.permission==='granted'){
           new Notification('Nexus Roulette Simulation Complete!',{body:`${simCfg.sessions} sessions done. Tap to see results.`,icon:'./icon.svg'});
         }
       }
@@ -220,7 +149,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
         {/* Wheel + sessions */}
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           <div>
-            <Lbl>Wheel Type</Lbl>
+            <FieldLabel>Wheel Type</FieldLabel>
             <div style={{display:"flex",gap:8}}>
               {[["european","🇪🇺 European"],["american","🇺🇸 American"]].map(([v,l])=>{
                 const sel=simCfg.roulette===v;
@@ -230,7 +159,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
           </div>
 
           <div>
-            <Lbl>Sessions</Lbl>
+            <FieldLabel>Sessions</FieldLabel>
             <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
               <button onClick={()=>setSimCfg(c=>({...c,sessions:Math.max(10,c.sessions-(c.sessions<=100?10:c.sessions<=1000?100:1000))}))} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#a78bfa",fontSize:18,fontWeight:700,cursor:"pointer"}}>-</button>
               <div style={{flex:1,textAlign:"center",fontSize:16,fontWeight:800,color:"#c4b5fd"}}>{simCfg.sessions.toLocaleString()}</div>
@@ -244,7 +173,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
           </div>
 
           <div>
-            <Lbl>Spins per Session</Lbl>
+            <FieldLabel>Spins per Session</FieldLabel>
             <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
               <button onClick={()=>setSimCfg(c=>({...c,spinsPerSession:Math.max(100,c.spinsPerSession-100)}))} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#a78bfa",fontSize:18,fontWeight:700,cursor:"pointer"}}>-</button>
               <div style={{flex:1,textAlign:"center",fontSize:16,fontWeight:800,color:"#c4b5fd"}}>{simCfg.spinsPerSession.toLocaleString()}</div>
@@ -262,7 +191,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
 
       {/* Strategies */}
       <Card>
-        <Lbl>{"Strategies to Benchmark ("+simCfg.strategies.length+")"}</Lbl>
+        <FieldLabel>{"Strategies to Benchmark ("+simCfg.strategies.length+")"}</FieldLabel>
         {simCfg.strategies.map((strat,i)=>(
           <div key={i} style={{background:"#0f1923",borderRadius:10,padding:"10px 12px",border:"1px solid #2d4057",marginBottom:8}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -274,7 +203,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
             </div>
             <div style={{fontSize:10,color:"#64748b"}}>
               {strat.type==="fibonacci"
-                ?`${strat.config.betMode||"progression"} · ${(strat.config.evenTargets||[]).length>0?(strat.config.evenTargets).join("+"):((strat.config.dozenTargets||[]).map(d=>DZ_LABELS[d]).join("+")||"--")+(strat.config.colTargets?.length>0?" + "+(strat.config.colTargets.map(c=>COL_LABELS[c]).join("+")):"")}`
+                ?`${strat.config.betMode||"progression"} · ${(strat.config.evenTargets||[]).length>0?(strat.config.evenTargets).join("+"):((strat.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")||"--")+(strat.config.colTargets?.length>0?" + "+(strat.config.colTargets.map(c=>COLUMN_LABELS[c]).join("+")):"")}`
                 :`Solution · entry ${strat.config.entryThreshold}`
               } · ROI {strat.config.roi}% · stop ${cur.symbol}{strat.config.stopLoss}
             </div>
@@ -296,6 +225,11 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
       <button onClick={startSim} style={{width:"100%",padding:"16px 0",borderRadius:14,border:"none",background:"#7c3aed",color:"white",fontSize:16,fontWeight:900,cursor:"pointer",letterSpacing:1}}>
         ▶ Start Simulation
       </button>
+      {startError && (
+        <div style={{padding:"10px 14px",borderRadius:10,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:12,fontWeight:700,textAlign:"center"}}>
+          ⚠ {startError}
+        </div>
+      )}
       <button onClick={requestNotifPermission} style={{width:"100%",padding:"10px 0",borderRadius:10,border:"1px solid #2d4057",background:"transparent",color:"#64748b",fontSize:11,cursor:"pointer"}}>
         🔔 Enable completion notification
       </button>
@@ -337,7 +271,9 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
           }
           <button onClick={()=>setView("setup")} style={{flex:1,padding:"12px 0",borderRadius:10,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>← Setup</button>
         </div>
-        {simDone && <div style={{textAlign:"center",color:"#4ade80",fontWeight:700,marginTop:8}}>✅ Simulation Complete!</div>}
+        {simDone && (simProgress>=simCfg.sessions
+          ? <div style={{textAlign:"center",color:"#4ade80",fontWeight:700,marginTop:8}}>✅ Simulation Complete!</div>
+          : <div style={{textAlign:"center",color:"#fbbf24",fontWeight:700,marginTop:8}}>⏹ Stopped early — {simProgress.toLocaleString()} of {simCfg.sessions.toLocaleString()} sessions ran</div>)}
       </Card>
     </div>
   );
@@ -349,7 +285,10 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simPaused, s
         <button onClick={()=>setView("setup")} style={{flex:1,padding:"10px 0",borderRadius:10,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>← Setup</button>
         <button onClick={()=>setView("running")} style={{flex:1,padding:"10px 0",borderRadius:10,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Progress</button>
       </div>
-      <div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>{simCfg.sessions.toLocaleString()} sessions × {simCfg.spinsPerSession.toLocaleString()} spins</div>
+      <div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>
+        {((simResults[0]&&simResults[0].sessions.length)||0).toLocaleString()} sessions × {simCfg.spinsPerSession.toLocaleString()} spins
+        {simResults[0]&&simResults[0].sessions.length<simCfg.sessions?" (stopped early)":""}
+      </div>
 
       {simCfg.strategies.map((strat,i)=>{
         const r=simResults[i];
@@ -481,7 +420,7 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
       {strat.type==="fibonacci" && (
         <>
           <div>
-            <Lbl>Bet Mode</Lbl>
+            <FieldLabel>Bet Mode</FieldLabel>
             <div style={{display:"flex",gap:5}}>
               {[["flat","Flat"],["progression","Progression"]].map(([m,l])=>{
                 const sel=(cfg.betMode||"progression")===m;
@@ -490,7 +429,7 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
             </div>
           </div>
           <div>
-            <Lbl>Even Money</Lbl>
+            <FieldLabel>Even Money</FieldLabel>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
               {[{key:"red",label:"Red",color:"#ef4444",pair:"black"},{key:"black",label:"Black",color:"#94a3b8",pair:"red"},{key:"odd",label:"Odd",color:"#a78bfa",pair:"even"},{key:"even",label:"Even",color:"#60a5fa",pair:"odd"},{key:"high",label:"High",color:"#fbbf24",pair:"low"},{key:"low",label:"Low",color:"#86efac",pair:"high"}].map(em=>{
                 const evts=cfg.evenTargets||[];
@@ -503,15 +442,15 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
           {(cfg.evenTargets||[]).length===0 && (
             <>
               <div>
-                <Lbl>Dozens</Lbl>
+                <FieldLabel>Dozens</FieldLabel>
                 <div style={{display:"flex",gap:5}}>
-                  {[0,1,2].map(i=>{const sel=(cfg.dozenTargets||[]).includes(i);return<button key={i} onClick={()=>{toggleArr("dozenTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?DZ_BD[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?DZ_TX[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{DZ_LABELS[i]}</button>;})}
+                  {[0,1,2].map(i=>{const sel=(cfg.dozenTargets||[]).includes(i);return<button key={i} onClick={()=>{toggleArr("dozenTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?DOZEN_BORDERS[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?DOZEN_TEXTS[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{DOZEN_LABELS[i]}</button>;})}
                 </div>
               </div>
               <div>
-                <Lbl>Columns</Lbl>
+                <FieldLabel>Columns</FieldLabel>
                 <div style={{display:"flex",gap:5}}>
-                  {[0,1,2].map(i=>{const sel=(cfg.colTargets||[]).includes(i);return<button key={i} onClick={()=>{toggleArr("colTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?COL_BD[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?COL_TX[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{COL_LABELS[i]}</button>;})}
+                  {[0,1,2].map(i=>{const sel=(cfg.colTargets||[]).includes(i);return<button key={i} onClick={()=>{toggleArr("colTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?COLUMN_BORDERS[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?COLUMN_TEXTS[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{COLUMN_LABELS[i]}</button>;})}
                 </div>
               </div>
             </>
@@ -529,7 +468,7 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
 
       {/* Park/Play Rules */}
       <div style={{borderTop:"1px solid #2d4057",paddingTop:10}}>
-        <Lbl>Park/Play Rules</Lbl>
+        <FieldLabel>Park/Play Rules</FieldLabel>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {[
             ["waitForWin","Wait for win before entering","Don't bet until first in-range hit observed"],

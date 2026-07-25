@@ -89,7 +89,7 @@ function getCategory(val, dts, cts, row, evts) {
     if(hits>=2) return "jackpot";
     return "win";
   }
-  const inD=dts.includes(dozenOf(val)), inC=cts.includes(colOf(val));
+  const inD=dts.includes(dozenOf(val)), inC=cts.includes(columnOf(val));
   if(!inD&&!inC) return "loss";
   if(inD&&inC) return "jackpot";
   if(!row) return "win";
@@ -116,7 +116,7 @@ function numDroughtStyle(d, entry, maxLvl, isAct) {
   return{bg:"#200505",bd:"#dc2626",tx:"#f87171"};
 }
 
-const catStyle = cat => {
+const categoryStyle = cat => {
   if(cat==="jackpot")      return{bd:"#fbbf24",tx:"#fbbf24",bg:"#1c1500"};
   if(cat==="win")          return{bd:"#4ade80",tx:"#4ade80",bg:"#0a1f0a"};
   if(cat==="breakeven")    return{bd:"#a3e635",tx:"#a3e635",bg:"#0d1a00"};

@@ -1,7 +1,7 @@
 // -- Session, Track, Settings Factories --
 function newSession(roulette, bankroll) {
   return {
-    id:uid(), name:"Session "+new Date().toLocaleDateString(),
+    id:generateId(), name:"Session "+new Date().toLocaleDateString(),
     created:Date.now(), modified:Date.now(),
     roulette:roulette||"american", bankroll:bankroll||500,
     bankrollCurrent:bankroll||500, totalBuyIn:0, buyIns:[],
@@ -12,7 +12,7 @@ function newSession(roulette, bankroll) {
 
 function newTrack(type, colorIdx, config) {
   return {
-    id:uid(), type, color:TRACK_COLORS[colorIdx%TRACK_COLORS.length],
+    id:generateId(), type, color:TRACK_COLORS[colorIdx%TRACK_COLORS.length],
     state:"active", config:{...config}, level:0, pnl:0, bets:[],
     createdAtSpin:0, closedAtSpin:null, wins:0, sequences:0,
   };
@@ -48,8 +48,8 @@ function defaultSettings() {
 
 function loadApp() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if(!raw) { console.warn("NEXUS: No saved data found in localStorage (key="+KEY+")"); return { savedSessions:[], currentSession:newSession(), gameSession:newSession(), settings:defaultSettings() }; }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) { console.warn("NEXUS: No saved data found in localStorage (key="+STORAGE_KEY+")"); return { savedSessions:[], currentSession:newSession(), gameSession:newSession(), settings:defaultSettings() }; }
     const d = JSON.parse(raw);
     if(d) {
       if(!d.settings) d.settings = defaultSettings();
@@ -71,14 +71,17 @@ function loadApp() {
       if(!d.currentSession.cashOuts) d.currentSession.cashOuts = [];
       if(d.currentSession.sessionStartedAt===undefined) d.currentSession.sessionStartedAt = null;
       if(d.currentSession.sessionEndedAt===undefined) d.currentSession.sessionEndedAt = null;
-      // Auto-recalibrate bankroll from track P&Ls to fix any drift
+      // Auto-recalibrate bankroll from track P&Ls to fix any float drift.
+      // Both live sessions have the same shape and the same drift exposure.
+      [d.currentSession, d.gameSession].forEach(sess => {
+        sess.bankrollCurrent = Math.round((
+          sess.bankroll +
+          (sess.totalBuyIn||0) -
+          (sess.totalCashOut||0) +
+          (sess.tracks||[]).reduce((sum,t) => sum + t.pnl*(t.config.unit||1), 0)
+        )*100)/100;
+      });
       const sess = d.currentSession;
-      sess.bankrollCurrent = Math.round((
-        sess.bankroll +
-        (sess.totalBuyIn||0) -
-        (sess.totalCashOut||0) +
-        (sess.tracks||[]).reduce((sum,t) => sum + t.pnl*(t.config.unit||1), 0)
-      )*100)/100;
       console.log("NEXUS: Loaded "+((d.savedSessions||[]).length)+" saved sessions, current has "+sess.spins.length+" spins");
       return d;
     }
@@ -88,10 +91,12 @@ function loadApp() {
 
 function saveApp(state) {
   try{
-    localStorage.setItem(KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }catch(e){
     console.error("NEXUS: saveApp FAILED:", e);
-    alert("WARNING: Could not save data to local storage! Your data may be lost. Error: "+e.message);
+    // Surfaced as an in-app banner (App listens for this event) — never a
+    // blocking browser dialog.
+    try{ window.dispatchEvent(new CustomEvent("nexus-save-error",{detail:e.message})); }catch(_e){}
   }
 }
 
@@ -105,8 +110,11 @@ function computeMetrics(session) {
       maxLevel:t.bets.reduce((m,b)=>Math.max(m,b.level),0),
       jackpots:t.bets.filter(b=>b.cat==="jackpot").length};
   });
+  // Net P&L = everything the player holds (chips on the table + cash already
+  // pocketed) minus everything they put in. Cash-outs move winnings out of the
+  // visible bankroll — they are NOT losses, so they must be added back.
   const totalInvested = session.bankroll + (session.totalBuyIn||0);
-  return{spins:session.spins.length,netPnL:session.bankrollCurrent-totalInvested,
+  return{spins:session.spins.length,netPnL:session.bankrollCurrent+(session.totalCashOut||0)-totalInvested,
     bankrollStart:session.bankroll,bankrollCurrent:session.bankrollCurrent,
     totalBuyIn:session.totalBuyIn||0,perTrack};
 }

@@ -3,16 +3,16 @@ import { useState, useEffect, useMemo } from "react";
 
 // -- Constants --
 const RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-const DZ_LABELS = ["1st Dozen","2nd Dozen","3rd Dozen"];
-const COL_LABELS = ["1st Col","2nd Col","3rd Col"];
-const DZ_BD = ["#f59e0b","#3b82f6","#a855f7"];
-const DZ_TX = ["#fbbf24","#60a5fa","#c084fc"];
-const COL_BD = ["#2dd4bf","#f472b6","#a3e635"];
-const COL_TX = ["#5eead4","#f9a8d4","#bef264"];
+const DOZEN_LABELS = ["1st Dozen","2nd Dozen","3rd Dozen"];
+const COLUMN_LABELS = ["1st Col","2nd Col","3rd Col"];
+const DOZEN_BORDERS = ["#f59e0b","#3b82f6","#a855f7"];
+const DOZEN_TEXTS = ["#fbbf24","#60a5fa","#c084fc"];
+const COLUMN_BORDERS = ["#2dd4bf","#f472b6","#a3e635"];
+const COLUMN_TEXTS = ["#5eead4","#f9a8d4","#bef264"];
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
-const KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.40.35";
+const STORAGE_KEY = "nexus-roulette-v1";
+const APP_VERSION = "0.41.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -34,6 +34,17 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.41.0", date:"Jul 25, 2026", title:"Experimental Overhaul + $10 Chip", changes:[
+    "New $10 chip (blue) in the chip selector, Game and Live modes",
+    "Experimental mode rebuilt: The Solution now bets every overdue number with its own progression, matching live play (results were unwinnable before)",
+    "Min-drought-to-enter park rule now actually applies in simulations",
+    "Progression Bet strategies must have a target before a simulation can start",
+    "Stopping a simulation early is now labeled honestly and partial sessions are discarded",
+    "Win rate now counts resolved sequences, not every intermediate losing spin",
+    "Net P&L no longer counts cash-outs as losses",
+    "Result flash and Stop Loss labels respect your chosen currency",
+    "Large simulations run much faster (progression tables computed once, not per spin)",
+  ]},
   { v:"0.35.0", date:"Apr 13, 2026", title:"Manual Betting", changes:[
     "Place bets directly on the roulette table — tap any number, dozen, column, or even money bet",
     "Casino-style chip selector with denominations from 25¢ to $500",
@@ -152,10 +163,10 @@ const CHANGELOG = [
 ];
 
 // -- Currency helpers --
-function getCur(code) { return CURRENCIES[code] || CURRENCIES.USD; }
+function getCurrency(code) { return CURRENCIES[code] || CURRENCIES.USD; }
 
-function fmtMoney(amount, currCode) {
-  const cur = getCur(currCode);
+function formatMoney(amount, currCode) {
+  const cur = getCurrency(currCode);
   if (amount === undefined || amount === null || isNaN(amount)) return cur.symbol + "0";
   const abs = Math.abs(amount);
   let str;
@@ -165,21 +176,34 @@ function fmtMoney(amount, currCode) {
   return (amount < 0 ? "-" : "") + cur.symbol + str;
 }
 
-function fmtChips(chips, unit, currCode) {
-  return fmtMoney(chips * unit, currCode);
+function formatChips(chips, unit, currCode) {
+  return formatMoney(chips * unit, currCode);
 }
 
 // Smart format: no decimals unless fractional part exists
-function fmtSmart(amount, cur) {
+function formatSmart(amount, cur) {
   var abs = Math.abs(amount);
   var hasFrac = abs % 1 !== 0;
   var str = hasFrac ? abs.toFixed(cur.dec) : abs.toFixed(0);
   return (amount<0?"-":"") + cur.symbol + str;
 }
-function fmtNum(amount) {
+function formatNumber(amount) {
   var abs = Math.abs(amount);
   return abs % 1 !== 0 ? abs.toFixed(2) : abs.toFixed(0);
 }
+
+// -- Chip Denominations --
+// Single source of truth for the chip selector racks (Game + Live pages).
+const CHIP_DENOMS = [
+  {val:0.25,color:"#89CFF0",border:"#5BA3D9",label:"25¢"},
+  {val:0.50,color:"#FFB6C1",border:"#E8929E",label:"50¢"},
+  {val:1,color:"#ffffff",border:"#aaaaaa",label:"$1"},
+  {val:5,color:"#ef4444",border:"#b91c1c",label:"$5"},
+  {val:10,color:"#3b82f6",border:"#1d4ed8",label:"$10"},
+  {val:25,color:"#22c55e",border:"#15803d",label:"$25"},
+  {val:100,color:"#1e293b",border:"#64748b",label:"$100"},
+  {val:500,color:"#8b5cf6",border:"#6d28d9",label:"$500"},
+];
 
 // -- Bet Types & Helpers --
 const BET_TYPES = [
@@ -254,25 +278,25 @@ function isInsideBet(type) {
 
 function signChips(chips, unit, currCode) {
   const v = chips * unit;
-  return (v >= 0 ? "+" : "-") + getCur(currCode).symbol + Math.abs(v).toFixed(getCur(currCode).dec);
+  return (v >= 0 ? "+" : "-") + getCurrency(currCode).symbol + Math.abs(v).toFixed(getCurrency(currCode).dec);
 }
 
 function convertAmount(amount, fromCode, toCode) {
-  const from = getCur(fromCode), to = getCur(toCode);
+  const from = getCurrency(fromCode), to = getCurrency(toCode);
   return amount * (to.rate / from.rate);
 }
 
 // -- Data helpers --
-const uid = () => Math.random().toString(36).slice(2,10);
+const generateId = () => Math.random().toString(36).slice(2,10);
 const dozenOf = v => { if(v==="0"||v==="00")return null; const n=+v; return n<=12?0:n<=24?1:2; };
-const colOf = v => { if(v==="0"||v==="00")return null; const n=+v; return n%3===1?0:n%3===2?1:2; };
+const columnOf = v => { if(v==="0"||v==="00")return null; const n=+v; return n%3===1?0:n%3===2?1:2; };
 
-function getWheelNums(r) {
+function getWheelNumbers(r) {
   const b = r==="american" ? ["0","00"] : ["0"];
   for(let i=1;i<=36;i++) b.push(String(i));
   return b;
 }
-function initDroughts(r) { const d={}; getWheelNums(r).forEach(n=>d[n]=0); return d; }
+function initDroughts(r) { const d={}; getWheelNumbers(r).forEach(n=>d[n]=0); return d; }
 
 const TABLE_LIMIT_PRESETS = [
   {label:"$0.25 min (machine)", minBet:0.25, maxBet:100,   maxTotal:500},

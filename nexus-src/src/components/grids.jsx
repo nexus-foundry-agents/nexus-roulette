@@ -6,10 +6,10 @@ function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOver
   function numCell(val) {
     const isZ = val==="0"||val==="00";
     const cat = isZ ? "loss" : getCategory(val,dts,cts,fibRow);
-    const cs = catStyle(cat);
+    const cs = categoryStyle(cat);
     const overlays = (trackOverlays||[]).filter(o => {
       if(isZ) return false;
-      if(o.type==="fibonacci") return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(colOf(val));
+      if(o.type==="fibonacci") return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(columnOf(val));
       if(o.type==="solution") return (o.activeBets||[]).some(b=>b.number===val);
       return false;
     });
@@ -40,14 +40,14 @@ function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOver
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:2}}>
         {[0,1,2].map(i => (
-          <div key={i} style={{textAlign:"center",fontSize:8,color:cts.includes(i)?COL_TX[i]:"#334155",fontWeight:700,textTransform:"uppercase"}}>Col {i+1}</div>
+          <div key={i} style={{textAlign:"center",fontSize:8,color:cts.includes(i)?COLUMN_TEXTS[i]:"#334155",fontWeight:700,textTransform:"uppercase"}}>Col {i+1}</div>
         ))}
       </div>
       {[0,1,2].map(dz => {
         const act = dts.includes(dz);
         return (
-          <div key={dz} style={{borderRadius:8,marginBottom:4,border:"1px solid "+(act?DZ_BD[dz]:"#1a1a2e"),padding:act?"3px":"0"}}>
-            {act && <div style={{textAlign:"center",fontSize:8,color:DZ_BD[dz],fontWeight:700,textTransform:"uppercase",padding:"1px 0 2px"}}>{DZ_LABELS[dz]}</div>}
+          <div key={dz} style={{borderRadius:8,marginBottom:4,border:"1px solid "+(act?DOZEN_BORDERS[dz]:"#1a1a2e"),padding:act?"3px":"0"}}>
+            {act && <div style={{textAlign:"center",fontSize:8,color:DOZEN_BORDERS[dz],fontWeight:700,textTransform:"uppercase",padding:"1px 0 2px"}}>{DOZEN_LABELS[dz]}</div>}
             {rows.slice(dz*4,dz*4+4).map(([a,b,c]) => (
               <div key={a} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:4}}>
                 {[a,b,c].map(n => numCell(String(n)))}

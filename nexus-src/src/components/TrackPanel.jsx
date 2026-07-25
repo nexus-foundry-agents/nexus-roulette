@@ -1,6 +1,6 @@
 // -- Track Config Panels (Edit + Add) --
 function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
-  const cur = getCur(currency||"USD");
+  const cur = getCurrency(currency||"USD");
   const tMin = tableMinBet||1;
   const [cfg, setCfg] = useState({...track.config});
   function upCfg(k,v){setCfg(c=>({...c,[k]:v}));}
@@ -22,7 +22,7 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
       </div>
       <ROIStepper value={cfg.roi} onChange={v=>upCfg("roi",v)}/>
       <div>
-        <Lbl>Stop Loss</Lbl>
+        <FieldLabel>Stop Loss</FieldLabel>
         <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
           <button onClick={()=>upCfg("stopLoss",Math.max(25,cfg.stopLoss-25))} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>-</button>
           <div style={{flex:1,textAlign:"center",fontSize:16,fontWeight:900,color:"#f87171"}}>{cur.symbol}{cfg.stopLoss}</div>
@@ -32,22 +32,22 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
       {track.type==="fibonacci" && (
         <>
           <div>
-            <Lbl>Dozens</Lbl>
+            <FieldLabel>Dozens</FieldLabel>
             <div style={{display:"flex",gap:6}}>
-              {[0,1,2].map(i=>{const sel=(cfg.dozenTargets||[]).includes(i);return<button key={i} onClick={()=>toggleArr("dozenTargets",i,2)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?DZ_BD[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?DZ_TX[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{DZ_LABELS[i]}</button>;})}
+              {[0,1,2].map(i=>{const sel=(cfg.dozenTargets||[]).includes(i);return<button key={i} onClick={()=>toggleArr("dozenTargets",i,2)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?DOZEN_BORDERS[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?DOZEN_TEXTS[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{DOZEN_LABELS[i]}</button>;})}
             </div>
           </div>
           <div>
-            <Lbl>Columns</Lbl>
+            <FieldLabel>Columns</FieldLabel>
             <div style={{display:"flex",gap:6}}>
-              {[0,1,2].map(i=>{const sel=(cfg.colTargets||[]).includes(i);return<button key={i} onClick={()=>toggleArr("colTargets",i,2)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?COL_BD[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?COL_TX[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{COL_LABELS[i]}</button>;})}
+              {[0,1,2].map(i=>{const sel=(cfg.colTargets||[]).includes(i);return<button key={i} onClick={()=>toggleArr("colTargets",i,2)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?COLUMN_BORDERS[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?COLUMN_TEXTS[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{COLUMN_LABELS[i]}</button>;})}
             </div>
           </div>
         </>
       )}
       {track.type==="custom" && (
         <div>
-          <Lbl>Bet Mode</Lbl>
+          <FieldLabel>Bet Mode</FieldLabel>
           <div style={{display:"flex",gap:6}}>
             {["flat","progression"].map(m=>{const sel=(cfg.betMode||"flat")===m;return <button key={m} onClick={()=>upCfg("betMode",m)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"2px solid "+(sel?"#7c3aed":"#2d4057"),background:sel?"#1e1040":"transparent",color:sel?"#c4b5fd":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",textTransform:"capitalize"}}>{m}</button>;})}
           </div>
@@ -63,7 +63,7 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
 }
 
 function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCfgChange, closedTracks, currency, tableMinBet}) {
-  const cur = getCur(currency||"USD");
+  const cur = getCurrency(currency||"USD");
   const tMin = tableMinBet||1;
   function upCfg(k,v) { onCfgChange(c=>({...c,[k]:v})); }
   function toggleArr(key,val,max) {
@@ -88,7 +88,7 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             {closedTracks.slice(-5).reverse().map(t=>{
               const label=t.type==="fibonacci"
-                ?((t.config.dozenTargets||[]).map(d=>DZ_LABELS[d]).join("+")+(t.config.colTargets&&t.config.colTargets.length>0?" + "+(t.config.colTargets.map(c=>COL_LABELS[c]).join("+")):"")+" · "+t.config.roi+"% ROI")
+                ?((t.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")+(t.config.colTargets&&t.config.colTargets.length>0?" + "+(t.config.colTargets.map(c=>COLUMN_LABELS[c]).join("+")):"")+" · "+t.config.roi+"% ROI")
                 :"Solution · "+t.config.roi+"% ROI";
               return(
                 <button key={t.id} onClick={()=>resumeFromClosed(t)} style={{padding:"8px 12px",borderRadius:9,border:"1px solid "+t.color,background:"#0f1923",color:t.color,fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"left"}}>
@@ -122,17 +122,17 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
       </div>
       <ROIStepper value={cfg.roi} onChange={v=>upCfg("roi",v)} disabled={type==="fibonacci"&&((cfg.betMode||"progression")==="flat"||(cfg.evenTargets||[]).length>0)}/>
       <div>
-        <Lbl>Stop Loss ($)</Lbl>
+        <FieldLabel>Stop Loss ({cur.symbol})</FieldLabel>
         <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:12,border:"1px solid #2d4057",overflow:"hidden"}}>
           <button onClick={()=>upCfg("stopLoss",Math.max(25,cfg.stopLoss-25))} style={{padding:"9px 16px",background:"transparent",border:"none",color:"#60a5fa",fontSize:20,fontWeight:700,cursor:"pointer"}}>-</button>
-          <div style={{flex:1,textAlign:"center",fontSize:18,fontWeight:900,color:"#f87171"}}>${cfg.stopLoss}</div>
+          <div style={{flex:1,textAlign:"center",fontSize:18,fontWeight:900,color:"#f87171"}}>{cur.symbol}{cfg.stopLoss}</div>
           <button onClick={()=>upCfg("stopLoss",cfg.stopLoss+25)} style={{padding:"9px 16px",background:"transparent",border:"none",color:"#60a5fa",fontSize:20,fontWeight:700,cursor:"pointer"}}>+</button>
         </div>
       </div>
       {type==="fibonacci" && (
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           <div>
-            <Lbl>Even Money {(cfg.evenTargets||[]).length>0&&(cfg.betMode||"progression")!=="flat"?"(martingale -- ROI auto)":""}</Lbl>
+            <FieldLabel>Even Money {(cfg.evenTargets||[]).length>0&&(cfg.betMode||"progression")!=="flat"?"(martingale -- ROI auto)":""}</FieldLabel>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
               {[
                 {key:"red",  label:"Red",   color:"#ef4444", pair:"black"},
@@ -161,15 +161,15 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
           {(cfg.evenTargets||[]).length===0 && (
             <>
               <div>
-                <Lbl>Dozens</Lbl>
+                <FieldLabel>Dozens</FieldLabel>
                 <div style={{display:"flex",gap:8}}>
-                  {[0,1,2].map(i=>{const sel=(cfg.dozenTargets||[]).includes(i);return <button key={i} onClick={()=>{toggleArr("dozenTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"8px 0",borderRadius:9,border:"2px solid "+(sel?DZ_BD[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?DZ_TX[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{DZ_LABELS[i]}</button>;})}
+                  {[0,1,2].map(i=>{const sel=(cfg.dozenTargets||[]).includes(i);return <button key={i} onClick={()=>{toggleArr("dozenTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"8px 0",borderRadius:9,border:"2px solid "+(sel?DOZEN_BORDERS[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?DOZEN_TEXTS[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{DOZEN_LABELS[i]}</button>;})}
                 </div>
               </div>
               <div>
-                <Lbl>Columns</Lbl>
+                <FieldLabel>Columns</FieldLabel>
                 <div style={{display:"flex",gap:8}}>
-                  {[0,1,2].map(i=>{const sel=(cfg.colTargets||[]).includes(i);return <button key={i} onClick={()=>{toggleArr("colTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"8px 0",borderRadius:9,border:"2px solid "+(sel?COL_BD[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?COL_TX[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{COL_LABELS[i]}</button>;})}
+                  {[0,1,2].map(i=>{const sel=(cfg.colTargets||[]).includes(i);return <button key={i} onClick={()=>{toggleArr("colTargets",i,2);upCfg("evenTargets",[]);}} style={{flex:1,padding:"8px 0",borderRadius:9,border:"2px solid "+(sel?COLUMN_BORDERS[i]:"#2d4057"),background:sel?"#0f1923":"transparent",color:sel?COLUMN_TEXTS[i]:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{COLUMN_LABELS[i]}</button>;})}
                 </div>
                 {(cfg.dozenTargets||[]).length===0&&(cfg.colTargets||[]).length===0&&(cfg.evenTargets||[]).length===0&&(
                   <div style={{color:"#f87171",fontSize:11,marginTop:4}}>Select at least one target.</div>
@@ -181,7 +181,7 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
       )}
       {type==="solution" && (
         <div>
-          <Lbl>Entry Threshold (misses)</Lbl>
+          <FieldLabel>Entry Threshold (misses)</FieldLabel>
           <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
             <button onClick={()=>upCfg("entryThreshold",Math.max(20,cfg.entryThreshold-5))} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>-</button>
             <div style={{flex:1,textAlign:"center",fontSize:18,fontWeight:900,color:"#f59e0b"}}>{cfg.entryThreshold}</div>
@@ -189,10 +189,14 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
           </div>
         </div>
       )}
-      <button onClick={()=>{
-        if(type==="fibonacci"&&(cfg.evenTargets||[]).length===0&&(cfg.dozenTargets||[]).length===0&&(cfg.colTargets||[]).length===0){alert("Select at least one target.");return;}
-        onAdd(type,cfg);
-      }} style={{padding:"13px 0",borderRadius:12,border:"none",background:"#16a34a",color:"white",fontSize:15,fontWeight:800,cursor:"pointer"}}>Add Track</button>
+      {(()=>{
+        // No targets picked = nothing to bet on; the inline hint above explains
+        // why, so the button simply stays disabled (no blocking dialogs).
+        const fibUntargeted = type==="fibonacci"&&(cfg.evenTargets||[]).length===0&&(cfg.dozenTargets||[]).length===0&&(cfg.colTargets||[]).length===0;
+        return (
+          <button disabled={fibUntargeted} onClick={()=>{ if(!fibUntargeted) onAdd(type,cfg); }} style={{padding:"13px 0",borderRadius:12,border:"none",background:fibUntargeted?"#1e3a2a":"#16a34a",color:fibUntargeted?"#4b6357":"white",fontSize:15,fontWeight:800,cursor:fibUntargeted?"not-allowed":"pointer",opacity:fibUntargeted?0.7:1}}>{fibUntargeted?"Select a target first":"Add Track"}</button>
+        );
+      })()}
     </div>
   );
 }

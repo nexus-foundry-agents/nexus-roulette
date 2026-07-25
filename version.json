@@ -1,1 +1,1 @@
-{"version":"0.40.35","date":"2026-05-03","notes":"Stable phone deployment at nexus-foundry.ai/roulette with a fresh PWA cache and location-relative updater."}
+{"version":"0.41.0","date":"2026-07-25","notes":"Experimental mode overhaul (per-number Solution bets, honest stop/win-rate, park rules enforced), new $10 blue chip, Net P&L cash-out fix, currency symbol fixes."}

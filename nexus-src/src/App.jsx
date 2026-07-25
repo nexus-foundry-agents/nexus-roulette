@@ -29,7 +29,6 @@ export default function App() {
   }, [appMode]);
   const [simCfg, setSimCfg] = useState(defaultSimConfig);
   const [simRunning, setSimRunning] = useState(false);
-  const [simPaused, setSimPaused] = useState(false);
   const [simProgress, setSimProgress] = useState(0); // sessions completed
   const [simResults, setSimResults] = useState(null);
   const [simDone, setSimDone] = useState(false);
@@ -63,9 +62,13 @@ export default function App() {
     function saveUIState(){
       try{localStorage.setItem("nexus_ui",JSON.stringify({manualBets,lastBets,liveManualBets,liveLastBets,selectedChip,gameResult}));}catch(e){}
     }
-    document.addEventListener("visibilitychange",function(){if(document.hidden)saveUIState();});
+    function onVisibilityChange(){ if(document.hidden) saveUIState(); }
+    document.addEventListener("visibilitychange",onVisibilityChange);
     window.addEventListener("beforeunload",saveUIState);
-    return ()=>{window.removeEventListener("beforeunload",saveUIState);};
+    return ()=>{
+      document.removeEventListener("visibilitychange",onVisibilityChange);
+      window.removeEventListener("beforeunload",saveUIState);
+    };
   },[manualBets,lastBets,liveManualBets,liveLastBets,selectedChip,gameResult]);
   const [liveBetResults, setLiveBetResults] = useState(null);
   const [liveUndoStack, setLiveUndoStack] = useState([]);
@@ -101,15 +104,33 @@ export default function App() {
   const settings = appState.settings || defaultSettings();
   const saved = appState.savedSessions || [];
   const currency = settings.currency || "USD";
-  const cur = getCur(currency);
+  const cur = getCurrency(currency);
 
   useEffect(() => { saveApp(appState); }, [appState]);
+
+  // Storage failures surface as a banner, never a blocking browser dialog
+  const [saveError, setSaveError] = useState(null);
+  useEffect(() => {
+    function onSaveError(e){ setSaveError((e && e.detail) || "Unknown storage error"); }
+    window.addEventListener("nexus-save-error", onSaveError);
+    return () => window.removeEventListener("nexus-save-error", onSaveError);
+  }, []);
+
+  // Keep the selected chip legal when the table minimum changes: snap up to the
+  // smallest chip at or above the minimum so bets can never slip under it.
+  useEffect(() => {
+    const tMin = settings.tableMinBet || 1;
+    if(selectedChip < tMin){
+      const next = CHIP_DENOMS.find(c => c.val >= tMin);
+      if(next) setSelectedChip(next.val);
+    }
+  }, [settings.tableMinBet]);
 
   function updApp(fn) { setAppState(p => { const n=JSON.parse(JSON.stringify(p)); fn(n); return n; }); }
   function updSess(fn) { updApp(s => { if(!s[sessKey])s[sessKey]=newSession(); fn(s[sessKey]); s[sessKey].modified=Date.now(); }); }
   function updSettings(fn) { updApp(s => { fn(s.settings); }); }
 
-  const wheelNums = useMemo(() => getWheelNums(sess.roulette), [sess.roulette]);
+  const wheelNums = useMemo(() => getWheelNumbers(sess.roulette), [sess.roulette]);
   const nonClosedTracks = sess.tracks.filter(t=>t.state!=="closed");
   const primaryTrack = sess.tracks.find(t=>t.id===selectedTrackId&&t.state!=="closed") || sess.tracks.find(t=>t.state==="active") || null;
   const nextColorIdx = sess.tracks.length % TRACK_COLORS.length;
@@ -143,7 +164,7 @@ export default function App() {
   const {doz:dozD, col:colD} = useMemo(() => {
     const doz=[0,0,0], col=[0,0,0];
     for(let d=0;d<3;d++){let s=0;for(let i=sess.spins.length-1;i>=0;i--){if(dozenOf(sess.spins[i])===d)break;s++;}doz[d]=s;}
-    for(let c=0;c<3;c++){let s=0;for(let i=sess.spins.length-1;i>=0;i--){if(colOf(sess.spins[i])===c)break;s++;}col[c]=s;}
+    for(let c=0;c<3;c++){let s=0;for(let i=sess.spins.length-1;i>=0;i--){if(columnOf(sess.spins[i])===c)break;s++;}col[c]=s;}
     return{doz,col};
   }, [sess.spins]);
 
@@ -228,7 +249,7 @@ export default function App() {
               evts.forEach(key=>{const em=EVEN_MONEY.find(e=>e.key===key);if(em&&em.pred(+val))hitCount++;});
             } else {
               if(dts.includes(dozenOf(val)))hitCount++;
-              if(cts.includes(colOf(val)))hitCount++;
+              if(cts.includes(columnOf(val)))hitCount++;
             }
           }
           const isHit=hitCount>0;
@@ -364,7 +385,7 @@ export default function App() {
       const oldCode = s.settings.currency;
       s.settings.currency = newCode;
       if(mode==="convert" && oldCode!==newCode) {
-        const ratio = getCur(newCode).rate / getCur(oldCode).rate;
+        const ratio = getCurrency(newCode).rate / getCurrency(oldCode).rate;
         ["currentSession","gameSession"].forEach(function(sk){
           if(!s[sk]) return;
           s[sk].bankroll = Math.round(s[sk].bankroll*ratio*100)/100;
@@ -454,7 +475,7 @@ export default function App() {
         aggregate: {
           totalSessions: allSessions.length,
           totalSpins: allSessions.reduce((a,s)=>a+s.spins.length,0),
-          netPnL: allSessions.reduce((a,s)=>a+(s.bankrollCurrent-s.bankroll),0)
+          netPnL: allSessions.reduce((a,s)=>a+computeMetrics(s).netPnL,0)
         }
       };
       const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
@@ -540,7 +561,7 @@ export default function App() {
   }
 
   function exportJSON() {
-    const data={exportedAt:new Date().toISOString(),sessions:saved.map(s=>({...s,metrics:computeMetrics(s)})),aggregate:{totalSessions:saved.length,totalSpins:saved.reduce((a,s)=>a+s.spins.length,0),netPnL:saved.reduce((a,s)=>a+(s.bankrollCurrent-s.bankroll),0)}};
+    const data={exportedAt:new Date().toISOString(),sessions:saved.map(s=>({...s,metrics:computeMetrics(s)})),aggregate:{totalSessions:saved.length,totalSpins:saved.reduce((a,s)=>a+s.spins.length,0),netPnL:saved.reduce((a,s)=>a+computeMetrics(s).netPnL,0)}};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a"); a.href=url; a.download="nexus-roulette-export-"+Date.now()+".json";
@@ -647,15 +668,7 @@ export default function App() {
     const hasActiveTracks = nonClosedTracks.some(t=>t.state==="active");
     const tMin = settings.tableMinBet||1;
 
-    const CHIPS = [
-      {val:0.25,color:"#89CFF0",border:"#5BA3D9",label:"25¢"},
-      {val:0.50,color:"#FFB6C1",border:"#E8929E",label:"50¢"},
-      {val:1,color:"#ffffff",border:"#aaaaaa",label:"$1"},
-      {val:5,color:"#ef4444",border:"#b91c1c",label:"$5"},
-      {val:25,color:"#22c55e",border:"#15803d",label:"$25"},
-      {val:100,color:"#1e293b",border:"#64748b",label:"$100"},
-      {val:500,color:"#8b5cf6",border:"#6d28d9",label:"$500"},
-    ].filter(c=>c.val>=tMin);
+    const CHIPS = CHIP_DENOMS.filter(c=>c.val>=tMin);
 
     const totalBetAmt = manualBets.reduce((s,b)=>s+b.amount,0);
     const canSpin = manualBets.length>0 || hasActiveTracks;
@@ -780,7 +793,7 @@ export default function App() {
           <button onClick={doGameSpin} disabled={gameSpinning||!!betResults} style={{flex:1,padding:isLandscape?"12px 0":"12px 0",borderRadius:10,border:"none",background:gameSpinning||betResults?"#374151":"linear-gradient(135deg,#16a34a,#059669)",color:"white",fontSize:isLandscape?15:16,fontWeight:900,cursor:gameSpinning||betResults?"not-allowed":"pointer",opacity:gameSpinning?0.7:1}}>
             {gameSpinning?"Spinning...":"🎰 SPIN"}
           </button>
-          {lastSpinDelta!==null && <div style={{textAlign:"center",flexShrink:0,minWidth:55}}><div style={{fontSize:7,color:"#64748b",textTransform:"uppercase"}}>Last</div><div style={{fontSize:14,fontWeight:900,color:lastSpinDelta>0?"#4ade80":lastSpinDelta<0?"#f87171":"#94a3b8"}}>{lastSpinDelta>0?"+":lastSpinDelta<0?"-":""}{cur.symbol}{fmtNum(lastSpinDelta)}</div></div>}
+          {lastSpinDelta!==null && <div style={{textAlign:"center",flexShrink:0,minWidth:55}}><div style={{fontSize:7,color:"#64748b",textTransform:"uppercase"}}>Last</div><div style={{fontSize:14,fontWeight:900,color:lastSpinDelta>0?"#4ade80":lastSpinDelta<0?"#f87171":"#94a3b8"}}>{lastSpinDelta>0?"+":lastSpinDelta<0?"-":""}{cur.symbol}{formatNumber(lastSpinDelta)}</div></div>}
         </div>
 
         {/* Roulette Table */}
@@ -804,13 +817,13 @@ export default function App() {
           <button onClick={doubleBets} disabled={manualBets.length===0||!!betResults} style={{flex:1,padding:isLandscape?"6px 0":"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:manualBets.length>0&&!betResults?"#fbbf24":"#374151",fontSize:isLandscape?11:8,fontWeight:700}}>2×</button>
           <button onClick={repeatBets} disabled={lastBets.length===0} style={{flex:1,padding:isLandscape?"6px 0":"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:lastBets.length>0?"#86efac":"#374151",fontSize:isLandscape?11:8,fontWeight:700}}>♻Rpt</button>
         </div>
-        {totalBetAmt>0 && <div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fbbf24"}}>Bet: {cur.symbol}{fmtNum(totalBetAmt)}</div>}
+        {totalBetAmt>0 && <div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fbbf24"}}>Bet: {cur.symbol}{formatNumber(totalBetAmt)}</div>}
         {totalBetAmt>0 && !betResults && (
           <button onClick={()=>{
             const posMap={}; manualBets.forEach(function(b){ const key=b.type==="straight"?"s:"+b.target:b.type+(b.target!==undefined?":"+b.target:""); if(!posMap[key])posMap[key]={type:b.type,target:b.target,baseAmount:0}; posMap[key].baseAmount+=b.amount; });
             const positions=Object.values(posMap); const hasInside=positions.some(function(p){return isInsideBet(p.type);});
             if(!hasInside){ var dts=[],cts=[],evts=[]; positions.forEach(function(p){ if(p.type==="dozen")dts.push(p.target);else if(p.type==="column")cts.push(p.target);else evts.push(p.type); }); var cfg=defaultFibCfg(); cfg.betMode="flat";cfg.dozenTargets=dts;cfg.colTargets=cts;cfg.evenTargets=evts; updSess(s=>{s.tracks.push(newTrack("fibonacci",s.tracks.length,cfg));}); }
-            else{ var cfg={type:"custom",unit:1,roi:15,betMode:"flat",stopLoss:200,positions:positions}; updSess(s=>{ s.tracks.push({id:uid(),type:"custom",color:TRACK_COLORS[s.tracks.length%TRACK_COLORS.length],state:"active",config:cfg,level:0,pnl:0,bets:[],createdAtSpin:s.spins.length,closedAtSpin:null,wins:0,sequences:0}); }); }
+            else{ var cfg={type:"custom",unit:1,roi:15,betMode:"flat",stopLoss:200,positions:positions}; updSess(s=>{ s.tracks.push({id:generateId(),type:"custom",color:TRACK_COLORS[s.tracks.length%TRACK_COLORS.length],state:"active",config:cfg,level:0,pnl:0,bets:[],createdAtSpin:s.spins.length,closedAtSpin:null,wins:0,sequences:0}); }); }
             clearBets(); if(settings.vibration!==false&&navigator.vibrate)navigator.vibrate([20,10,20]);
           }} style={{width:"100%",padding:"8px 0",borderRadius:8,border:"2px dashed #7c3aed",background:"#1e1040",color:"#c4b5fd",fontSize:11,fontWeight:700,cursor:"pointer"}}>🃏 Create Strategy from Bets</button>
         )}
@@ -835,12 +848,12 @@ export default function App() {
           <div style={{display:"flex",gap:8,width:"100%"}}>
             <div style={{flex:1,background:pnlVal>=0?"#0a1f0a":"#200505",borderRadius:12,padding:"14px 10px",border:"2px solid "+(pnlVal>=0?"#16a34a":"#991b1b"),textAlign:"center"}}>
               <div style={{fontSize:9,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>Session Profit</div>
-              <div style={{fontSize:28,fontWeight:900,color:pnlVal>=0?"#4ade80":"#f87171"}}>{pnlVal>=0?"+":"-"}{cur.symbol}{fmtNum(pnlVal)}</div>
+              <div style={{fontSize:28,fontWeight:900,color:pnlVal>=0?"#4ade80":"#f87171"}}>{pnlVal>=0?"+":"-"}{cur.symbol}{formatNumber(pnlVal)}</div>
             </div>
             {lastSpinDelta!==null && (
               <div style={{width:100,background:lastSpinDelta>0?"#0a1f0a":lastSpinDelta<0?"#200505":"#0f1923",borderRadius:12,padding:"14px 10px",border:"2px solid "+(lastSpinDelta>0?"#16a34a":lastSpinDelta<0?"#991b1b":"#2d4057"),textAlign:"center"}}>
                 <div style={{fontSize:9,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>Last Spin</div>
-                <div style={{fontSize:22,fontWeight:900,color:lastSpinDelta>0?"#4ade80":lastSpinDelta<0?"#f87171":"#94a3b8"}}>{lastSpinDelta>0?"+":lastSpinDelta<0?"-":""}{cur.symbol}{fmtNum(lastSpinDelta)}</div>
+                <div style={{fontSize:22,fontWeight:900,color:lastSpinDelta>0?"#4ade80":lastSpinDelta<0?"#f87171":"#94a3b8"}}>{lastSpinDelta>0?"+":lastSpinDelta<0?"-":""}{cur.symbol}{formatNumber(lastSpinDelta)}</div>
               </div>
             )}
           </div>
@@ -859,17 +872,17 @@ export default function App() {
             </div>
             <div style={{borderTop:"1px solid #2d4057",marginTop:2,paddingTop:6,display:"flex",flexDirection:"column",gap:4}}>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"d"+i} label={DZ_LABELS[i]} range={["1-12","13-24","25-36"][i]} drought={dozD[i]} colorBd={DZ_BD[i]} colorTx={DZ_TX[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"d"+i} label={DOZEN_LABELS[i]} range={["1-12","13-24","25-36"][i]} drought={dozD[i]} colorBd={DOZEN_BORDERS[i]} colorTx={DOZEN_TEXTS[i]}/>)}
               </div>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"c"+i} label={COL_LABELS[i]} range={["1,4..34","2,5..35","3,6..36"][i]} drought={colD[i]} colorBd={COL_BD[i]} colorTx={COL_TX[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"c"+i} label={COLUMN_LABELS[i]} range={["1,4..34","2,5..35","3,6..36"][i]} drought={colD[i]} colorBd={COLUMN_BORDERS[i]} colorTx={COLUMN_TEXTS[i]}/>)}
               </div>
             </div>
           </div>
         )}
 
         {/* Strategy tracks */}
-        <Lbl>Strategy Tracks</Lbl>
+        <FieldLabel>Strategy Tracks</FieldLabel>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {nonClosedTracks.map((t) => {
             const tbl=computeTableForTrack(t);
@@ -883,11 +896,11 @@ export default function App() {
                     <div style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0}}/>
                     <span style={{fontSize:11,fontWeight:700,color:t.color,flex:1}}>{TRACK_ICONS[t.type]} {t.type==="fibonacci"?"Progression":t.type==="custom"?"Custom Bet":"The Solution"}</span>
                     <span style={{fontSize:9,color:t.state==="active"?"#4ade80":"#fbbf24",fontWeight:700}}>[{t.state.toUpperCase()}]</span>
-                    <span style={{fontSize:12,fontWeight:800,color:dolPnl>=0?"#4ade80":"#f87171"}}>{dolPnl>=0?"+":"-"}{cur.symbol}{fmtNum(dolPnl)}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:dolPnl>=0?"#4ade80":"#f87171"}}>{dolPnl>=0?"+":"-"}{cur.symbol}{formatNumber(dolPnl)}</span>
                   </div>
                   <div style={{display:"flex",gap:8,marginBottom:6}}>
                     <span style={{fontSize:10,color:"#94a3b8"}}>Lvl <strong style={{color:t.level>=10?"#f87171":t.level>=6?"#fbbf24":"#e2e8f0"}}>{t.level}</strong>/{tbl.length}</span>
-                    {row && <span style={{fontSize:10,color:"#60a5fa"}}>Bet: {fmtChips(row.totalBet,t.config.unit,currency)}/spin</span>}
+                    {row && <span style={{fontSize:10,color:"#60a5fa"}}>Bet: {formatChips(row.totalBet,t.config.unit,currency)}/spin</span>}
                     {t.type==="custom" && <span style={{fontSize:9,color:"#8b5cf6"}}>{(t.config.betMode||"flat")==="flat"?"Flat":"Prog"} · {(t.config.positions||[]).length} pos</span>}
                   </div>
                   <div style={{display:"flex",gap:5}}>
@@ -961,7 +974,7 @@ export default function App() {
               const isZ=val==="0"||val==="00", r=!isZ&&RED.has(+val);
               const hitTracks=(trackOverlays||[]).filter(o=>{
                 if(isZ)return false;
-                if(o.type==="fibonacci")return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(colOf(val));
+                if(o.type==="fibonacci")return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(columnOf(val));
                 if(o.type==="solution")return (o.activeBets||[]).some(b=>b.number===val);
                 return false;
               });
@@ -978,7 +991,7 @@ export default function App() {
         {/* Roulette Table for Live Mode */}
         {(()=>{
           const tMin = settings.tableMinBet||1;
-          const CHIPS = [{val:0.25,color:"#89CFF0",border:"#5BA3D9",label:"25¢"},{val:0.50,color:"#FFB6C1",border:"#E8929E",label:"50¢"},{val:1,color:"#ffffff",border:"#aaaaaa",label:"$1"},{val:5,color:"#ef4444",border:"#b91c1c",label:"$5"},{val:25,color:"#22c55e",border:"#15803d",label:"$25"},{val:100,color:"#1e293b",border:"#64748b",label:"$100"},{val:500,color:"#8b5cf6",border:"#6d28d9",label:"$500"}].filter(c=>c.val>=tMin);
+          const CHIPS = CHIP_DENOMS.filter(c=>c.val>=tMin);
           const liveTotalBet=liveManualBets.reduce((s,b)=>s+b.amount,0);
           const liveBoardBets={}; liveManualBets.forEach(b=>{const key=b.type==="straight"?"s:"+b.target:b.type+(b.target!==undefined?":"+b.target:"");liveBoardBets[key]=(liveBoardBets[key]||0)+b.amount;});
           const stratBets={}; nonClosedTracks.filter(t=>t.state==="active").forEach(t=>{
@@ -1004,7 +1017,7 @@ export default function App() {
               <RouletteBoard roulette={sess.roulette} winningNumber={liveWinNumber} stratBets={stratBets} spinning={false} onBet={livePlaceBet} boardBets={liveBoardBets} chipColor={(CHIPS.find(c=>c.val===selectedChip)||CHIPS[0]).color} betResults={liveBetResults} stratChips={computeStratChips()} landscape={isLandscape}/>
               <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap"}}>{CHIPS.map(c=>(<button key={c.val} onClick={()=>{setSelectedChip(c.val);setLiveSelectingWinner(false);}} style={{width:34,height:34,borderRadius:"50%",border:"2px solid "+(selectedChip===c.val&&!liveSelectingWinner?"#fbbf24":c.border),background:c.color,color:c.val>=100?"#fff":c.val<=0.5?"#1e293b":"#1e293b",fontSize:c.val<1?6:8,fontWeight:900,cursor:"pointer",boxShadow:selectedChip===c.val&&!liveSelectingWinner?"0 0 8px #fbbf24":"none",display:"flex",alignItems:"center",justifyContent:"center"}}>{c.label}</button>))}</div>
               <div style={{display:"flex",gap:3}}><button onClick={liveUndoBet} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#60a5fa":"#374151",fontSize:8,fontWeight:700}}>↩Undo</button><button onClick={liveClearBets} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#f87171":"#374151",fontSize:8,fontWeight:700}}>✕Clear</button><button onClick={liveDoubleBets} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#fbbf24":"#374151",fontSize:8,fontWeight:700}}>2×</button><button onClick={liveRepeatBets} disabled={liveLastBets.length===0} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveLastBets.length>0?"#86efac":"#374151",fontSize:8,fontWeight:700}}>♻Rpt</button></div>
-              {liveTotalBet>0&&<div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fbbf24"}}>Bet: {cur.symbol}{fmtNum(liveTotalBet)}</div>}
+              {liveTotalBet>0&&<div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fbbf24"}}>Bet: {cur.symbol}{formatNumber(liveTotalBet)}</div>}
               <div style={{textAlign:"center",fontSize:8,color:"#374151"}}>center=straight · edge=split · corner=corner</div>
             </div>
           );
@@ -1023,17 +1036,17 @@ export default function App() {
             </div>
             <div style={{borderTop:"1px solid #2d4057",marginTop:2,paddingTop:6,display:"flex",flexDirection:"column",gap:4}}>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"d"+i} label={DZ_LABELS[i]} range={["1-12","13-24","25-36"][i]} drought={dozD[i]} colorBd={DZ_BD[i]} colorTx={DZ_TX[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"d"+i} label={DOZEN_LABELS[i]} range={["1-12","13-24","25-36"][i]} drought={dozD[i]} colorBd={DOZEN_BORDERS[i]} colorTx={DOZEN_TEXTS[i]}/>)}
               </div>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"c"+i} label={COL_LABELS[i]} range={["1,4..34","2,5..35","3,6..36"][i]} drought={colD[i]} colorBd={COL_BD[i]} colorTx={COL_TX[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"c"+i} label={COLUMN_LABELS[i]} range={["1,4..34","2,5..35","3,6..36"][i]} drought={colD[i]} colorBd={COLUMN_BORDERS[i]} colorTx={COLUMN_TEXTS[i]}/>)}
               </div>
             </div>
           </div>
         )}
 
         {/* Track cards with drag-to-reorder */}
-        <Lbl>Active Strategy Tracks</Lbl>
+        <FieldLabel>Active Strategy Tracks</FieldLabel>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {nonClosedTracks.map((t,idx) => {
             const tbl=computeTableForTrack(t);
@@ -1056,7 +1069,7 @@ export default function App() {
                     <div style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0}}/>
                     <span style={{fontSize:11,fontWeight:700,color:t.color,flex:1}}>{TRACK_ICONS[t.type]} {t.type==="fibonacci"?"Progression Bet":t.type==="custom"?"Custom Bet":"The Solution"}</span>
                     <span style={{fontSize:9,color:t.state==="active"?"#4ade80":t.state==="parked"?"#fbbf24":"#94a3b8",fontWeight:700}}>[{t.state.toUpperCase()}]</span>
-                    <span style={{fontSize:12,fontWeight:800,color:dolPnl>=0?"#4ade80":"#f87171"}}>{dolPnl>=0?"+":"-"}{cur.symbol}{fmtNum(dolPnl)}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:dolPnl>=0?"#4ade80":"#f87171"}}>{dolPnl>=0?"+":"-"}{cur.symbol}{formatNumber(dolPnl)}</span>
                   </div>
                   <div style={{display:"flex",gap:8,marginBottom:6}}>
                     <span style={{fontSize:10,color:"#94a3b8"}}>Lvl <strong style={{color:t.level>=10?"#f87171":t.level>=6?"#fbbf24":"#e2e8f0"}}>{t.level}</strong>/{tbl.length}</span>
@@ -1096,7 +1109,7 @@ export default function App() {
         {/* Solution candidates -- shown even without active Solution track */}
         {solCandidates.length>0 && (
           <Card>
-            <Lbl>{"🎯 Solution Candidates ("+solCandidates.length+")"}</Lbl>
+            <FieldLabel>{"🎯 Solution Candidates ("+solCandidates.length+")"}</FieldLabel>
             <div style={{fontSize:10,color:"#64748b",marginBottom:6}}>Tap a number to start tracking it with The Solution</div>
             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
               {solCandidates.slice(0,20).map(num=>{
@@ -1117,7 +1130,7 @@ export default function App() {
             {hasMix && outcomes && outcomes.jackpot && (
               <div style={{background:"#1c1500",borderRadius:14,padding:12,border:"1px solid #f59e0b"}}>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                  {[{l:"JP Bet",v:row?fmtChips(row.totalBet,primaryTrack.config.unit,currency):"--",c:"#fbbf24"},{l:"JP Return",v:fmtMoney(outcomes.jackpot.ret*(primaryTrack.config.unit||1),currency),c:"#fbbf24"},{l:"JP Profit",v:(outcomes.jackpot.profit*(primaryTrack.config.unit||1)>=0?"+":"-")+cur.symbol+Math.abs(outcomes.jackpot.profit*(primaryTrack.config.unit||1)).toFixed(cur.dec),c:outcomes.jackpot.profit>=0?"#4ade80":"#f87171"}].map(({l,v,c}) => (
+                  {[{l:"JP Bet",v:row?formatChips(row.totalBet,primaryTrack.config.unit,currency):"--",c:"#fbbf24"},{l:"JP Return",v:formatMoney(outcomes.jackpot.ret*(primaryTrack.config.unit||1),currency),c:"#fbbf24"},{l:"JP Profit",v:(outcomes.jackpot.profit*(primaryTrack.config.unit||1)>=0?"+":"-")+cur.symbol+Math.abs(outcomes.jackpot.profit*(primaryTrack.config.unit||1)).toFixed(cur.dec),c:outcomes.jackpot.profit>=0?"#4ade80":"#f87171"}].map(({l,v,c}) => (
                     <div key={l} style={{textAlign:"center"}}>
                       <div style={{fontSize:8,color:"#78350f",textTransform:"uppercase",marginBottom:2}}>{l}</div>
                       <div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div>
@@ -1137,7 +1150,7 @@ export default function App() {
                 </span>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                {[{l:"Bet/Spin",v:row?fmtChips(row.totalBet,primaryTrack.config.unit,currency):"--",c:"#60a5fa"},{l:"Total Spent",v:row?fmtChips(row.totalInvest,primaryTrack.config.unit,currency):"--",c:"#f87171"},{l:"Partial Win",v:outcomes?fmtMoney(outcomes.partial.ret*(primaryTrack.config.unit||1),currency):"--",c:"#a78bfa"},{l:"Partial Profit",v:outcomes?signChips(outcomes.partial.profit,primaryTrack.config.unit||1,currency):"--",c:outcomes&&outcomes.partial.profit>=0?"#4ade80":"#f97316"}].map(({l,v,c}) => (
+                {[{l:"Bet/Spin",v:row?formatChips(row.totalBet,primaryTrack.config.unit,currency):"--",c:"#60a5fa"},{l:"Total Spent",v:row?formatChips(row.totalInvest,primaryTrack.config.unit,currency):"--",c:"#f87171"},{l:"Partial Win",v:outcomes?formatMoney(outcomes.partial.ret*(primaryTrack.config.unit||1),currency):"--",c:"#a78bfa"},{l:"Partial Profit",v:outcomes?signChips(outcomes.partial.profit,primaryTrack.config.unit||1,currency):"--",c:outcomes&&outcomes.partial.profit>=0?"#4ade80":"#f97316"}].map(({l,v,c}) => (
                   <div key={l} style={{background:"#0f1923",borderRadius:10,padding:"10px 8px",textAlign:"center",border:"1px solid #2d4057"}}>
                     <div style={{fontSize:8,color:"#64748b",textTransform:"uppercase",marginBottom:2}}>{l}</div>
                     <div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div>
@@ -1157,7 +1170,7 @@ export default function App() {
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {solBets.length>0 && (
               <Card>
-                <Lbl>Active Bets</Lbl>
+                <FieldLabel>Active Bets</FieldLabel>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {solBets.map(b => {
                     const row=solTable[Math.min(b.level,solTable.length-1)];
@@ -1165,7 +1178,7 @@ export default function App() {
                       <div key={b.number} style={{background:"#0f1923",borderRadius:10,padding:"10px 12px",border:"1px solid "+primaryTrack.color,textAlign:"center",minWidth:70}}>
                         <div style={{fontSize:18,fontWeight:900,color:RED.has(+b.number)?"#f87171":"#f1f5f9"}}>{b.number}</div>
                         <div style={{fontSize:9,color:"#64748b"}}>Lvl {b.level+1}</div>
-                        <div style={{fontSize:11,color:"#60a5fa",fontWeight:700}}>{row?fmtChips(row.totalBet,primaryTrack.config.unit,currency):"--"}/spin</div>
+                        <div style={{fontSize:11,color:"#60a5fa",fontWeight:700}}>{row?formatChips(row.totalBet,primaryTrack.config.unit,currency):"--"}/spin</div>
                         <button onClick={()=>addSolBet(primaryTrack.id,b.number)} style={{marginTop:3,fontSize:8,background:"transparent",border:"1px solid #7f1d1d",borderRadius:4,color:"#f87171",padding:"2px 5px",cursor:"pointer"}}>×</button>
                       </div>
                     );
@@ -1174,7 +1187,7 @@ export default function App() {
               </Card>
             )}
             <Card>
-              <Lbl>{inRange.length>0?inRange.length+" numbers at or past entry":"No numbers in range yet"}</Lbl>
+              <FieldLabel>{inRange.length>0?inRange.length+" numbers at or past entry":"No numbers in range yet"}</FieldLabel>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                 {inRange.map(num => {
                   const d=sess.droughts[num]||0, isAct=solBets.some(b=>b.number===num);
@@ -1189,7 +1202,7 @@ export default function App() {
               </div>
             </Card>
             <Card>
-              <Lbl>Tap Winning Number</Lbl>
+              <FieldLabel>Tap Winning Number</FieldLabel>
               <SolGrid onNumber={v=>tapNumber(v,true)} droughts={sess.droughts} entry={solEntryThreshold} maxLvl={solTable.length} activeBets={solBets} wheelNums={wheelNums} trackOverlays={trackOverlays.filter(o=>o.id!==primaryTrack.id)} flashNum={flashNum}/>
             </Card>
           </div>
@@ -1243,7 +1256,7 @@ export default function App() {
         )}
         <Card>
           <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
-            <span style={{color:selTrack.color}}>•</span> {selTrack.type==="fibonacci"?((selTrack.config.dozenTargets||[]).map(d=>DZ_LABELS[d]).join("+")+((selTrack.config.colTargets||[]).length>0?" + "+(selTrack.config.colTargets||[]).map(c=>COL_LABELS[c]).join("+"):"")+" · "+selTrack.config.roi+"% ROI"):"Single # · "+selTrack.config.roi+"% ROI"} · {tbl.length} levels · {cur.symbol}{selTrack.config.stopLoss} stop
+            <span style={{color:selTrack.color}}>•</span> {selTrack.type==="fibonacci"?((selTrack.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")+((selTrack.config.colTargets||[]).length>0?" + "+(selTrack.config.colTargets||[]).map(c=>COLUMN_LABELS[c]).join("+"):"")+" · "+selTrack.config.roi+"% ROI"):"Single # · "+selTrack.config.roi+"% ROI"} · {tbl.length} levels · {cur.symbol}{selTrack.config.stopLoss} stop
           </div>
           <div style={{background:"#0f1923",borderRadius:8,padding:"8px 10px",marginBottom:8,border:"1px solid #2d4057",display:"flex",flexDirection:"column",gap:3}}>
             {legendRows.map(([abbr,desc]) => (
@@ -1297,7 +1310,7 @@ export default function App() {
                     const isZ=val==="0"||val==="00", r=!isZ&&RED.has(+val);
                     const hitTracks=(trackOverlays||[]).filter(o=>{
                       if(isZ)return false;
-                      if(o.type==="fibonacci")return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(colOf(val));
+                      if(o.type==="fibonacci")return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(columnOf(val));
                       if(o.type==="solution")return (o.activeBets||[]).some(b=>b.number===val);
                       return false;
                     });
@@ -1344,7 +1357,7 @@ export default function App() {
     return (
       <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
         <Card>
-          <Lbl>Current Session</Lbl>
+          <FieldLabel>Current Session</FieldLabel>
           <div style={{fontSize:13,color:"#e2e8f0",fontWeight:700,marginBottom:4}}>{sess.name}</div>
           <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>{new Date(sess.created).toLocaleString()} · {sess.spins.length} spins · {sess.tracks.length} tracks</div>
           {sess.sessionStartedAt && (
@@ -1365,12 +1378,12 @@ export default function App() {
           )}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
             {[
-              {l:"Initial Bankroll",v:fmtMoney(sess.bankroll,currency),c:"#60a5fa"},
-              {l:"Current",v:fmtMoney(sess.bankrollCurrent,currency),c:"#60a5fa"},
-              {l:"Total Buy Ins",v:"+"+fmtMoney(sess.totalBuyIn||0,currency),c:"#a78bfa"},
-              {l:"Total Cash Outs",v:sess.totalCashOut>0?fmtMoney(sess.totalCashOut||0,currency):fmtMoney(0,currency),c:"#f97316"},
-              {l:"Net Money In",v:fmtMoney((sess.totalBuyIn||0)-(sess.totalCashOut||0),currency),c:(sess.totalBuyIn||0)>=(sess.totalCashOut||0)?"#f87171":"#4ade80"},
-              {l:"Net P&L",v:(pnlVal>=0?"+":"-")+cur.symbol+fmtNum(pnlVal),c:pnlColor},
+              {l:"Initial Bankroll",v:formatMoney(sess.bankroll,currency),c:"#60a5fa"},
+              {l:"Current",v:formatMoney(sess.bankrollCurrent,currency),c:"#60a5fa"},
+              {l:"Total Buy Ins",v:"+"+formatMoney(sess.totalBuyIn||0,currency),c:"#a78bfa"},
+              {l:"Total Cash Outs",v:sess.totalCashOut>0?formatMoney(sess.totalCashOut||0,currency):formatMoney(0,currency),c:"#f97316"},
+              {l:"Net Money In",v:formatMoney((sess.totalBuyIn||0)-(sess.totalCashOut||0),currency),c:(sess.totalBuyIn||0)>=(sess.totalCashOut||0)?"#f87171":"#4ade80"},
+              {l:"Net P&L",v:(pnlVal>=0?"+":"-")+cur.symbol+formatNumber(pnlVal),c:pnlColor},
             ].map(({l,v,c}) => (
               <div key={l} style={{background:"#0f1923",borderRadius:10,padding:"10px 8px",border:"1px solid #2d4057",textAlign:"center"}}>
                 <div style={{fontSize:8,color:"#64748b",textTransform:"uppercase",marginBottom:3}}>{l}</div>
@@ -1387,7 +1400,7 @@ export default function App() {
 
         {trackGroups.length>0 && (
           <Card>
-            <Lbl>Strategy Performance</Lbl>
+            <FieldLabel>Strategy Performance</FieldLabel>
             {trackGroups.map(g => {
               const winRate=g.wins+g.losses>0?(g.wins/(g.wins+g.losses)*100).toFixed(0)+"%":"--";
               const hasInactive=g.tracks.some(t=>t.state==="closed"||t.state==="parked");
@@ -1396,7 +1409,7 @@ export default function App() {
               const activeInGroup=g.tracks.filter(t=>t.state==="active");
               const typeLabel=g.type==="fibonacci"?"🎲 Progression Bet":g.type==="custom"?"🃏 Custom Bet":"🎯 Solution";
               const targetLabel=g.type==="fibonacci"&&g.lastTargets
-                ?((g.lastTargets.doz||[]).map(d=>DZ_LABELS[d]).join("+")+(g.lastTargets.col&&g.lastTargets.col.length>0?" + "+(g.lastTargets.col.map(c=>COL_LABELS[c]).join("+")):""))
+                ?((g.lastTargets.doz||[]).map(d=>DOZEN_LABELS[d]).join("+")+(g.lastTargets.col&&g.lastTargets.col.length>0?" + "+(g.lastTargets.col.map(c=>COLUMN_LABELS[c]).join("+")):""))
                 :"";
               return(
                 <div key={g.key} style={{background:"#0f1923",borderRadius:10,padding:"12px",border:"1px solid #2d4057",marginBottom:8}}>
@@ -1437,14 +1450,13 @@ export default function App() {
         )}
 
         <Card>
-          <Lbl>{"Saved Sessions ("+saved.length+")"}</Lbl>
+          <FieldLabel>{"Saved Sessions ("+saved.length+")"}</FieldLabel>
           {saved.length===0
             ? <div style={{textAlign:"center",padding:"16px 0",color:"#475569",fontSize:12}}>No saved sessions yet.</div>
             : (
               <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:"40vh",overflowY:"auto"}}>
                 {[...saved].reverse().map(s => {
-                  const si=s.totalBuyIn||0, ti=s.bankroll+si;
-                  const pnl=s.bankrollCurrent-ti, isCurrent=s.id===sess.id;
+                  const pnl=computeMetrics(s).netPnL, isCurrent=s.id===sess.id;
                   return (
                     <div key={s.id} style={{background:"#0f1923",borderRadius:10,padding:"10px 12px",border:"1px solid "+(isCurrent?"#86efac":"#2d4057")}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
@@ -1488,11 +1500,11 @@ export default function App() {
     return (
       <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
         <Card>
-          <Lbl>Currency</Lbl>
+          <FieldLabel>Currency</FieldLabel>
           <button onClick={()=>setCurrencyOpen(true)} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px",borderRadius:12,border:"1px solid #2d4057",background:"#0f1923",cursor:"pointer",textAlign:"left"}}>
-            <span style={{fontSize:22}}>{getCur(currency).flag}</span>
+            <span style={{fontSize:22}}>{getCurrency(currency).flag}</span>
             <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0"}}>{getCur(currency).name}</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0"}}>{getCurrency(currency).name}</div>
               <div style={{fontSize:11,color:"#475569"}}>{currency} · {cur.symbol}</div>
             </div>
             <span style={{color:"#64748b",fontSize:18}}>›</span>
@@ -1500,13 +1512,13 @@ export default function App() {
         </Card>
 
         <Card>
-          <Lbl>Default Buy In</Lbl>
+          <FieldLabel>Default Buy In</FieldLabel>
           <MoneyInput value={localBuyIn} onChange={setLocalBuyIn} currCode={currency}/>
           <button onClick={saveBuyIn} style={{width:"100%",marginTop:10,padding:"12px 0",borderRadius:10,border:"none",background:"#16a34a",color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>Save Default</button>
         </Card>
 
         <Card>
-          <Lbl>Roulette Type</Lbl>
+          <FieldLabel>Roulette Type</FieldLabel>
           <div style={{display:"flex",gap:8}}>
             {[["american","🇺🇸 American (00)"],["european","🇪🇺 European"]].map(([v,label]) => (
               <button key={v} onClick={()=>updSess(s=>{s.roulette=v;s.droughts=initDroughts(v);})} style={{flex:1,padding:"10px 4px",borderRadius:9,border:"1px solid "+(sess.roulette===v?"#60a5fa":"#2d4057"),cursor:"pointer",fontSize:11,fontWeight:700,background:sess.roulette===v?"#0c1a2e":"#0f1923",color:sess.roulette===v?"#60a5fa":"#64748b"}}>{label}</button>
@@ -1515,7 +1527,7 @@ export default function App() {
         </Card>
 
         <Card>
-          <Lbl>Info</Lbl>
+          <FieldLabel>Info</FieldLabel>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <button onClick={()=>setChangelogOpen(true)} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>📋 Changelog</button>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
@@ -1525,7 +1537,7 @@ export default function App() {
           </div>
         </Card>
         <Card>
-          <Lbl>Table Limits</Lbl>
+          <FieldLabel>Table Limits</FieldLabel>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {[
               {label:"Min Bet", key:"tableMinBet", color:"#4ade80"},
@@ -1573,7 +1585,7 @@ export default function App() {
           </div>
         </Card>
         <Card>
-          <Lbl>Google Drive Backup</Lbl>
+          <FieldLabel>Google Drive Backup</FieldLabel>
           <div style={{padding:"10px 12px",borderRadius:10,border:"1px solid "+(getDriveToken()?"#4ade80":"#2d4057"),background:getDriveToken()?"#0a1f0a":"#0f1923"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -1644,7 +1656,7 @@ export default function App() {
           </div>
         </Card>
         <Card>
-          <Lbl>Info</Lbl>
+          <FieldLabel>Info</FieldLabel>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <button onClick={()=>{if(window.confirm("Restart onboarding? Your current bankroll will be your new starting point."))updApp(s=>{const curBankroll=s.currentSession.bankrollCurrent;s.settings.onboarded=false;s.settings._restartBankroll=curBankroll;});}} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:13,cursor:"pointer"}}>Restart Onboarding</button>
             <button onClick={importJSON} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}}>📥 Import Session Data</button>
@@ -1694,9 +1706,9 @@ export default function App() {
             <div>
               <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:12,marginTop:4,flexWrap:"wrap"}}>
                 <button onClick={()=>setEditBankroll(true)} style={{fontSize:12,color:"#64748b",background:"transparent",border:"none",cursor:"pointer",padding:0}}>
-                  Bank: <strong style={{color:"#60a5fa"}}>{fmtMoney(sess.bankrollCurrent,currency)}</strong> <span style={{fontSize:9,color:"#334155"}}>✏️</span>
+                  Bank: <strong style={{color:"#60a5fa"}}>{formatMoney(sess.bankrollCurrent,currency)}</strong> <span style={{fontSize:9,color:"#334155"}}>✏️</span>
                 </button>
-                <span style={{fontSize:12,color:"#64748b"}}>Profit: <strong style={{color:pnlColor}}>{pnlVal>=0?"+":"-"}{cur.symbol}{fmtNum(pnlVal)}</strong></span>
+                <span style={{fontSize:12,color:"#64748b"}}>Profit: <strong style={{color:pnlColor}}>{pnlVal>=0?"+":"-"}{cur.symbol}{formatNumber(pnlVal)}</strong></span>
                 <span style={{fontSize:12,color:"#64748b"}}>Spins: <strong style={{color:"#e2e8f0"}}>{sess.spins.length}</strong></span>
               </div>
               <div style={{display:"flex",gap:8,marginTop:8,justifyContent:"center"}}>
@@ -1706,6 +1718,14 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Storage failure banner */}
+        {saveError && (
+          <div style={{width:"100%",padding:"10px 14px",borderRadius:12,border:"2px solid #991b1b",background:"#200505",color:"#f87171",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+            <span>⚠ Could not save to device storage — recent changes may be lost. ({saveError})</span>
+            <button onClick={()=>setSaveError(null)} style={{padding:"4px 10px",borderRadius:8,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>Dismiss</button>
+          </div>
+        )}
 
         {/* Update banner */}
         {updateAvailable && (
@@ -1738,7 +1758,7 @@ export default function App() {
         {/* Version badge */}
         <div style={{fontSize:9,color:"#374151",textAlign:"center"}}>v{APP_VERSION}</div>
 
-        {appMode==="sim" && <SimModePage simCfg={simCfg} setSimCfg={setSimCfg} simRunning={simRunning} setSimRunning={setSimRunning} simPaused={simPaused} setSimPaused={setSimPaused} simProgress={simProgress} setSimProgress={setSimProgress} simResults={simResults} setSimResults={setSimResults} simDone={simDone} setSimDone={setSimDone} simStopRef={simStopRef} currency={currency} cur={cur}/>}
+        {appMode==="sim" && <SimModePage simCfg={simCfg} setSimCfg={setSimCfg} simRunning={simRunning} setSimRunning={setSimRunning} simProgress={simProgress} setSimProgress={setSimProgress} simResults={simResults} setSimResults={setSimResults} simDone={simDone} setSimDone={setSimDone} simStopRef={simStopRef} currency={currency} cur={cur}/>}
 
         {appMode==="game" && <GamePage/>}
 
@@ -1763,7 +1783,7 @@ export default function App() {
         )}
 
       {/* Modals */}
-      {result && <ResultFlash result={result} onDismiss={()=>setResult(null)}/>}
+      {result && <ResultFlash result={result} cur={cur} onDismiss={()=>setResult(null)}/>}
       {buyInOpen && <BuyInModal defaultAmount={settings.defaultBuyIn||100} currency={currency} currentBankroll={sess.bankrollCurrent} onBuyIn={doBuyIn} onClose={()=>setBuyInOpen(false)}/>}
       {cashOutOpen && <CashOutModal maxAmount={sess.bankrollCurrent} currency={currency} currentBankroll={sess.bankrollCurrent} onCashOut={doCashOut} onClose={()=>setCashOutOpen(false)}/>}
       {currencyOpen && <CurrencyModal current={currency} bankroll={sess.bankrollCurrent} onSave={changeCurrency} onClose={()=>setCurrencyOpen(false)}/>}

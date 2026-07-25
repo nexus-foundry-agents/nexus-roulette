@@ -1,8 +1,9 @@
 // -- Result Flash Overlay --
-function ResultFlash({result, onDismiss}) {
+function ResultFlash({result, cur, onDismiss}) {
   useEffect(() => { const t=setTimeout(onDismiss,3000); return()=>clearTimeout(t); }, []);
   if(!result) return null;
   const {val, trackResults, totalDelta} = result;
+  const symbol = (cur && cur.symbol) || "$";
   const isJackpot = trackResults.filter(r=>r.profit>0).length > 1;
   return (
     <div onClick={onDismiss} style={{position:"fixed",bottom:0,left:0,right:0,background:"#0f1923",border:"2px solid "+(isJackpot?"#fbbf24":"#2d4057"),borderRadius:"16px 16px 0 0",padding:"16px 20px",zIndex:1000,cursor:"pointer"}}>
@@ -13,7 +14,7 @@ function ResultFlash({result, onDismiss}) {
       {isJackpot && (
         <div style={{background:"#1c1500",borderRadius:10,padding:"8px 12px",marginBottom:8,textAlign:"center",border:"1px solid #fbbf24"}}>
           <div style={{fontSize:13,color:"#fbbf24",fontWeight:800}}>JACKPOT</div>
-          <div style={{fontSize:20,fontWeight:900,color:"#fbbf24"}}>{totalDelta>=0?"+":"-"}${Math.abs(totalDelta).toFixed(2)}</div>
+          <div style={{fontSize:20,fontWeight:900,color:"#fbbf24"}}>{totalDelta>=0?"+":"-"}{symbol}{Math.abs(totalDelta).toFixed(2)}</div>
         </div>
       )}
       {trackResults.map((r,i) => (
@@ -29,7 +30,7 @@ function ResultFlash({result, onDismiss}) {
       ))}
       {!isJackpot && (
         <div style={{marginTop:8,textAlign:"center",fontSize:12,color:"#64748b"}}>
-          Net: <span style={{color:totalDelta>=0?"#4ade80":"#f87171",fontWeight:700}}>{totalDelta>=0?"+":"-"}${Math.abs(totalDelta).toFixed(2)}</span>
+          Net: <span style={{color:totalDelta>=0?"#4ade80":"#f87171",fontWeight:700}}>{totalDelta>=0?"+":"-"}{symbol}{Math.abs(totalDelta).toFixed(2)}</span>
         </div>
       )}
     </div>
