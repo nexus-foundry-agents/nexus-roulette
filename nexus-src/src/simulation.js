@@ -13,6 +13,8 @@ function defaultSimConfig() {
     sessions: 100,
     spinsPerSession: 500,
     roulette: "european",
+    bankrollMode: false,   // carry P&L across sessions from one buy-in
+    bankrollStart: 500,    // the buy-in (separate from any per-strategy stop loss)
     strategies: [], // array of {type, config} same shape as live tracks
   };
 }
@@ -40,6 +42,8 @@ function simNewResults(strategyCount) {
     sessions:[], totalPnl:0, totalWins:0, totalLosses:0, totalSeqLosses:0,
     stopLossHits:0, winStreaks:[], lossStreaks:[], currentStreak:{type:null,len:0},
     totalSequences:0, pnlHistory:[],
+    satOutSessions:0, // sessions where the strategy never placed a single bet
+    bankrollStart:null, bankrollCurrent:null, busted:false, bustedAtSession:null, // bankroll mode
   }));
 }
 
@@ -47,7 +51,7 @@ function simNewResults(strategyCount) {
 // pushStreak as spins resolve. Returns per-strategy outcomes
 // [{pnl,wins,losses,seqLosses,stopLossHits}], or null if shouldStop() fired
 // mid-session — aborted sessions are discarded so partial data never skews stats.
-function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop) {
+function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop, activeMask) {
   const sState = strategies.map(strat=>({
     level:0, pnl:0, wins:0, losses:0, seqLosses:0, stopLossHits:0,
     trough:0, peak:0, // deepest drawdown / highest running P&L within this session
@@ -64,6 +68,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
     const val = wheelNums[Math.floor(Math.random()*wheelNums.length)];
 
     strategies.forEach((strat,si)=>{
+      if(activeMask && activeMask[si]===false) return; // busted in bankroll mode — out of the game
       const st=sState[si];
       const cfg=strat.config;
       const rules=cfg.parkRules||{};

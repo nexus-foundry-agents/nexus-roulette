@@ -21,7 +21,7 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.43.0";
+  var MY_V="0.44.0";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -391,7 +391,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.43.0";
+var APP_VERSION = "0.44.0";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -495,6 +495,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.44.0",
+  date: "Jul 25, 2026",
+  title: "Bankroll Survival + Sat-Out Metric",
+  changes: ["💰 Bankroll Mode: P&L carries over between sessions from one buy-in (separate from stop loss); if the bankroll hits zero mid-session you're busted, and the results show how many sessions you survived", "Busted strategies leave the game while others keep playing; running bankroll shown on every session row", "Sat Out metric: how many sessions the strategy never entered at all (drought threshold never reached), as a stat tile and a Session Explorer filter"]
+}, {
   v: "0.43.0",
   date: "Jul 25, 2026",
   title: "Session Explorer",
@@ -1714,6 +1719,10 @@ function defaultSimConfig() {
     sessions: 100,
     spinsPerSession: 500,
     roulette: "european",
+    bankrollMode: false,
+    // carry P&L across sessions from one buy-in
+    bankrollStart: 500,
+    // the buy-in (separate from any per-strategy stop loss)
     strategies: [] // array of {type, config} same shape as live tracks
   };
 }
@@ -1774,7 +1783,13 @@ function simNewResults(strategyCount) {
         len: 0
       },
       totalSequences: 0,
-      pnlHistory: []
+      pnlHistory: [],
+      satOutSessions: 0,
+      // sessions where the strategy never placed a single bet
+      bankrollStart: null,
+      bankrollCurrent: null,
+      busted: false,
+      bustedAtSession: null // bankroll mode
     };
   });
 }
@@ -1783,7 +1798,7 @@ function simNewResults(strategyCount) {
 // pushStreak as spins resolve. Returns per-strategy outcomes
 // [{pnl,wins,losses,seqLosses,stopLossHits}], or null if shouldStop() fired
 // mid-session — aborted sessions are discarded so partial data never skews stats.
-function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop) {
+function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop, activeMask) {
   var sState = strategies.map(function (strat) {
     return {
       level: 0,
@@ -1812,6 +1827,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       };
       var val = wheelNums[Math.floor(Math.random() * wheelNums.length)];
       strategies.forEach(function (strat, si) {
+        if (activeMask && activeMask[si] === false) return; // busted in bankroll mode — out of the game
         var st = sState[si];
         var cfg = strat.config;
         var rules = cfg.parkRules || {};
@@ -5971,6 +5987,7 @@ function SessionExplorer(_ref36) {
     if (filter === "won") return s.pnl > 0;
     if (filter === "lost") return s.pnl < 0;
     if (filter === "stoploss") return (s.stopLossHits || 0) > 0;
+    if (filter === "satout") return (s.wins || 0) === 0 && (s.losses || 0) === 0;
     return true;
   });
   var sorted = sort === "order" ? filtered : _toConsumableArray(filtered).sort(function (a, b) {
@@ -5983,6 +6000,8 @@ function SessionExplorer(_ref36) {
     return s.pnl < 0;
   }).length + ")"], ["stoploss", "Hit Stop (" + indexed.filter(function (s) {
     return (s.stopLossHits || 0) > 0;
+  }).length + ")"], ["satout", "Sat Out (" + indexed.filter(function (s) {
+    return (s.wins || 0) === 0 && (s.losses || 0) === 0;
   }).length + ")"]];
   var sortChips = [["order", "# Order"], ["best", "Best P&L"], ["worst", "Worst P&L"]];
   function chipStyle(selected, color) {
@@ -6109,7 +6128,14 @@ function SessionExplorer(_ref36) {
         color: "#64748b",
         flexShrink: 0
       }
-    }, "\u2913", s.trough !== undefined ? (s.trough < 0 ? "-" : "") + cur.symbol + Math.abs(s.trough || 0).toFixed(0) : "—", " \u2912", s.peak !== undefined ? "+" + cur.symbol + Math.abs(s.peak || 0).toFixed(0) : "—"));
+    }, "\u2913", s.trough !== undefined ? (s.trough < 0 ? "-" : "") + cur.symbol + Math.abs(s.trough || 0).toFixed(0) : "—", " \u2912", s.peak !== undefined ? "+" + cur.symbol + Math.abs(s.peak || 0).toFixed(0) : "—"), s.bankrollAfter !== undefined && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        fontWeight: 700,
+        color: s.bankrollAfter > 0 ? "#4ade80" : "#f87171",
+        flexShrink: 0
+      }
+    }, "\uD83D\uDCB0", cur.symbol, s.bankrollAfter.toFixed(0)));
   })), sorted.length > visible.length && /*#__PURE__*/React.createElement("button", {
     onClick: function onClick() {
       return setShown(function (n) {
@@ -6215,17 +6241,32 @@ function SimModePage(_ref41) {
       });
     });
     var sessionIdx = 0;
+    // Bankroll mode: each strategy plays from its own copy of the buy-in; a
+    // busted strategy leaves the game while the rest keep playing.
+    var active = simCfg.strategies.map(function () {
+      return true;
+    });
+    if (simCfg.bankrollMode) {
+      results.forEach(function (r) {
+        r.bankrollStart = simCfg.bankrollStart || 500;
+        r.bankrollCurrent = r.bankrollStart;
+      });
+    }
     function runChunk() {
       var CHUNK = 10;
       for (var ci = 0; ci < CHUNK && sessionIdx < simCfg.sessions; ci++) {
         if (simStopRef.current) break;
+        if (simCfg.bankrollMode && active.every(function (a) {
+          return !a;
+        })) break; // everyone's busted
         var outcomes = simRunSession(simCfg.strategies, tables, wheelNums, simCfg.spinsPerSession, results, function () {
           return simStopRef.current;
-        });
+        }, active);
         if (!outcomes) break; // stopped mid-session — discard the partial session
         sessionIdx++;
         outcomes.forEach(function (o, si) {
-          results[si].sessions.push({
+          if (!active[si]) return;
+          var sessionRecord = {
             pnl: o.pnl,
             wins: o.wins,
             losses: o.losses,
@@ -6233,7 +6274,24 @@ function SimModePage(_ref41) {
             stopLossHits: o.stopLossHits,
             trough: o.trough,
             peak: o.peak
-          });
+          };
+          if (simCfg.bankrollMode) {
+            // The trough is the deepest the running P&L went mid-session: if the
+            // buy-in couldn't cover it, the player ran out of money DURING this
+            // session — it counts as played, and the strategy is out of the game.
+            if (results[si].bankrollCurrent + o.trough <= 0) {
+              results[si].busted = true;
+              results[si].bustedAtSession = results[si].sessions.length + 1;
+              results[si].bankrollCurrent = 0;
+              active[si] = false;
+              sessionRecord.bankrollAfter = 0;
+            } else {
+              results[si].bankrollCurrent = Math.round((results[si].bankrollCurrent + o.pnl) * 100) / 100;
+              sessionRecord.bankrollAfter = results[si].bankrollCurrent;
+            }
+          }
+          if (o.wins + o.losses === 0) results[si].satOutSessions++;
+          results[si].sessions.push(sessionRecord);
           results[si].totalPnl += o.pnl;
           results[si].totalWins += o.wins;
           results[si].totalLosses += o.losses;
@@ -6246,7 +6304,9 @@ function SimModePage(_ref41) {
       setSimResults(results.map(function (r) {
         return _objectSpread({}, r);
       }));
-      if (sessionIdx < simCfg.sessions && !simStopRef.current) {
+      if (sessionIdx < simCfg.sessions && !simStopRef.current && !(simCfg.bankrollMode && active.every(function (a) {
+        return !a;
+      }))) {
         setTimeout(runChunk, 0);
       } else {
         var completed = sessionIdx >= simCfg.sessions;
@@ -6489,7 +6549,57 @@ function SimModePage(_ref41) {
         cursor: "pointer"
       }
     }, v >= 1000 ? v / 1000 + "K" : v);
-  }))))), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(FieldLabel, null, "Strategies to Benchmark (" + simCfg.strategies.length + ")"), simCfg.strategies.map(function (strat, i) {
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: "8px 10px",
+      borderRadius: 8,
+      border: "1px solid " + (simCfg.bankrollMode ? "#4ade80" : "#2d4057"),
+      background: simCfg.bankrollMode ? "#07200d" : "#0f1923"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: simCfg.bankrollMode ? "#4ade80" : "#94a3b8"
+    }
+  }, "\uD83D\uDCB0 Bankroll Mode"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569"
+    }
+  }, "P&L carries over between sessions from one buy-in; if it hits zero, the run records how many sessions you lasted")), /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      return setSimCfg(function (c) {
+        return _objectSpread(_objectSpread({}, c), {}, {
+          bankrollMode: !c.bankrollMode
+        });
+      });
+    },
+    style: {
+      padding: "4px 12px",
+      borderRadius: 7,
+      border: "none",
+      background: simCfg.bankrollMode ? "#15803d" : "#374151",
+      color: "white",
+      fontSize: 10,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, simCfg.bankrollMode ? "ON" : "OFF")), simCfg.bankrollMode && /*#__PURE__*/React.createElement(MoneyInput, {
+    value: simCfg.bankrollStart || 500,
+    onChange: function onChange(v) {
+      return setSimCfg(function (c) {
+        return _objectSpread(_objectSpread({}, c), {}, {
+          bankrollStart: v
+        });
+      });
+    },
+    currCode: currency,
+    label: "Starting Bankroll (buy-in \u2014 separate from any stop loss)"
+  }))), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(FieldLabel, null, "Strategies to Benchmark (" + simCfg.strategies.length + ")"), simCfg.strategies.map(function (strat, i) {
     var _strat$config$colTarg;
     return /*#__PURE__*/React.createElement("div", {
       key: i,
@@ -6892,7 +7002,32 @@ function SimModePage(_ref41) {
         fontSize: 10,
         color: "#64748b"
       }
-    }, "avg ", stats.avgPnlPerSession >= 0 ? "+" : "", cur.symbol, stats.avgPnlPerSession.toFixed(2), "/sess"))), /*#__PURE__*/React.createElement("div", {
+    }, "avg ", stats.avgPnlPerSession >= 0 ? "+" : "", cur.symbol, stats.avgPnlPerSession.toFixed(2), "/sess"))), r.bankrollStart != null && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 12,
+        padding: "10px 12px",
+        borderRadius: 10,
+        border: "1px solid " + (r.busted ? "#7f1d1d" : "#166534"),
+        background: r.busted ? "#200505" : "#07200d"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 800,
+        color: r.busted ? "#f87171" : "#4ade80"
+      }
+    }, r.busted ? "\uD83D\uDC80 Busted after ".concat(r.bustedAtSession, " session").concat(r.bustedAtSession === 1 ? "" : "s") : "\u2705 Survived all ".concat(r.sessions.length, " sessions")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#94a3b8",
+        marginTop: 3
+      }
+    }, "Bankroll: ", cur.symbol, r.bankrollStart.toFixed(2), " buy-in \u2192 ", r.busted ? cur.symbol + "0.00" : cur.symbol + (r.bankrollCurrent || 0).toFixed(2), !r.busted && r.bankrollCurrent != null && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: r.bankrollCurrent - r.bankrollStart >= 0 ? "#4ade80" : "#f87171",
+        fontWeight: 700
+      }
+    }, " ", "(", r.bankrollCurrent - r.bankrollStart >= 0 ? "+" : "-", cur.symbol, Math.abs(r.bankrollCurrent - r.bankrollStart).toFixed(2), ")"))), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 12
       }
@@ -6954,7 +7089,7 @@ function SimModePage(_ref41) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"]].map(function (_ref46) {
+    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref46) {
       var _ref47 = _slicedToArray(_ref46, 3),
         l = _ref47[0],
         v = _ref47[1],

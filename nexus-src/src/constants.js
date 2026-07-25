@@ -12,7 +12,7 @@ const COLUMN_TEXTS = ["#5eead4","#f9a8d4","#bef264"];
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.43.0";
+const APP_VERSION = "0.44.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -34,6 +34,11 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.44.0", date:"Jul 25, 2026", title:"Bankroll Survival + Sat-Out Metric", changes:[
+    "💰 Bankroll Mode: P&L carries over between sessions from one buy-in (separate from stop loss); if the bankroll hits zero mid-session you're busted, and the results show how many sessions you survived",
+    "Busted strategies leave the game while others keep playing; running bankroll shown on every session row",
+    "Sat Out metric: how many sessions the strategy never entered at all (drought threshold never reached), as a stat tile and a Session Explorer filter",
+  ]},
   { v:"0.43.0", date:"Jul 25, 2026", title:"Session Explorer", changes:[
     "Per-session drill-down in Experimental results: every session's P&L, sequence wins/losses, win rate, stop-loss count, and low/high water marks",
     "Filter sessions (All / Won / Lost / Hit Stop) and sort by order, best, or worst P&L",

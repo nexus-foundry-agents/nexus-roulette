@@ -68,6 +68,7 @@ function SessionExplorer({sessions, cur}) {
     if(filter==="won") return s.pnl>0;
     if(filter==="lost") return s.pnl<0;
     if(filter==="stoploss") return (s.stopLossHits||0)>0;
+    if(filter==="satout") return (s.wins||0)===0&&(s.losses||0)===0;
     return true;
   });
   const sorted = sort==="order" ? filtered
@@ -79,6 +80,7 @@ function SessionExplorer({sessions, cur}) {
     ["won","Won ("+indexed.filter(s=>s.pnl>0).length+")"],
     ["lost","Lost ("+indexed.filter(s=>s.pnl<0).length+")"],
     ["stoploss","Hit Stop ("+indexed.filter(s=>(s.stopLossHits||0)>0).length+")"],
+    ["satout","Sat Out ("+indexed.filter(s=>(s.wins||0)===0&&(s.losses||0)===0).length+")"],
   ];
   const sortChips = [["order","# Order"],["best","Best P&L"],["worst","Worst P&L"]];
 
@@ -113,6 +115,9 @@ function SessionExplorer({sessions, cur}) {
               <span style={{fontSize:9,color:"#64748b",flexShrink:0}}>
                 ⤓{s.trough!==undefined?(s.trough<0?"-":"")+cur.symbol+Math.abs(s.trough||0).toFixed(0):"—"} ⤒{s.peak!==undefined?"+"+cur.symbol+Math.abs(s.peak||0).toFixed(0):"—"}
               </span>
+              {s.bankrollAfter!==undefined && (
+                <span style={{fontSize:9,fontWeight:700,color:s.bankrollAfter>0?"#4ade80":"#f87171",flexShrink:0}}>💰{cur.symbol}{s.bankrollAfter.toFixed(0)}</span>
+              )}
             </div>
           );
         })}
@@ -161,16 +166,41 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
     const tables=simCfg.strategies.map(s=>computeTableForTrack({type:s.type,config:s.config}));
 
     let sessionIdx=0;
+    // Bankroll mode: each strategy plays from its own copy of the buy-in; a
+    // busted strategy leaves the game while the rest keep playing.
+    const active=simCfg.strategies.map(()=>true);
+    if(simCfg.bankrollMode){
+      results.forEach(r=>{r.bankrollStart=simCfg.bankrollStart||500;r.bankrollCurrent=r.bankrollStart;});
+    }
 
     function runChunk(){
       const CHUNK=10;
       for(let ci=0;ci<CHUNK&&sessionIdx<simCfg.sessions;ci++){
         if(simStopRef.current) break;
-        const outcomes=simRunSession(simCfg.strategies,tables,wheelNums,simCfg.spinsPerSession,results,()=>simStopRef.current);
+        if(simCfg.bankrollMode&&active.every(a=>!a)) break; // everyone's busted
+        const outcomes=simRunSession(simCfg.strategies,tables,wheelNums,simCfg.spinsPerSession,results,()=>simStopRef.current,active);
         if(!outcomes) break; // stopped mid-session — discard the partial session
         sessionIdx++;
         outcomes.forEach((o,si)=>{
-          results[si].sessions.push({pnl:o.pnl,wins:o.wins,losses:o.losses,seqLosses:o.seqLosses,stopLossHits:o.stopLossHits,trough:o.trough,peak:o.peak});
+          if(!active[si]) return;
+          const sessionRecord={pnl:o.pnl,wins:o.wins,losses:o.losses,seqLosses:o.seqLosses,stopLossHits:o.stopLossHits,trough:o.trough,peak:o.peak};
+          if(simCfg.bankrollMode){
+            // The trough is the deepest the running P&L went mid-session: if the
+            // buy-in couldn't cover it, the player ran out of money DURING this
+            // session — it counts as played, and the strategy is out of the game.
+            if(results[si].bankrollCurrent+o.trough<=0){
+              results[si].busted=true;
+              results[si].bustedAtSession=results[si].sessions.length+1;
+              results[si].bankrollCurrent=0;
+              active[si]=false;
+              sessionRecord.bankrollAfter=0;
+            } else {
+              results[si].bankrollCurrent=Math.round((results[si].bankrollCurrent+o.pnl)*100)/100;
+              sessionRecord.bankrollAfter=results[si].bankrollCurrent;
+            }
+          }
+          if((o.wins+o.losses)===0) results[si].satOutSessions++;
+          results[si].sessions.push(sessionRecord);
           results[si].totalPnl+=o.pnl;
           results[si].totalWins+=o.wins;
           results[si].totalLosses+=o.losses;
@@ -180,11 +210,10 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
         });
       }
 
-
       setSimProgress(sessionIdx);
       setSimResults(results.map(r=>({...r})));
 
-      if(sessionIdx<simCfg.sessions&&!simStopRef.current){
+      if(sessionIdx<simCfg.sessions&&!simStopRef.current&&!(simCfg.bankrollMode&&active.every(a=>!a))){
         setTimeout(runChunk,0);
       } else {
         const completed=sessionIdx>=simCfg.sessions;
@@ -255,6 +284,17 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
               ))}
             </div>
           </div>
+
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderRadius:8,border:"1px solid "+(simCfg.bankrollMode?"#4ade80":"#2d4057"),background:simCfg.bankrollMode?"#07200d":"#0f1923"}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:simCfg.bankrollMode?"#4ade80":"#94a3b8"}}>💰 Bankroll Mode</div>
+              <div style={{fontSize:9,color:"#475569"}}>P&L carries over between sessions from one buy-in; if it hits zero, the run records how many sessions you lasted</div>
+            </div>
+            <button onClick={()=>setSimCfg(c=>({...c,bankrollMode:!c.bankrollMode}))} style={{padding:"4px 12px",borderRadius:7,border:"none",background:simCfg.bankrollMode?"#15803d":"#374151",color:"white",fontSize:10,fontWeight:700,cursor:"pointer"}}>{simCfg.bankrollMode?"ON":"OFF"}</button>
+          </div>
+          {simCfg.bankrollMode && (
+            <MoneyInput value={simCfg.bankrollStart||500} onChange={v=>setSimCfg(c=>({...c,bankrollStart:v}))} currCode={currency} label="Starting Bankroll (buy-in — separate from any stop loss)"/>
+          )}
 
         </div>
       </Card>
@@ -385,6 +425,25 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
               </div>
             </div>
 
+            {/* Bankroll survival */}
+            {r.bankrollStart!=null && (
+              <div style={{marginBottom:12,padding:"10px 12px",borderRadius:10,border:"1px solid "+(r.busted?"#7f1d1d":"#166534"),background:r.busted?"#200505":"#07200d"}}>
+                <div style={{fontSize:13,fontWeight:800,color:r.busted?"#f87171":"#4ade80"}}>
+                  {r.busted
+                    ? `💀 Busted after ${r.bustedAtSession} session${r.bustedAtSession===1?"":"s"}`
+                    : `✅ Survived all ${r.sessions.length} sessions`}
+                </div>
+                <div style={{fontSize:10,color:"#94a3b8",marginTop:3}}>
+                  Bankroll: {cur.symbol}{r.bankrollStart.toFixed(2)} buy-in → {r.busted?cur.symbol+"0.00":cur.symbol+(r.bankrollCurrent||0).toFixed(2)}
+                  {!r.busted&&r.bankrollCurrent!=null&&(
+                    <span style={{color:(r.bankrollCurrent-r.bankrollStart)>=0?"#4ade80":"#f87171",fontWeight:700}}>
+                      {" "}({(r.bankrollCurrent-r.bankrollStart)>=0?"+":"-"}{cur.symbol}{Math.abs(r.bankrollCurrent-r.bankrollStart).toFixed(2)})
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* P&L Distribution */}
             <div style={{marginBottom:12}}>
               <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>P&L Per Session Distribution</div>
@@ -409,6 +468,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
                   ["Avg Loss Streak",stats.avgLossStreak.toFixed(1),"#f97316"],
                   ["Stop Loss Hits",r.stopLossHits,"#fbbf24"],
                   ["Stop Loss Rate",(stats.stopLossRate).toFixed(2)+"/sess","#fbbf24"],
+                  ["Sat Out (never entered)",(r.satOutSessions||0)+" of "+r.sessions.length+" ("+(r.sessions.length?((r.satOutSessions||0)/r.sessions.length*100).toFixed(1):"0")+"%)","#60a5fa"],
                 ].map(([l,v,c])=>(
                   <div key={l} style={{background:"#0f1923",borderRadius:8,padding:"8px 8px",border:"1px solid #2d4057"}}>
                     <div style={{fontSize:8,color:"#64748b",marginBottom:2}}>{l}</div>

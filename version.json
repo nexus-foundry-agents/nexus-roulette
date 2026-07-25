@@ -1,1 +1,1 @@
-{"version":"0.43.0","date":"2026-07-25","notes":"Session Explorer in Experimental results: per-session P&L, sequence wins/losses, win rate, stop-loss count, low/high water marks, with filters (Won/Lost/Hit Stop) and sorting. Win-rate definition shown in the header."}
+{"version":"0.44.0","date":"2026-07-25","notes":"Bankroll Mode (P&L carries across sessions from one buy-in; busting shows how many sessions you survived) + Sat Out metric for sessions the strategy never entered, with matching Session Explorer filter."}
