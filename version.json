@@ -1,1 +1,1 @@
-{"version":"0.44.0","date":"2026-07-25","notes":"Bankroll Mode (P&L carries across sessions from one buy-in; busting shows how many sessions you survived) + Sat Out metric for sessions the strategy never entered, with matching Session Explorer filter."}
+{"version":"0.45.0","date":"2026-07-25","notes":"Averages grid, Expected Loss panel (house edge, luck delta), and Repeat Experiment: run the same setup up to 500 times with aggregate stats across all runs and a per-experiment outcome chart (P&L, or sessions survived in Bankroll Mode)."}

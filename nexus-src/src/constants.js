@@ -12,7 +12,7 @@ const COLUMN_TEXTS = ["#5eead4","#f9a8d4","#bef264"];
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.44.0";
+const APP_VERSION = "0.45.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -34,6 +34,12 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.45.0", date:"Jul 25, 2026", title:"Averages, Expected Loss + Repeat Experiments", changes:[
+    "Averages grid in Experimental results: avg P&L per session and per sequence, avg winning vs losing session (with counts), avg sequences and avg staked per session",
+    "Expected Loss panel: total staked × house edge for the wheel you ran (2.70% EU / 5.26% US), per-session expectation, and an actual-vs-expected luck delta",
+    "Expected loss is shown as a secondary metric — real runs scatter around the drain and can finish in profit despite it",
+    "🔁 Repeat Experiment: run the exact same setup up to 500 times; results include full aggregate stats across all runs (profitable %, avg/median/best/worst P&L — or bust rate and sessions survived in Bankroll Mode) plus a bar chart of every experiment's outcome",
+  ]},
   { v:"0.44.0", date:"Jul 25, 2026", title:"Bankroll Survival + Sat-Out Metric", changes:[
     "💰 Bankroll Mode: P&L carries over between sessions from one buy-in (separate from stop loss); if the bankroll hits zero mid-session you're busted, and the results show how many sessions you survived",
     "Busted strategies leave the game while others keep playing; running bankroll shown on every session row",

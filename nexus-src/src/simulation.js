@@ -15,6 +15,7 @@ function defaultSimConfig() {
     roulette: "european",
     bankrollMode: false,   // carry P&L across sessions from one buy-in
     bankrollStart: 500,    // the buy-in (separate from any per-strategy stop loss)
+    repeatExperiments: 1,  // run the whole configured experiment N times with identical parameters
     strategies: [], // array of {type, config} same shape as live tracks
   };
 }
@@ -41,7 +42,7 @@ function simNewResults(strategyCount) {
   return Array.from({length:strategyCount},()=>({
     sessions:[], totalPnl:0, totalWins:0, totalLosses:0, totalSeqLosses:0,
     stopLossHits:0, winStreaks:[], lossStreaks:[], currentStreak:{type:null,len:0},
-    totalSequences:0, pnlHistory:[],
+    totalSequences:0, pnlHistory:[], totalStaked:0,
     satOutSessions:0, // sessions where the strategy never placed a single bet
     bankrollStart:null, bankrollCurrent:null, busted:false, bustedAtSession:null, // bankroll mode
   }));
@@ -54,6 +55,7 @@ function simNewResults(strategyCount) {
 function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop, activeMask) {
   const sState = strategies.map(strat=>({
     level:0, pnl:0, wins:0, losses:0, seqLosses:0, stopLossHits:0,
+    staked:0, // total money placed on the felt this session (drives expected-loss math)
     trough:0, peak:0, // deepest drawdown / highest running P&L within this session
     waitingForWin: !!(strat.config.parkRules&&strat.config.parkRules.waitForWin),
     parkedAfterLoss:false,
@@ -126,6 +128,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
 
         const payMult=evts.length>0?2:3;
         const row=tbl[Math.min(st.level,tbl.length-1)];
+        st.staked+=(betMode==="flat"?numTargets:(row?row.c:1)*numTargets)*unit;
 
         if(betMode==="flat"){
           if(isHit){ st.pnl+=(hitCount*payMult-numTargets)*unit; st.wins++; pushStreak(results[si],true); }
@@ -171,6 +174,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
         const resolved=[];
         st.activeBets.forEach(b=>{
           const row=tbl[Math.min(b.level,tbl.length-1)];
+          st.staked+=(row?row.c:1)*unit;
           if(b.number===val){
             st.pnl+=((row?row.ret:0)-(row?row.c:1))*unit;
             st.wins++; resolved.push(b.number);
@@ -200,6 +204,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
   return sState.map(st=>({
     pnl:Math.round(st.pnl*100)/100,
     wins:st.wins, losses:st.losses, seqLosses:st.seqLosses, stopLossHits:st.stopLossHits,
+    staked:Math.round(st.staked*100)/100,
     trough:Math.round(st.trough*100)/100, peak:Math.round(st.peak*100)/100,
   }));
 }
@@ -233,9 +238,21 @@ function computeSimStats(result) {
   const avgWinStreak = result.winStreaks.length ? result.winStreaks.reduce((a,b)=>a+b,0)/result.winStreaks.length : 0;
   const avgLossStreak = result.lossStreaks.length ? result.lossStreaks.reduce((a,b)=>a+b,0)/result.lossStreaks.length : 0;
 
+  const winSessions = sessions.filter(s=>s.pnl>0);
+  const lossSessions = sessions.filter(s=>s.pnl<0);
+  const avg = arr => arr.length ? arr.reduce((a,s)=>a+s.pnl,0)/arr.length : 0;
+
   return {
     totalPnl: result.totalPnl,
     avgPnlPerSession: result.totalPnl / n,
+    avgWinSession: avg(winSessions),        // mean P&L across profitable sessions only
+    avgLossSession: avg(lossSessions),      // mean P&L across losing sessions only
+    winSessionCount: winSessions.length,
+    lossSessionCount: lossSessions.length,
+    avgPnlPerSequence: result.totalSequences>0 ? result.totalPnl/result.totalSequences : 0,
+    avgSequencesPerSession: result.totalSequences/n,
+    avgStakedPerSession: (result.totalStaked||0)/n,
+    totalStaked: result.totalStaked||0,
     winRate: result.totalSequences > 0 ? result.totalWins/result.totalSequences : 0,
     p25: pct(25), p50: pct(50), p75: pct(75),
     minPnl: pnls[0], maxPnl: pnls[n-1],

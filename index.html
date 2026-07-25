@@ -21,7 +21,7 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.44.0";
+  var MY_V="0.45.0";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -391,7 +391,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.44.0";
+var APP_VERSION = "0.45.0";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -495,6 +495,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.45.0",
+  date: "Jul 25, 2026",
+  title: "Averages, Expected Loss + Repeat Experiments",
+  changes: ["Averages grid in Experimental results: avg P&L per session and per sequence, avg winning vs losing session (with counts), avg sequences and avg staked per session", "Expected Loss panel: total staked × house edge for the wheel you ran (2.70% EU / 5.26% US), per-session expectation, and an actual-vs-expected luck delta", "Expected loss is shown as a secondary metric — real runs scatter around the drain and can finish in profit despite it", "🔁 Repeat Experiment: run the exact same setup up to 500 times; results include full aggregate stats across all runs (profitable %, avg/median/best/worst P&L — or bust rate and sessions survived in Bankroll Mode) plus a bar chart of every experiment's outcome"]
+}, {
   v: "0.44.0",
   date: "Jul 25, 2026",
   title: "Bankroll Survival + Sat-Out Metric",
@@ -1723,6 +1728,8 @@ function defaultSimConfig() {
     // carry P&L across sessions from one buy-in
     bankrollStart: 500,
     // the buy-in (separate from any per-strategy stop loss)
+    repeatExperiments: 1,
+    // run the whole configured experiment N times with identical parameters
     strategies: [] // array of {type, config} same shape as live tracks
   };
 }
@@ -1784,6 +1791,7 @@ function simNewResults(strategyCount) {
       },
       totalSequences: 0,
       pnlHistory: [],
+      totalStaked: 0,
       satOutSessions: 0,
       // sessions where the strategy never placed a single bet
       bankrollStart: null,
@@ -1807,6 +1815,8 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       losses: 0,
       seqLosses: 0,
       stopLossHits: 0,
+      staked: 0,
+      // total money placed on the felt this session (drives expected-loss math)
       trough: 0,
       peak: 0,
       // deepest drawdown / highest running P&L within this session
@@ -1916,6 +1926,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
           }
           var payMult = evts.length > 0 ? 2 : 3;
           var row = tbl[Math.min(st.level, tbl.length - 1)];
+          st.staked += (betMode === "flat" ? numTargets : (row ? row.c : 1) * numTargets) * unit;
           if (betMode === "flat") {
             if (isHit) {
               st.pnl += (hitCount * payMult - numTargets) * unit;
@@ -1977,6 +1988,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
           var resolved = [];
           st.activeBets.forEach(function (b) {
             var row = tbl[Math.min(b.level, tbl.length - 1)];
+            st.staked += (row ? row.c : 1) * unit;
             if (b.number === val) {
               st.pnl += ((row ? row.ret : 0) - (row ? row.c : 1)) * unit;
               st.wins++;
@@ -2025,6 +2037,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       losses: st.losses,
       seqLosses: st.seqLosses,
       stopLossHits: st.stopLossHits,
+      staked: Math.round(st.staked * 100) / 100,
       trough: Math.round(st.trough * 100) / 100,
       peak: Math.round(st.peak * 100) / 100
     };
@@ -2078,9 +2091,30 @@ function computeSimStats(result) {
   var avgLossStreak = result.lossStreaks.length ? result.lossStreaks.reduce(function (a, b) {
     return a + b;
   }, 0) / result.lossStreaks.length : 0;
+  var winSessions = sessions.filter(function (s) {
+    return s.pnl > 0;
+  });
+  var lossSessions = sessions.filter(function (s) {
+    return s.pnl < 0;
+  });
+  var avg = function avg(arr) {
+    return arr.length ? arr.reduce(function (a, s) {
+      return a + s.pnl;
+    }, 0) / arr.length : 0;
+  };
   return {
     totalPnl: result.totalPnl,
     avgPnlPerSession: result.totalPnl / n,
+    avgWinSession: avg(winSessions),
+    // mean P&L across profitable sessions only
+    avgLossSession: avg(lossSessions),
+    // mean P&L across losing sessions only
+    winSessionCount: winSessions.length,
+    lossSessionCount: lossSessions.length,
+    avgPnlPerSequence: result.totalSequences > 0 ? result.totalPnl / result.totalSequences : 0,
+    avgSequencesPerSession: result.totalSequences / n,
+    avgStakedPerSession: (result.totalStaked || 0) / n,
+    totalStaked: result.totalStaked || 0,
     winRate: result.totalSequences > 0 ? result.totalWins / result.totalSequences : 0,
     p25: pct(25),
     p50: pct(50),
@@ -5961,11 +5995,168 @@ function StatContextBar(_ref34) {
   }));
 }
 
+// -- Experiment Comparison Panel (Results view, Repeat Experiment) --
+// One row per experiment (identical parameters), with aggregate stats across all
+// of them: overall P&L per experiment, or sessions survived in bankroll mode.
+function ExperimentPanel(_ref36) {
+  var experiments = _ref36.experiments,
+    bankrollMode = _ref36.bankrollMode,
+    sessionsPerExperiment = _ref36.sessionsPerExperiment,
+    cur = _ref36.cur;
+  if (!experiments || experiments.length < 2) return null;
+  var pnls = experiments.map(function (e) {
+    return e.pnl;
+  });
+  var sortedPnls = _toConsumableArray(pnls).sort(function (a, b) {
+    return a - b;
+  });
+  var median = sortedPnls[Math.floor(sortedPnls.length / 2)];
+  var avgPnl = pnls.reduce(function (a, b) {
+    return a + b;
+  }, 0) / pnls.length;
+  var profitable = experiments.filter(function (e) {
+    return e.pnl > 0;
+  }).length;
+  var busts = experiments.filter(function (e) {
+    return e.busted;
+  }).length;
+  var survivals = experiments.map(function (e) {
+    return e.sessions;
+  });
+  var avgSurvival = survivals.reduce(function (a, b) {
+    return a + b;
+  }, 0) / survivals.length;
+  var sortedSurv = _toConsumableArray(survivals).sort(function (a, b) {
+    return a - b;
+  });
+  var maxAbsPnl = Math.max.apply(Math, _toConsumableArray(pnls.map(Math.abs)).concat([1]));
+  var maxSurv = Math.max.apply(Math, _toConsumableArray(survivals).concat([1]));
+  var tiles = bankrollMode ? [["Experiments", experiments.length, "#c4b5fd"], ["Bust Rate", busts + " of " + experiments.length + " (" + (busts / experiments.length * 100).toFixed(0) + "%)", busts > 0 ? "#f87171" : "#4ade80"], ["Avg Sessions Lasted", avgSurvival.toFixed(1), "#fbbf24"], ["Median Sessions", sortedSurv[Math.floor(sortedSurv.length / 2)], "#fbbf24"], ["Shortest / Longest", sortedSurv[0] + " / " + sortedSurv[sortedSurv.length - 1], "#94a3b8"], ["Avg Final Bankroll", cur.symbol + (experiments.reduce(function (a, e) {
+    return a + (e.bankrollEnd || 0);
+  }, 0) / experiments.length).toFixed(2), "#4ade80"]] : [["Experiments", experiments.length, "#c4b5fd"], ["Profitable", profitable + " of " + experiments.length + " (" + (profitable / experiments.length * 100).toFixed(0) + "%)", profitable > 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Experiment", (avgPnl >= 0 ? "+" : "-") + cur.symbol + Math.abs(avgPnl).toFixed(2), avgPnl >= 0 ? "#4ade80" : "#f87171"], ["Median P&L", (median >= 0 ? "+" : "-") + cur.symbol + Math.abs(median).toFixed(2), median >= 0 ? "#86efac" : "#f97316"], ["Best / Worst", (sortedPnls[sortedPnls.length - 1] >= 0 ? "+" : "-") + cur.symbol + Math.abs(sortedPnls[sortedPnls.length - 1]).toFixed(0) + " / " + (sortedPnls[0] >= 0 ? "+" : "-") + cur.symbol + Math.abs(sortedPnls[0]).toFixed(0), "#94a3b8"], ["Avg Stop-Loss Hits", (experiments.reduce(function (a, e) {
+    return a + (e.stopLossHits || 0);
+  }, 0) / experiments.length).toFixed(1), "#fbbf24"]];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12,
+      padding: "10px 12px",
+      borderRadius: 10,
+      border: "1px solid #7c3aed",
+      background: "#12081f"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#a78bfa",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 6
+    }
+  }, "\uD83D\uDD01 Experiment Results \u2014 ", experiments.length, " identical runs"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 6,
+      marginBottom: 8
+    }
+  }, tiles.map(function (_ref37) {
+    var _ref38 = _slicedToArray(_ref37, 3),
+      l = _ref38[0],
+      v = _ref38[1],
+      c = _ref38[2];
+    return /*#__PURE__*/React.createElement("div", {
+      key: l,
+      style: {
+        background: "#0f1923",
+        borderRadius: 8,
+        padding: "7px 8px",
+        border: "1px solid #2d4057"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#64748b",
+        marginBottom: 2
+      }
+    }, l), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 700,
+        color: c
+      }
+    }, v));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#64748b",
+      marginBottom: 4
+    }
+  }, bankrollMode ? "Sessions survived per experiment" : "Overall P&L per experiment"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 2,
+      maxHeight: "36vh",
+      overflowY: "auto"
+    }
+  }, experiments.map(function (e, i) {
+    var value = bankrollMode ? e.sessions : e.pnl;
+    var width = bankrollMode ? Math.max(2, value / maxSurv * 100) : Math.max(2, Math.abs(value) / maxAbsPnl * 100);
+    var good = bankrollMode ? !e.busted : value >= 0;
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#475569",
+        width: 26,
+        textAlign: "right",
+        flexShrink: 0
+      }
+    }, "#", i + 1), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 11,
+        background: "#1e2d3d",
+        borderRadius: 4,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: "100%",
+        borderRadius: 4,
+        background: good ? "#22c55e" : "#ef4444",
+        width: width + "%"
+      }
+    })), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        fontWeight: 700,
+        color: good ? "#4ade80" : "#f87171",
+        width: 86,
+        flexShrink: 0,
+        textAlign: "right"
+      }
+    }, bankrollMode ? e.sessions + " sess " + (e.busted ? "💀" : "✅") + (e.busted ? "" : " " + cur.symbol + (e.bankrollEnd || 0).toFixed(0)) : (value >= 0 ? "+" : "-") + cur.symbol + Math.abs(value).toFixed(2)));
+  })), sessionsPerExperiment && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 6
+    }
+  }, "Detailed stats below reflect the last experiment; the summary above covers all ", experiments.length, "."));
+}
+
 // -- Per-Session Explorer (Results view) --
 // Filterable, sortable drill-down into every simulated session.
-function SessionExplorer(_ref36) {
-  var sessions = _ref36.sessions,
-    cur = _ref36.cur;
+function SessionExplorer(_ref39) {
+  var sessions = _ref39.sessions,
+    cur = _ref39.cur;
   var _useState33 = (0, _react.useState)("all"),
     _useState34 = _slicedToArray(_useState33, 2),
     filter = _useState34[0],
@@ -6037,10 +6228,10 @@ function SessionExplorer(_ref36) {
       gap: 4,
       marginBottom: 4
     }
-  }, filterChips.map(function (_ref37) {
-    var _ref38 = _slicedToArray(_ref37, 2),
-      key = _ref38[0],
-      label = _ref38[1];
+  }, filterChips.map(function (_ref40) {
+    var _ref41 = _slicedToArray(_ref40, 2),
+      key = _ref41[0],
+      label = _ref41[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -6055,10 +6246,10 @@ function SessionExplorer(_ref36) {
       gap: 4,
       marginBottom: 6
     }
-  }, sortChips.map(function (_ref39) {
-    var _ref40 = _slicedToArray(_ref39, 2),
-      key = _ref40[0],
-      label = _ref40[1];
+  }, sortChips.map(function (_ref42) {
+    var _ref43 = _slicedToArray(_ref42, 2),
+      key = _ref43[0],
+      label = _ref43[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -6157,20 +6348,20 @@ function SessionExplorer(_ref36) {
 }
 
 // -- Simulation Mode Page --
-function SimModePage(_ref41) {
-  var simCfg = _ref41.simCfg,
-    setSimCfg = _ref41.setSimCfg,
-    simRunning = _ref41.simRunning,
-    setSimRunning = _ref41.setSimRunning,
-    simProgress = _ref41.simProgress,
-    setSimProgress = _ref41.setSimProgress,
-    simResults = _ref41.simResults,
-    setSimResults = _ref41.setSimResults,
-    simDone = _ref41.simDone,
-    setSimDone = _ref41.setSimDone,
-    simStopRef = _ref41.simStopRef,
-    currency = _ref41.currency,
-    cur = _ref41.cur;
+function SimModePage(_ref44) {
+  var simCfg = _ref44.simCfg,
+    setSimCfg = _ref44.setSimCfg,
+    simRunning = _ref44.simRunning,
+    setSimRunning = _ref44.setSimRunning,
+    simProgress = _ref44.simProgress,
+    setSimProgress = _ref44.setSimProgress,
+    simResults = _ref44.simResults,
+    setSimResults = _ref44.setSimResults,
+    simDone = _ref44.simDone,
+    setSimDone = _ref44.setSimDone,
+    simStopRef = _ref44.simStopRef,
+    currency = _ref44.currency,
+    cur = _ref44.cur;
   var _useState39 = (0, _react.useState)("setup"),
     _useState40 = _slicedToArray(_useState39, 2),
     view = _useState40[0],
@@ -6231,8 +6422,9 @@ function SimModePage(_ref41) {
     setView("running");
 
     // The math lives in simulation.js (simRunSession); this only chunks sessions
-    // across setTimeout ticks so the UI stays responsive.
-    var results = simNewResults(simCfg.strategies.length);
+    // across setTimeout ticks so the UI stays responsive. With Repeat Experiment,
+    // the entire configured run repeats with identical parameters; per-experiment
+    // summaries accumulate in `history` and the detailed stats show the last run.
     var wheelNums = getWheelNumbers(simCfg.roulette);
     var tables = simCfg.strategies.map(function (s) {
       return computeTableForTrack({
@@ -6240,18 +6432,54 @@ function SimModePage(_ref41) {
         config: s.config
       });
     });
-    var sessionIdx = 0;
-    // Bankroll mode: each strategy plays from its own copy of the buy-in; a
-    // busted strategy leaves the game while the rest keep playing.
-    var active = simCfg.strategies.map(function () {
-      return true;
+    var totalExperiments = Math.max(1, simCfg.repeatExperiments || 1);
+    var history = simCfg.strategies.map(function () {
+      return [];
     });
-    if (simCfg.bankrollMode) {
+    var results,
+      active,
+      sessionIdx,
+      experimentIdx = 0;
+    function initExperiment() {
+      results = simNewResults(simCfg.strategies.length);
       results.forEach(function (r) {
-        r.bankrollStart = simCfg.bankrollStart || 500;
-        r.bankrollCurrent = r.bankrollStart;
+        r.roulette = simCfg.roulette;
+      }); // pin the wheel the run used (drives house-edge math)
+      // Bankroll mode: each strategy plays from its own copy of the buy-in; a
+      // busted strategy leaves the game while the rest keep playing.
+      active = simCfg.strategies.map(function () {
+        return true;
+      });
+      sessionIdx = 0;
+      if (simCfg.bankrollMode) {
+        results.forEach(function (r) {
+          r.bankrollStart = simCfg.bankrollStart || 500;
+          r.bankrollCurrent = r.bankrollStart;
+        });
+      }
+    }
+    function finishExperiment(bankSummary) {
+      // Finalize streaks; a "sequence" is a resolved win or a completed losing
+      // progression (stop-loss), never a single intermediate losing spin.
+      // A run stopped mid-experiment still finalizes for display, but its partial
+      // summary is NOT banked into the experiment history.
+      results.forEach(function (r, si) {
+        if (r.currentStreak.len > 0) {
+          if (r.currentStreak.type) r.winStreaks.push(r.currentStreak.len);else r.lossStreaks.push(r.currentStreak.len);
+        }
+        r.totalSequences = r.totalWins + r.totalSeqLosses;
+        if (bankSummary) history[si].push({
+          pnl: Math.round(r.totalPnl * 100) / 100,
+          sessions: r.sessions.length,
+          busted: !!r.busted,
+          bustedAtSession: r.bustedAtSession,
+          bankrollEnd: r.bankrollCurrent,
+          satOut: r.satOutSessions,
+          stopLossHits: r.stopLossHits
+        });
       });
     }
+    initExperiment();
     function runChunk() {
       var CHUNK = 10;
       for (var ci = 0; ci < CHUNK && sessionIdx < simCfg.sessions; ci++) {
@@ -6272,6 +6500,7 @@ function SimModePage(_ref41) {
             losses: o.losses,
             seqLosses: o.seqLosses,
             stopLossHits: o.stopLossHits,
+            staked: o.staked,
             trough: o.trough,
             peak: o.peak
           };
@@ -6297,33 +6526,45 @@ function SimModePage(_ref41) {
           results[si].totalLosses += o.losses;
           results[si].totalSeqLosses += o.seqLosses;
           results[si].stopLossHits += o.stopLossHits;
+          results[si].totalStaked = Math.round(((results[si].totalStaked || 0) + o.staked) * 100) / 100;
           results[si].pnlHistory.push(results[si].totalPnl);
         });
       }
-      setSimProgress(sessionIdx);
-      setSimResults(results.map(function (r) {
-        return _objectSpread({}, r);
-      }));
-      if (sessionIdx < simCfg.sessions && !simStopRef.current && !(simCfg.bankrollMode && active.every(function (a) {
+      var experimentOver = sessionIdx >= simCfg.sessions || simCfg.bankrollMode && active.every(function (a) {
         return !a;
-      }))) {
+      });
+      setSimProgress(experimentIdx * simCfg.sessions + sessionIdx);
+      setSimResults(results.map(function (r, si) {
+        return _objectSpread(_objectSpread({}, r), {}, {
+          experimentNum: experimentIdx + 1,
+          experimentsPlanned: totalExperiments,
+          experimentHistory: _toConsumableArray(history[si])
+        });
+      }));
+      if (!experimentOver && !simStopRef.current) {
+        setTimeout(runChunk, 0);
+      } else if (experimentOver && !simStopRef.current && experimentIdx + 1 < totalExperiments) {
+        // This experiment is done — bank its summary and start the next with identical parameters
+        finishExperiment(true);
+        experimentIdx++;
+        initExperiment();
         setTimeout(runChunk, 0);
       } else {
-        var completed = sessionIdx >= simCfg.sessions;
-        // Finalize streaks; a "sequence" is a resolved win or a completed losing
-        // progression (stop-loss), never a single intermediate losing spin.
-        results.forEach(function (r) {
-          if (r.currentStreak.len > 0) {
-            if (r.currentStreak.type) r.winStreaks.push(r.currentStreak.len);else r.lossStreaks.push(r.currentStreak.len);
-          }
-          r.totalSequences = r.totalWins + r.totalSeqLosses;
-        });
-        setSimResults(_toConsumableArray(results));
+        var completed = experimentOver && experimentIdx + 1 >= totalExperiments;
+        finishExperiment(experimentOver);
+        setSimResults(results.map(function (r, si) {
+          return _objectSpread(_objectSpread({}, r), {}, {
+            experimentNum: experimentIdx + 1,
+            experimentsPlanned: totalExperiments,
+            experimentHistory: _toConsumableArray(history[si])
+          });
+        }));
         setSimRunning(false);
         setSimDone(true);
         if (completed && 'Notification' in window && Notification.permission === 'granted') {
+          var runsLabel = totalExperiments > 1 ? "".concat(totalExperiments, " experiments \xD7 ").concat(simCfg.sessions, " sessions done.") : "".concat(simCfg.sessions, " sessions done.");
           new Notification('Nexus Roulette Simulation Complete!', {
-            body: "".concat(simCfg.sessions, " sessions done. Tap to see results."),
+            body: runsLabel + ' Tap to see results.',
             icon: './icon.svg'
           });
         }
@@ -6365,10 +6606,10 @@ function SimModePage(_ref41) {
       display: "flex",
       gap: 8
     }
-  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref42) {
-    var _ref43 = _slicedToArray(_ref42, 2),
-      v = _ref43[0],
-      l = _ref43[1];
+  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref45) {
+    var _ref46 = _slicedToArray(_ref45, 2),
+      v = _ref46[0],
+      l = _ref46[1];
     var sel = simCfg.roulette === v;
     return /*#__PURE__*/React.createElement("button", {
       key: v,
@@ -6599,7 +6840,108 @@ function SimModePage(_ref41) {
     },
     currCode: currency,
     label: "Starting Bankroll (buy-in \u2014 separate from any stop loss)"
-  }))), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(FieldLabel, null, "Strategies to Benchmark (" + simCfg.strategies.length + ")"), simCfg.strategies.map(function (strat, i) {
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(FieldLabel, null, "\uD83D\uDD01 Repeat Experiment"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginBottom: 4
+    }
+  }, "Run this exact setup multiple times and compare the outcomes of every experiment side by side"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      background: "#0f1923",
+      borderRadius: 10,
+      border: "1px solid #2d4057",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      return setSimCfg(function (c) {
+        return _objectSpread(_objectSpread({}, c), {}, {
+          repeatExperiments: Math.max(1, (c.repeatExperiments || 1) - 1)
+        });
+      });
+    },
+    style: {
+      padding: "8px 14px",
+      background: "transparent",
+      border: "none",
+      color: "#a78bfa",
+      fontSize: 18,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "-"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    min: "1",
+    value: simCfg.repeatExperiments || 1,
+    onChange: function onChange(e) {
+      var n = parseInt(e.target.value, 10);
+      setSimCfg(function (c) {
+        return _objectSpread(_objectSpread({}, c), {}, {
+          repeatExperiments: isNaN(n) ? 1 : Math.max(1, Math.min(500, n))
+        });
+      });
+    },
+    style: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: 16,
+      fontWeight: 800,
+      color: "#c4b5fd",
+      background: "transparent",
+      border: "none",
+      outline: "none",
+      WebkitAppearance: "none"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      return setSimCfg(function (c) {
+        return _objectSpread(_objectSpread({}, c), {}, {
+          repeatExperiments: Math.min(500, (c.repeatExperiments || 1) + 1)
+        });
+      });
+    },
+    style: {
+      padding: "8px 14px",
+      background: "transparent",
+      border: "none",
+      color: "#a78bfa",
+      fontSize: 18,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "+")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 5,
+      marginTop: 5
+    }
+  }, [1, 5, 10, 25, 50].map(function (v) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: v,
+      onClick: function onClick() {
+        return setSimCfg(function (c) {
+          return _objectSpread(_objectSpread({}, c), {}, {
+            repeatExperiments: v
+          });
+        });
+      },
+      style: {
+        flex: 1,
+        padding: "5px 0",
+        borderRadius: 7,
+        border: "1px solid " + ((simCfg.repeatExperiments || 1) === v ? "#a78bfa" : "#2d4057"),
+        background: (simCfg.repeatExperiments || 1) === v ? "#2e1065" : "#0f1923",
+        color: (simCfg.repeatExperiments || 1) === v ? "#c4b5fd" : "#64748b",
+        fontSize: 10,
+        fontWeight: 700,
+        cursor: "pointer"
+      }
+    }, v, "\xD7");
+  }))))), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(FieldLabel, null, "Strategies to Benchmark (" + simCfg.strategies.length + ")"), simCfg.strategies.map(function (strat, i) {
     var _strat$config$colTarg;
     return /*#__PURE__*/React.createElement("div", {
       key: i,
@@ -6782,43 +7124,54 @@ function SimModePage(_ref41) {
       color: "#a78bfa",
       marginBottom: 10
     }
-  }, "\uD83D\uDD2C Simulation Running..."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      marginBottom: 4
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: "#64748b"
-    }
-  }, "Sessions"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: "#c4b5fd",
-      fontWeight: 700
-    }
-  }, simProgress.toLocaleString(), " / ", simCfg.sessions.toLocaleString())), /*#__PURE__*/React.createElement("div", {
-    style: {
-      height: 8,
-      borderRadius: 4,
-      background: "#1e2d3d",
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      height: "100%",
-      borderRadius: 4,
-      background: "#7c3aed",
-      width: "".concat(simProgress / simCfg.sessions * 100, "%"),
-      transition: "width 0.3s"
-    }
-  }))), simResults && simCfg.strategies.map(function (strat, i) {
+  }, "\uD83D\uDD2C Simulation Running..."), function () {
+    var totalTarget = simCfg.sessions * (simCfg.repeatExperiments || 1);
+    var expNum = simResults && simResults[0] && simResults[0].experimentNum || 1;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 12
+      }
+    }, (simCfg.repeatExperiments || 1) > 1 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#fbbf24",
+        fontWeight: 700,
+        marginBottom: 4
+      }
+    }, "\uD83D\uDD01 Experiment ", expNum, " of ", simCfg.repeatExperiments), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        marginBottom: 4
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#64748b"
+      }
+    }, "Sessions (all experiments)"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#c4b5fd",
+        fontWeight: 700
+      }
+    }, simProgress.toLocaleString(), " / ", totalTarget.toLocaleString())), /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 8,
+        borderRadius: 4,
+        background: "#1e2d3d",
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: "100%",
+        borderRadius: 4,
+        background: "#7c3aed",
+        width: "".concat(simProgress / totalTarget * 100, "%"),
+        transition: "width 0.3s"
+      }
+    })));
+  }(), simResults && simCfg.strategies.map(function (strat, i) {
     var r = simResults[i];
     var pnl = r ? r.totalPnl : 0;
     return /*#__PURE__*/React.createElement("div", {
@@ -6890,7 +7243,7 @@ function SimModePage(_ref41) {
       fontSize: 13,
       cursor: "pointer"
     }
-  }, "\u2190 Setup")), simDone && (simProgress >= simCfg.sessions ? /*#__PURE__*/React.createElement("div", {
+  }, "\u2190 Setup")), simDone && (simProgress >= simCfg.sessions * (simCfg.repeatExperiments || 1) ? /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       color: "#4ade80",
@@ -6904,7 +7257,7 @@ function SimModePage(_ref41) {
       fontWeight: 700,
       marginTop: 8
     }
-  }, "\u23F9 Stopped early \u2014 ", simProgress.toLocaleString(), " of ", simCfg.sessions.toLocaleString(), " sessions ran"))));
+  }, "\u23F9 Stopped early \u2014 ", simProgress.toLocaleString(), " of ", (simCfg.sessions * (simCfg.repeatExperiments || 1)).toLocaleString(), " sessions ran"))));
 
   // -- Results View --
   if (view === "results" && simResults) return /*#__PURE__*/React.createElement("div", {
@@ -7045,11 +7398,11 @@ function SimModePage(_ref41) {
         gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
         gap: 4
       }
-    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref44) {
-      var _ref45 = _slicedToArray(_ref44, 3),
-        l = _ref45[0],
-        v = _ref45[1],
-        c = _ref45[2];
+    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref47) {
+      var _ref48 = _slicedToArray(_ref47, 3),
+        l = _ref48[0],
+        v = _ref48[1],
+        c = _ref48[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -7071,7 +7424,119 @@ function SimModePage(_ref41) {
           color: v >= 0 ? c : "#f87171"
         }
       }, v >= 0 ? "+" : "-", cur.symbol, Math.abs(v).toFixed(0)));
-    }))), /*#__PURE__*/React.createElement("div", {
+    }))), /*#__PURE__*/React.createElement(ExperimentPanel, {
+      experiments: r.experimentHistory,
+      bankrollMode: !!simCfg.bankrollMode,
+      sessionsPerExperiment: simCfg.sessions,
+      cur: cur
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#64748b",
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        marginBottom: 6
+      }
+    }, "Averages"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 6
+      }
+    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref49) {
+      var _ref50 = _slicedToArray(_ref49, 3),
+        l = _ref50[0],
+        v = _ref50[1],
+        c = _ref50[2];
+      return /*#__PURE__*/React.createElement("div", {
+        key: l,
+        style: {
+          background: "#0f1923",
+          borderRadius: 8,
+          padding: "8px 8px",
+          border: "1px solid #2d4057"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 8,
+          color: "#64748b",
+          marginBottom: 2
+        }
+      }, l), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 14,
+          fontWeight: 700,
+          color: c
+        }
+      }, v));
+    }))), function () {
+      var wheelUsed = r.roulette || simCfg.roulette;
+      var houseEdge = wheelUsed === "european" ? 1 / 37 : 2 / 38;
+      var expectedLoss = stats.totalStaked * houseEdge;
+      var luckDelta = stats.totalPnl + expectedLoss; // how far actual results ran from expectation
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: 12,
+          padding: "10px 12px",
+          borderRadius: 10,
+          border: "1px solid #2d4057",
+          background: "#0c1520"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          color: "#64748b",
+          textTransform: "uppercase",
+          letterSpacing: 1,
+          marginBottom: 4
+        }
+      }, "Expected Loss \xB7 house edge ", (houseEdge * 100).toFixed(2), "% (", wheelUsed === "european" ? "🇪🇺" : "🇺🇸", ")"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 8,
+          flexWrap: "wrap"
+        }
+      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 8,
+          color: "#64748b"
+        }
+      }, "Expected (total staked \xD7 edge)"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 14,
+          fontWeight: 700,
+          color: "#f97316"
+        }
+      }, "-", cur.symbol, expectedLoss.toFixed(2), " ", /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 9,
+          color: "#64748b"
+        }
+      }, "(-", cur.symbol, (expectedLoss / (stats.sessionPnls.length || 1)).toFixed(2), "/sess)"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 8,
+          color: "#64748b"
+        }
+      }, "Actual vs expected (luck)"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 14,
+          fontWeight: 700,
+          color: luckDelta >= 0 ? "#4ade80" : "#f87171"
+        }
+      }, luckDelta >= 0 ? "+" : "-", cur.symbol, Math.abs(luckDelta).toFixed(2), " ", luckDelta >= 0 ? "ahead" : "behind"))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          color: "#475569",
+          marginTop: 5,
+          lineHeight: 1.4
+        }
+      }, "Secondary metric: the house keeps ", (houseEdge * 100).toFixed(2), "% of every ", cur.symbol, " staked on average. Actual results scatter around that drain \u2014 a run can finish in profit even though the expected loss is always there."));
+    }(), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 12
       }
@@ -7089,11 +7554,11 @@ function SimModePage(_ref41) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref46) {
-      var _ref47 = _slicedToArray(_ref46, 3),
-        l = _ref47[0],
-        v = _ref47[1],
-        c = _ref47[2];
+    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref51) {
+      var _ref52 = _slicedToArray(_ref51, 3),
+        l = _ref52[0],
+        v = _ref52[1],
+        c = _ref52[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -7133,9 +7598,9 @@ function SimModePage(_ref41) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.winStreakDist.slice(0, 10).map(function (_ref48) {
-      var len = _ref48.len,
-        p = _ref48.pct;
+    }, stats.winStreakDist.slice(0, 10).map(function (_ref53) {
+      var len = _ref53.len,
+        p = _ref53.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -7187,9 +7652,9 @@ function SimModePage(_ref41) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.lossStreakDist.slice(0, 10).map(function (_ref49) {
-      var len = _ref49.len,
-        p = _ref49.pct;
+    }, stats.lossStreakDist.slice(0, 10).map(function (_ref54) {
+      var len = _ref54.len,
+        p = _ref54.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -7236,13 +7701,13 @@ function SimModePage(_ref41) {
 }
 
 // -- Sim Strategy Editor --
-function SimStratEditor(_ref50) {
-  var strat = _ref50.strat,
-    idx = _ref50.idx,
-    simCfg = _ref50.simCfg,
-    setSimCfg = _ref50.setSimCfg,
-    cur = _ref50.cur,
-    onClose = _ref50.onClose;
+function SimStratEditor(_ref55) {
+  var strat = _ref55.strat,
+    idx = _ref55.idx,
+    simCfg = _ref55.simCfg,
+    setSimCfg = _ref55.setSimCfg,
+    cur = _ref55.cur,
+    onClose = _ref55.onClose;
   var _useState45 = (0, _react.useState)(_objectSpread({}, strat.config)),
     _useState46 = _slicedToArray(_useState45, 2),
     cfg = _useState46[0],
@@ -7350,10 +7815,10 @@ function SimStratEditor(_ref50) {
       display: "flex",
       gap: 5
     }
-  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref51) {
-    var _ref52 = _slicedToArray(_ref51, 2),
-      m = _ref52[0],
-      l = _ref52[1];
+  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref56) {
+    var _ref57 = _slicedToArray(_ref56, 2),
+      m = _ref57[0],
+      l = _ref57[1];
     var sel = (cfg.betMode || "progression") === m;
     return /*#__PURE__*/React.createElement("button", {
       key: m,
@@ -7576,11 +8041,11 @@ function SimStratEditor(_ref50) {
       flexDirection: "column",
       gap: 6
     }
-  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref53) {
-    var _ref54 = _slicedToArray(_ref53, 3),
-      key = _ref54[0],
-      label = _ref54[1],
-      desc = _ref54[2];
+  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref58) {
+    var _ref59 = _slicedToArray(_ref58, 3),
+      key = _ref59[0],
+      label = _ref59[1],
+      desc = _ref59[2];
     return /*#__PURE__*/React.createElement("div", {
       key: key,
       style: {
@@ -8213,14 +8678,14 @@ function App() {
   if (!settings.onboarded) {
     return /*#__PURE__*/React.createElement(OnboardingScreen, {
       initialBankroll: settings._restartBankroll,
-      onComplete: function onComplete(_ref55) {
-        var roulette = _ref55.roulette,
-          bankroll = _ref55.bankroll,
-          defaultBuyIn = _ref55.defaultBuyIn,
-          curr = _ref55.currency,
-          tableMinBet = _ref55.tableMinBet,
-          tableMaxBet = _ref55.tableMaxBet,
-          tableMaxTotal = _ref55.tableMaxTotal;
+      onComplete: function onComplete(_ref60) {
+        var roulette = _ref60.roulette,
+          bankroll = _ref60.bankroll,
+          defaultBuyIn = _ref60.defaultBuyIn,
+          curr = _ref60.currency,
+          tableMinBet = _ref60.tableMinBet,
+          tableMaxBet = _ref60.tableMaxBet,
+          tableMaxTotal = _ref60.tableMaxTotal;
         updApp(function (s) {
           var prevBankroll = s.settings._restartBankroll;
           s.settings.onboarded = true;
@@ -10677,10 +11142,10 @@ function App() {
       l: "JP Profit",
       v: (outcomes.jackpot.profit * (primaryTrack.config.unit || 1) >= 0 ? "+" : "-") + cur.symbol + Math.abs(outcomes.jackpot.profit * (primaryTrack.config.unit || 1)).toFixed(cur.dec),
       c: outcomes.jackpot.profit >= 0 ? "#4ade80" : "#f87171"
-    }].map(function (_ref56) {
-      var l = _ref56.l,
-        v = _ref56.v,
-        c = _ref56.c;
+    }].map(function (_ref61) {
+      var l = _ref61.l,
+        v = _ref61.v,
+        c = _ref61.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -10762,10 +11227,10 @@ function App() {
       l: "Partial Profit",
       v: outcomes ? signChips(outcomes.partial.profit, primaryTrack.config.unit || 1, currency) : "--",
       c: outcomes && outcomes.partial.profit >= 0 ? "#4ade80" : "#f97316"
-    }].map(function (_ref57) {
-      var l = _ref57.l,
-        v = _ref57.v,
-        c = _ref57.c;
+    }].map(function (_ref62) {
+      var l = _ref62.l,
+        v = _ref62.v,
+        c = _ref62.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -11075,10 +11540,10 @@ function App() {
         flexDirection: "column",
         gap: 3
       }
-    }, legendRows.map(function (_ref58) {
-      var _ref59 = _slicedToArray(_ref58, 2),
-        abbr = _ref59[0],
-        desc = _ref59[1];
+    }, legendRows.map(function (_ref63) {
+      var _ref64 = _slicedToArray(_ref63, 2),
+        abbr = _ref64[0],
+        desc = _ref64[1];
       return /*#__PURE__*/React.createElement("div", {
         key: abbr,
         style: {
@@ -11404,10 +11869,10 @@ function App() {
       l: "Net P&L",
       v: (pnlVal >= 0 ? "+" : "-") + cur.symbol + formatNumber(pnlVal),
       c: pnlColor
-    }].map(function (_ref60) {
-      var l = _ref60.l,
-        v = _ref60.v,
-        c = _ref60.c;
+    }].map(function (_ref65) {
+      var l = _ref65.l,
+        v = _ref65.v,
+        c = _ref65.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -11552,11 +12017,11 @@ function App() {
           gap: 6,
           marginBottom: 8
         }
-      }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref61) {
-        var _ref62 = _slicedToArray(_ref61, 3),
-          l = _ref62[0],
-          v = _ref62[1],
-          c = _ref62[2];
+      }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref66) {
+        var _ref67 = _slicedToArray(_ref66, 3),
+          l = _ref67[0],
+          v = _ref67[1],
+          c = _ref67[2];
         return /*#__PURE__*/React.createElement("div", {
           key: l,
           style: {
@@ -11779,10 +12244,10 @@ function App() {
         display: "flex",
         gap: 8
       }
-    }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref63) {
-      var _ref64 = _slicedToArray(_ref63, 2),
-        v = _ref64[0],
-        label = _ref64[1];
+    }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref68) {
+      var _ref69 = _slicedToArray(_ref68, 2),
+        v = _ref69[0],
+        label = _ref69[1];
       return /*#__PURE__*/React.createElement("button", {
         key: v,
         onClick: function onClick() {
@@ -11872,10 +12337,10 @@ function App() {
       label: "Max Total (per spin)",
       key: "tableMaxTotal",
       color: "#f87171"
-    }].map(function (_ref65) {
-      var label = _ref65.label,
-        key = _ref65.key,
-        color = _ref65.color;
+    }].map(function (_ref70) {
+      var label = _ref70.label,
+        key = _ref70.key,
+        color = _ref70.color;
       var val = settings[key] || 1;
       function dec() {
         if (key === "tableMinBet") {
@@ -12222,8 +12687,8 @@ function App() {
   }
 
   // -- Bankroll Edit --
-  function BankrollEdit(_ref69) {
-    var onClose = _ref69.onClose;
+  function BankrollEdit(_ref74) {
+    var onClose = _ref74.onClose;
     var _useState149 = (0, _react.useState)(sess.bankrollCurrent),
       _useState150 = _slicedToArray(_useState149, 2),
       val = _useState150[0],
