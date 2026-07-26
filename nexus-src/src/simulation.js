@@ -53,11 +53,11 @@ function simNewResults(strategyCount) {
 // [{pnl,wins,losses,seqLosses,stopLossHits}], or null if shouldStop() fired
 // mid-session — aborted sessions are discarded so partial data never skews stats.
 function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop, activeMask) {
-  const sState = strategies.map(strat=>({
+  const sessionStates = strategies.map(strategy=>({
     level:0, pnl:0, wins:0, losses:0, seqLosses:0, stopLossHits:0,
     staked:0, // total money placed on the felt this session (drives expected-loss math)
     trough:0, peak:0, // deepest drawdown / highest running P&L within this session
-    waitingForWin: !!(strat.config.parkRules&&strat.config.parkRules.waitForWin),
+    waitingForWin: !!(strategy.config.parkRules&&strategy.config.parkRules.waitForWin),
     parkedAfterLoss:false,
     activeBets:[], // solution: [{number, level}] — one progression per number, like live play
     chaseTarget:null, // auto-chase: {kind:"dozen"|"column", index} locked for the current sequence
@@ -65,147 +65,147 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
   const droughts={};
   wheelNums.forEach(n=>{droughts[n]=0;});
 
-  for(let sp=0; sp<spinsPerSession; sp++){
+  for(let spinIndex=0; spinIndex<spinsPerSession; spinIndex++){
     if(shouldStop && shouldStop()) return null;
-    const val = wheelNums[Math.floor(Math.random()*wheelNums.length)];
+    const winningNumber = wheelNums[Math.floor(Math.random()*wheelNums.length)];
 
-    strategies.forEach((strat,si)=>{
-      if(activeMask && activeMask[si]===false) return; // busted in bankroll mode — out of the game
-      const st=sState[si];
-      const cfg=strat.config;
-      const rules=cfg.parkRules||{};
-      const tbl=tables[si];
-      const unit=cfg.unit||1;
+    strategies.forEach((strategy,strategyIndex)=>{
+      if(activeMask && activeMask[strategyIndex]===false) return; // busted in bankroll mode — out of the game
+      const strategyState=sessionStates[strategyIndex];
+      const config=strategy.config;
+      const rules=config.parkRules||{};
+      const progressionTable=tables[strategyIndex];
+      const unit=config.unit||1;
 
-      if(rules.parkAfterLoss && st.parkedAfterLoss){ st.parkedAfterLoss=false; return; }
+      if(rules.parkAfterLoss && strategyState.parkedAfterLoss){ strategyState.parkedAfterLoss=false; return; }
 
-      if(strat.type==="fibonacci"){
-        const autoChase=!!cfg.autoChase;
-        const evts=autoChase?[]:(cfg.evenTargets||[]);
-        let dts=autoChase?[]:(cfg.dozenTargets||[]), cts=autoChase?[]:(cfg.colTargets||[]);
-        const betMode=(cfg.betMode||"progression")==="flat"?"flat":(evts.length>0?"martingale":"progression");
-        const entering = betMode==="flat" || st.level===0;
+      if(strategy.type==="fibonacci"){
+        const autoChase=!!config.autoChase;
+        const evenMoneyTargets=autoChase?[]:(config.evenTargets||[]);
+        let dozenTargets=autoChase?[]:(config.dozenTargets||[]), columnTargets=autoChase?[]:(config.colTargets||[]);
+        const betMode=(config.betMode||"progression")==="flat"?"flat":(evenMoneyTargets.length>0?"martingale":"progression");
+        const entering = betMode==="flat" || strategyState.level===0;
 
         // Min-drought-to-enter is an ENTRY rule: it parks new sequences only,
         // never abandons a progression already in flight.
-        if(rules.droughtThreshold && entering && !st.chaseTarget){
-          let maxD=0;
+        if(rules.droughtThreshold && entering && !strategyState.chaseTarget){
+          let deepestGroupDrought=0;
           if(autoChase){
-            for(let d=0;d<3;d++)maxD=Math.max(maxD,dozenGroupDrought(droughts,d));
-            for(let c=0;c<3;c++)maxD=Math.max(maxD,columnGroupDrought(droughts,c));
+            for(let d=0;d<3;d++)deepestGroupDrought=Math.max(deepestGroupDrought,dozenGroupDrought(droughts,d));
+            for(let c=0;c<3;c++)deepestGroupDrought=Math.max(deepestGroupDrought,columnGroupDrought(droughts,c));
           }
-          else if(evts.length>0) evts.forEach(k=>{maxD=Math.max(maxD,evenMoneyGroupDrought(droughts,k));});
-          else { dts.forEach(d=>{maxD=Math.max(maxD,dozenGroupDrought(droughts,d));}); cts.forEach(c=>{maxD=Math.max(maxD,columnGroupDrought(droughts,c));}); }
-          if(maxD<rules.droughtThreshold)return;
+          else if(evenMoneyTargets.length>0) evenMoneyTargets.forEach(k=>{deepestGroupDrought=Math.max(deepestGroupDrought,evenMoneyGroupDrought(droughts,k));});
+          else { dozenTargets.forEach(d=>{deepestGroupDrought=Math.max(deepestGroupDrought,dozenGroupDrought(droughts,d));}); columnTargets.forEach(c=>{deepestGroupDrought=Math.max(deepestGroupDrought,columnGroupDrought(droughts,c));}); }
+          if(deepestGroupDrought<rules.droughtThreshold)return;
         }
 
         // Auto-chase: lock onto the most-missed dozen/column at sequence start and
         // stay with it until it hits or the stop loss ends the sequence. Ties are
         // broken at random (operator ruling 2026-07-25).
         if(autoChase){
-          if(!st.chaseTarget){
+          if(!strategyState.chaseTarget){
             const candidates=[];
             for(let d=0;d<3;d++)candidates.push({kind:"dozen",index:d,drought:dozenGroupDrought(droughts,d)});
             for(let c=0;c<3;c++)candidates.push({kind:"column",index:c,drought:columnGroupDrought(droughts,c)});
             const deepest=Math.max(...candidates.map(x=>x.drought));
             const tied=candidates.filter(x=>x.drought===deepest);
-            st.chaseTarget=tied[Math.floor(Math.random()*tied.length)];
+            strategyState.chaseTarget=tied[Math.floor(Math.random()*tied.length)];
           }
-          if(st.chaseTarget.kind==="dozen")dts=[st.chaseTarget.index]; else cts=[st.chaseTarget.index];
+          if(strategyState.chaseTarget.kind==="dozen")dozenTargets=[strategyState.chaseTarget.index]; else columnTargets=[strategyState.chaseTarget.index];
         }
 
-        const numTargets=(evts.length||(dts.length+cts.length))||1;
-        const isZ=val==="0"||val==="00";
+        const numTargets=(evenMoneyTargets.length||(dozenTargets.length+columnTargets.length))||1;
+        const isZeroPocket=winningNumber==="0"||winningNumber==="00";
         let hitCount=0;
-        if(!isZ){
-          if(evts.length>0){evts.forEach(k=>{const e=EVEN_MONEY.find(x=>x.key===k);if(e&&e.pred(+val))hitCount++;});}
-          else{if(dts.includes(dozenOf(val)))hitCount++;if(cts.includes(columnOf(val)))hitCount++;}
+        if(!isZeroPocket){
+          if(evenMoneyTargets.length>0){evenMoneyTargets.forEach(k=>{const e=EVEN_MONEY.find(x=>x.key===k);if(e&&e.pred(+winningNumber))hitCount++;});}
+          else{if(dozenTargets.includes(dozenOf(winningNumber)))hitCount++;if(columnTargets.includes(columnOf(winningNumber)))hitCount++;}
         }
         const isHit=hitCount>0;
 
         // Wait-for-win: observe only, start betting after the first target hit
-        if(st.waitingForWin){ if(isHit) st.waitingForWin=false; return; }
+        if(strategyState.waitingForWin){ if(isHit) strategyState.waitingForWin=false; return; }
 
-        const payMult=evts.length>0?2:3;
-        const row=tbl[Math.min(st.level,tbl.length-1)];
-        st.staked+=(betMode==="flat"?numTargets:(row?row.c:1)*numTargets)*unit;
+        const payMult=evenMoneyTargets.length>0?2:3;
+        const row=progressionTable[Math.min(strategyState.level,progressionTable.length-1)];
+        strategyState.staked+=(betMode==="flat"?numTargets:(row?row.c:1)*numTargets)*unit;
 
         if(betMode==="flat"){
-          if(isHit){ st.pnl+=(hitCount*payMult-numTargets)*unit; st.wins++; pushStreak(results[si],true); }
+          if(isHit){ strategyState.pnl+=(hitCount*payMult-numTargets)*unit; strategyState.wins++; pushStreak(results[strategyIndex],true); }
           else{
-            st.pnl-=numTargets*unit; st.losses++; st.seqLosses++;
-            pushStreak(results[si],false);
-            if(rules.parkAfterLoss)st.parkedAfterLoss=true;
+            strategyState.pnl-=numTargets*unit; strategyState.losses++; strategyState.seqLosses++;
+            pushStreak(results[strategyIndex],false);
+            if(rules.parkAfterLoss)strategyState.parkedAfterLoss=true;
           }
-          st.chaseTarget=null; // flat has no sequence — re-pick the coldest group every spin
+          strategyState.chaseTarget=null; // flat has no sequence — re-pick the coldest group every spin
         } else {
           if(isHit){
-            st.pnl+=(hitCount*payMult*(row?row.c:1)-(row?row.c:1)*numTargets)*unit;
-            st.wins++; st.level=0; st.chaseTarget=null;
-            pushStreak(results[si],true);
+            strategyState.pnl+=(hitCount*payMult*(row?row.c:1)-(row?row.c:1)*numTargets)*unit;
+            strategyState.wins++; strategyState.level=0; strategyState.chaseTarget=null;
+            pushStreak(results[strategyIndex],true);
           } else {
-            st.pnl-=(row?row.c:1)*numTargets*unit; st.losses++;
-            if(st.level<tbl.length-1){ st.level++; }
-            else{ st.stopLossHits++; st.seqLosses++; st.level=0; st.chaseTarget=null; if(rules.parkAfterStopLoss)st.waitingForWin=true; }
-            pushStreak(results[si],false);
-            if(rules.parkAfterLoss)st.parkedAfterLoss=true;
+            strategyState.pnl-=(row?row.c:1)*numTargets*unit; strategyState.losses++;
+            if(strategyState.level<progressionTable.length-1){ strategyState.level++; }
+            else{ strategyState.stopLossHits++; strategyState.seqLosses++; strategyState.level=0; strategyState.chaseTarget=null; if(rules.parkAfterStopLoss)strategyState.waitingForWin=true; }
+            pushStreak(results[strategyIndex],false);
+            if(rules.parkAfterLoss)strategyState.parkedAfterLoss=true;
           }
         }
       }
 
-      if(strat.type==="solution"){
-        const entry=cfg.entryThreshold||120;
+      if(strategy.type==="solution"){
+        const entry=config.entryThreshold||120;
         // Min-drought-to-enter raises the ENROLLMENT bar; bets already on the
         // table keep resolving normally.
         const effectiveEntry=Math.max(entry, rules.droughtThreshold||0);
-        const valInRange=val!=="0"&&val!=="00"&&(droughts[val]||0)>=entry;
+        const valInRange=winningNumber!=="0"&&winningNumber!=="00"&&(droughts[winningNumber]||0)>=entry;
 
-        if(rules.waitForWin && st.waitingForWin){
-          if(valInRange) st.waitingForWin=false;
+        if(rules.waitForWin && strategyState.waitingForWin){
+          if(valInRange) strategyState.waitingForWin=false;
           return;
         }
 
         // Enroll every number that has crossed the entry threshold (bets for THIS spin,
         // decided from droughts as they stood after the previous spin)
         Object.keys(droughts).forEach(k=>{
-          if(k!=="0"&&k!=="00"&&droughts[k]>=effectiveEntry&&!st.activeBets.find(b=>b.number===k)) st.activeBets.push({number:k,level:0});
+          if(k!=="0"&&k!=="00"&&droughts[k]>=effectiveEntry&&!strategyState.activeBets.find(b=>b.number===k)) strategyState.activeBets.push({number:k,level:0});
         });
 
         const resolved=[];
-        st.activeBets.forEach(b=>{
-          const row=tbl[Math.min(b.level,tbl.length-1)];
-          st.staked+=(row?row.c:1)*unit;
-          if(b.number===val){
-            st.pnl+=((row?row.ret:0)-(row?row.c:1))*unit;
-            st.wins++; resolved.push(b.number);
-            pushStreak(results[si],true);
+        strategyState.activeBets.forEach(b=>{
+          const row=progressionTable[Math.min(b.level,progressionTable.length-1)];
+          strategyState.staked+=(row?row.c:1)*unit;
+          if(b.number===winningNumber){
+            strategyState.pnl+=((row?row.ret:0)-(row?row.c:1))*unit;
+            strategyState.wins++; resolved.push(b.number);
+            pushStreak(results[strategyIndex],true);
           } else {
-            st.pnl-=(row?row.c:1)*unit; st.losses++;
-            if(b.level<tbl.length-1){ b.level++; }
-            else{ st.stopLossHits++; st.seqLosses++; b.level=0; if(rules.parkAfterStopLoss)st.waitingForWin=true; }
-            pushStreak(results[si],false);
-            if(rules.parkAfterLoss)st.parkedAfterLoss=true;
+            strategyState.pnl-=(row?row.c:1)*unit; strategyState.losses++;
+            if(b.level<progressionTable.length-1){ b.level++; }
+            else{ strategyState.stopLossHits++; strategyState.seqLosses++; b.level=0; if(rules.parkAfterStopLoss)strategyState.waitingForWin=true; }
+            pushStreak(results[strategyIndex],false);
+            if(rules.parkAfterLoss)strategyState.parkedAfterLoss=true;
           }
         });
-        if(resolved.length) st.activeBets=st.activeBets.filter(b=>!resolved.includes(b.number));
+        if(resolved.length) strategyState.activeBets=strategyState.activeBets.filter(b=>!resolved.includes(b.number));
       }
     });
 
-    sState.forEach(st=>{
-      if(st.pnl<st.trough)st.trough=st.pnl;
-      if(st.pnl>st.peak)st.peak=st.pnl;
+    sessionStates.forEach(strategyState=>{
+      if(strategyState.pnl<strategyState.trough)strategyState.trough=strategyState.pnl;
+      if(strategyState.pnl>strategyState.peak)strategyState.peak=strategyState.pnl;
     });
 
     // Droughts update AFTER every strategy has bet against this spin
     Object.keys(droughts).forEach(k=>droughts[k]++);
-    droughts[val]=0;
+    droughts[winningNumber]=0;
   }
 
-  return sState.map(st=>({
-    pnl:Math.round(st.pnl*100)/100,
-    wins:st.wins, losses:st.losses, seqLosses:st.seqLosses, stopLossHits:st.stopLossHits,
-    staked:Math.round(st.staked*100)/100,
-    trough:Math.round(st.trough*100)/100, peak:Math.round(st.peak*100)/100,
+  return sessionStates.map(strategyState=>({
+    pnl:Math.round(strategyState.pnl*100)/100,
+    wins:strategyState.wins, losses:strategyState.losses, seqLosses:strategyState.seqLosses, stopLossHits:strategyState.stopLossHits,
+    staked:Math.round(strategyState.staked*100)/100,
+    trough:Math.round(strategyState.trough*100)/100, peak:Math.round(strategyState.peak*100)/100,
   }));
 }
 
