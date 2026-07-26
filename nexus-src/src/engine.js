@@ -19,6 +19,15 @@ function formatElapsed(ms) {
     : `${m}:${String(sec).padStart(2,'0')}`;
 }
 
+// Builds the betting progression table. Each row is one level of the ladder:
+//   level        — 1-based rung number
+//   c            — chips bet PER TARGET at this level
+//   totalBet     — chips placed this spin (c × number of targets)
+//   totalInvest  — cumulative chips sunk since the sequence started
+//   ret          — chips returned if this level hits
+//   profit       — ret − totalInvest (net for the whole sequence on a hit)
+//   roi          — profit / totalInvest × 100
+// The `c` key is a persisted schema field (saved sessions reference it) — do not rename.
 function computeTable(subsets, payoutMult, roiPct, maxChips) {
   const r=roiPct/100, denom=payoutMult-subsets*(1+r);
   if(denom<=0) return [];

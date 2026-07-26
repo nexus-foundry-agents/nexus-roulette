@@ -958,6 +958,16 @@ function formatElapsed(ms) {
     sec = s % 60;
   return h > 0 ? "".concat(h, ":").concat(String(m).padStart(2, '0'), ":").concat(String(sec).padStart(2, '0')) : "".concat(m, ":").concat(String(sec).padStart(2, '0'));
 }
+
+// Builds the betting progression table. Each row is one level of the ladder:
+//   level        — 1-based rung number
+//   c            — chips bet PER TARGET at this level
+//   totalBet     — chips placed this spin (c × number of targets)
+//   totalInvest  — cumulative chips sunk since the sequence started
+//   ret          — chips returned if this level hits
+//   profit       — ret − totalInvest (net for the whole sequence on a hit)
+//   roi          — profit / totalInvest × 100
+// The `c` key is a persisted schema field (saved sessions reference it) — do not rename.
 function computeTable(subsets, payoutMult, roiPct, maxChips) {
   var r = roiPct / 100,
     denom = payoutMult - subsets * (1 + r);
@@ -1807,7 +1817,7 @@ function simNewResults(strategyCount) {
 // [{pnl,wins,losses,seqLosses,stopLossHits}], or null if shouldStop() fired
 // mid-session — aborted sessions are discarded so partial data never skews stats.
 function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, shouldStop, activeMask) {
-  var sState = strategies.map(function (strat) {
+  var sessionStates = strategies.map(function (strategy) {
     return {
       level: 0,
       pnl: 0,
@@ -1820,7 +1830,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       trough: 0,
       peak: 0,
       // deepest drawdown / highest running P&L within this session
-      waitingForWin: !!(strat.config.parkRules && strat.config.parkRules.waitForWin),
+      waitingForWin: !!(strategy.config.parkRules && strategy.config.parkRules.waitForWin),
       parkedAfterLoss: false,
       activeBets: [],
       // solution: [{number, level}] — one progression per number, like live play
@@ -1835,51 +1845,51 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       if (shouldStop && shouldStop()) return {
         v: null
       };
-      var val = wheelNums[Math.floor(Math.random() * wheelNums.length)];
-      strategies.forEach(function (strat, si) {
-        if (activeMask && activeMask[si] === false) return; // busted in bankroll mode — out of the game
-        var st = sState[si];
-        var cfg = strat.config;
-        var rules = cfg.parkRules || {};
-        var tbl = tables[si];
-        var unit = cfg.unit || 1;
-        if (rules.parkAfterLoss && st.parkedAfterLoss) {
-          st.parkedAfterLoss = false;
+      var winningNumber = wheelNums[Math.floor(Math.random() * wheelNums.length)];
+      strategies.forEach(function (strategy, strategyIndex) {
+        if (activeMask && activeMask[strategyIndex] === false) return; // busted in bankroll mode — out of the game
+        var strategyState = sessionStates[strategyIndex];
+        var config = strategy.config;
+        var rules = config.parkRules || {};
+        var progressionTable = tables[strategyIndex];
+        var unit = config.unit || 1;
+        if (rules.parkAfterLoss && strategyState.parkedAfterLoss) {
+          strategyState.parkedAfterLoss = false;
           return;
         }
-        if (strat.type === "fibonacci") {
-          var autoChase = !!cfg.autoChase;
-          var evts = autoChase ? [] : cfg.evenTargets || [];
-          var dts = autoChase ? [] : cfg.dozenTargets || [],
-            cts = autoChase ? [] : cfg.colTargets || [];
-          var betMode = (cfg.betMode || "progression") === "flat" ? "flat" : evts.length > 0 ? "martingale" : "progression";
-          var entering = betMode === "flat" || st.level === 0;
+        if (strategy.type === "fibonacci") {
+          var autoChase = !!config.autoChase;
+          var evenMoneyTargets = autoChase ? [] : config.evenTargets || [];
+          var dozenTargets = autoChase ? [] : config.dozenTargets || [],
+            columnTargets = autoChase ? [] : config.colTargets || [];
+          var betMode = (config.betMode || "progression") === "flat" ? "flat" : evenMoneyTargets.length > 0 ? "martingale" : "progression";
+          var entering = betMode === "flat" || strategyState.level === 0;
 
           // Min-drought-to-enter is an ENTRY rule: it parks new sequences only,
           // never abandons a progression already in flight.
-          if (rules.droughtThreshold && entering && !st.chaseTarget) {
-            var maxD = 0;
+          if (rules.droughtThreshold && entering && !strategyState.chaseTarget) {
+            var deepestGroupDrought = 0;
             if (autoChase) {
-              for (var d = 0; d < 3; d++) maxD = Math.max(maxD, dozenGroupDrought(droughts, d));
-              for (var c = 0; c < 3; c++) maxD = Math.max(maxD, columnGroupDrought(droughts, c));
-            } else if (evts.length > 0) evts.forEach(function (k) {
-              maxD = Math.max(maxD, evenMoneyGroupDrought(droughts, k));
+              for (var d = 0; d < 3; d++) deepestGroupDrought = Math.max(deepestGroupDrought, dozenGroupDrought(droughts, d));
+              for (var c = 0; c < 3; c++) deepestGroupDrought = Math.max(deepestGroupDrought, columnGroupDrought(droughts, c));
+            } else if (evenMoneyTargets.length > 0) evenMoneyTargets.forEach(function (k) {
+              deepestGroupDrought = Math.max(deepestGroupDrought, evenMoneyGroupDrought(droughts, k));
             });else {
-              dts.forEach(function (d) {
-                maxD = Math.max(maxD, dozenGroupDrought(droughts, d));
+              dozenTargets.forEach(function (d) {
+                deepestGroupDrought = Math.max(deepestGroupDrought, dozenGroupDrought(droughts, d));
               });
-              cts.forEach(function (c) {
-                maxD = Math.max(maxD, columnGroupDrought(droughts, c));
+              columnTargets.forEach(function (c) {
+                deepestGroupDrought = Math.max(deepestGroupDrought, columnGroupDrought(droughts, c));
               });
             }
-            if (maxD < rules.droughtThreshold) return;
+            if (deepestGroupDrought < rules.droughtThreshold) return;
           }
 
           // Auto-chase: lock onto the most-missed dozen/column at sequence start and
           // stay with it until it hits or the stop loss ends the sequence. Ties are
           // broken at random (operator ruling 2026-07-25).
           if (autoChase) {
-            if (!st.chaseTarget) {
+            if (!strategyState.chaseTarget) {
               var candidates = [];
               for (var _d = 0; _d < 3; _d++) candidates.push({
                 kind: "dozen",
@@ -1897,149 +1907,149 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
               var tied = candidates.filter(function (x) {
                 return x.drought === deepest;
               });
-              st.chaseTarget = tied[Math.floor(Math.random() * tied.length)];
+              strategyState.chaseTarget = tied[Math.floor(Math.random() * tied.length)];
             }
-            if (st.chaseTarget.kind === "dozen") dts = [st.chaseTarget.index];else cts = [st.chaseTarget.index];
+            if (strategyState.chaseTarget.kind === "dozen") dozenTargets = [strategyState.chaseTarget.index];else columnTargets = [strategyState.chaseTarget.index];
           }
-          var numTargets = evts.length || dts.length + cts.length || 1;
-          var isZ = val === "0" || val === "00";
+          var numTargets = evenMoneyTargets.length || dozenTargets.length + columnTargets.length || 1;
+          var isZeroPocket = winningNumber === "0" || winningNumber === "00";
           var hitCount = 0;
-          if (!isZ) {
-            if (evts.length > 0) {
-              evts.forEach(function (k) {
+          if (!isZeroPocket) {
+            if (evenMoneyTargets.length > 0) {
+              evenMoneyTargets.forEach(function (k) {
                 var e = EVEN_MONEY.find(function (x) {
                   return x.key === k;
                 });
-                if (e && e.pred(+val)) hitCount++;
+                if (e && e.pred(+winningNumber)) hitCount++;
               });
             } else {
-              if (dts.includes(dozenOf(val))) hitCount++;
-              if (cts.includes(columnOf(val))) hitCount++;
+              if (dozenTargets.includes(dozenOf(winningNumber))) hitCount++;
+              if (columnTargets.includes(columnOf(winningNumber))) hitCount++;
             }
           }
           var isHit = hitCount > 0;
 
           // Wait-for-win: observe only, start betting after the first target hit
-          if (st.waitingForWin) {
-            if (isHit) st.waitingForWin = false;
+          if (strategyState.waitingForWin) {
+            if (isHit) strategyState.waitingForWin = false;
             return;
           }
-          var payMult = evts.length > 0 ? 2 : 3;
-          var row = tbl[Math.min(st.level, tbl.length - 1)];
-          st.staked += (betMode === "flat" ? numTargets : (row ? row.c : 1) * numTargets) * unit;
+          var payMult = evenMoneyTargets.length > 0 ? 2 : 3;
+          var row = progressionTable[Math.min(strategyState.level, progressionTable.length - 1)];
+          strategyState.staked += (betMode === "flat" ? numTargets : (row ? row.c : 1) * numTargets) * unit;
           if (betMode === "flat") {
             if (isHit) {
-              st.pnl += (hitCount * payMult - numTargets) * unit;
-              st.wins++;
-              pushStreak(results[si], true);
+              strategyState.pnl += (hitCount * payMult - numTargets) * unit;
+              strategyState.wins++;
+              pushStreak(results[strategyIndex], true);
             } else {
-              st.pnl -= numTargets * unit;
-              st.losses++;
-              st.seqLosses++;
-              pushStreak(results[si], false);
-              if (rules.parkAfterLoss) st.parkedAfterLoss = true;
+              strategyState.pnl -= numTargets * unit;
+              strategyState.losses++;
+              strategyState.seqLosses++;
+              pushStreak(results[strategyIndex], false);
+              if (rules.parkAfterLoss) strategyState.parkedAfterLoss = true;
             }
-            st.chaseTarget = null; // flat has no sequence — re-pick the coldest group every spin
+            strategyState.chaseTarget = null; // flat has no sequence — re-pick the coldest group every spin
           } else {
             if (isHit) {
-              st.pnl += (hitCount * payMult * (row ? row.c : 1) - (row ? row.c : 1) * numTargets) * unit;
-              st.wins++;
-              st.level = 0;
-              st.chaseTarget = null;
-              pushStreak(results[si], true);
+              strategyState.pnl += (hitCount * payMult * (row ? row.c : 1) - (row ? row.c : 1) * numTargets) * unit;
+              strategyState.wins++;
+              strategyState.level = 0;
+              strategyState.chaseTarget = null;
+              pushStreak(results[strategyIndex], true);
             } else {
-              st.pnl -= (row ? row.c : 1) * numTargets * unit;
-              st.losses++;
-              if (st.level < tbl.length - 1) {
-                st.level++;
+              strategyState.pnl -= (row ? row.c : 1) * numTargets * unit;
+              strategyState.losses++;
+              if (strategyState.level < progressionTable.length - 1) {
+                strategyState.level++;
               } else {
-                st.stopLossHits++;
-                st.seqLosses++;
-                st.level = 0;
-                st.chaseTarget = null;
-                if (rules.parkAfterStopLoss) st.waitingForWin = true;
+                strategyState.stopLossHits++;
+                strategyState.seqLosses++;
+                strategyState.level = 0;
+                strategyState.chaseTarget = null;
+                if (rules.parkAfterStopLoss) strategyState.waitingForWin = true;
               }
-              pushStreak(results[si], false);
-              if (rules.parkAfterLoss) st.parkedAfterLoss = true;
+              pushStreak(results[strategyIndex], false);
+              if (rules.parkAfterLoss) strategyState.parkedAfterLoss = true;
             }
           }
         }
-        if (strat.type === "solution") {
-          var entry = cfg.entryThreshold || 120;
+        if (strategy.type === "solution") {
+          var entry = config.entryThreshold || 120;
           // Min-drought-to-enter raises the ENROLLMENT bar; bets already on the
           // table keep resolving normally.
           var effectiveEntry = Math.max(entry, rules.droughtThreshold || 0);
-          var valInRange = val !== "0" && val !== "00" && (droughts[val] || 0) >= entry;
-          if (rules.waitForWin && st.waitingForWin) {
-            if (valInRange) st.waitingForWin = false;
+          var valInRange = winningNumber !== "0" && winningNumber !== "00" && (droughts[winningNumber] || 0) >= entry;
+          if (rules.waitForWin && strategyState.waitingForWin) {
+            if (valInRange) strategyState.waitingForWin = false;
             return;
           }
 
           // Enroll every number that has crossed the entry threshold (bets for THIS spin,
           // decided from droughts as they stood after the previous spin)
           Object.keys(droughts).forEach(function (k) {
-            if (k !== "0" && k !== "00" && droughts[k] >= effectiveEntry && !st.activeBets.find(function (b) {
+            if (k !== "0" && k !== "00" && droughts[k] >= effectiveEntry && !strategyState.activeBets.find(function (b) {
               return b.number === k;
-            })) st.activeBets.push({
+            })) strategyState.activeBets.push({
               number: k,
               level: 0
             });
           });
           var resolved = [];
-          st.activeBets.forEach(function (b) {
-            var row = tbl[Math.min(b.level, tbl.length - 1)];
-            st.staked += (row ? row.c : 1) * unit;
-            if (b.number === val) {
-              st.pnl += ((row ? row.ret : 0) - (row ? row.c : 1)) * unit;
-              st.wins++;
+          strategyState.activeBets.forEach(function (b) {
+            var row = progressionTable[Math.min(b.level, progressionTable.length - 1)];
+            strategyState.staked += (row ? row.c : 1) * unit;
+            if (b.number === winningNumber) {
+              strategyState.pnl += ((row ? row.ret : 0) - (row ? row.c : 1)) * unit;
+              strategyState.wins++;
               resolved.push(b.number);
-              pushStreak(results[si], true);
+              pushStreak(results[strategyIndex], true);
             } else {
-              st.pnl -= (row ? row.c : 1) * unit;
-              st.losses++;
-              if (b.level < tbl.length - 1) {
+              strategyState.pnl -= (row ? row.c : 1) * unit;
+              strategyState.losses++;
+              if (b.level < progressionTable.length - 1) {
                 b.level++;
               } else {
-                st.stopLossHits++;
-                st.seqLosses++;
+                strategyState.stopLossHits++;
+                strategyState.seqLosses++;
                 b.level = 0;
-                if (rules.parkAfterStopLoss) st.waitingForWin = true;
+                if (rules.parkAfterStopLoss) strategyState.waitingForWin = true;
               }
-              pushStreak(results[si], false);
-              if (rules.parkAfterLoss) st.parkedAfterLoss = true;
+              pushStreak(results[strategyIndex], false);
+              if (rules.parkAfterLoss) strategyState.parkedAfterLoss = true;
             }
           });
-          if (resolved.length) st.activeBets = st.activeBets.filter(function (b) {
+          if (resolved.length) strategyState.activeBets = strategyState.activeBets.filter(function (b) {
             return !resolved.includes(b.number);
           });
         }
       });
-      sState.forEach(function (st) {
-        if (st.pnl < st.trough) st.trough = st.pnl;
-        if (st.pnl > st.peak) st.peak = st.pnl;
+      sessionStates.forEach(function (strategyState) {
+        if (strategyState.pnl < strategyState.trough) strategyState.trough = strategyState.pnl;
+        if (strategyState.pnl > strategyState.peak) strategyState.peak = strategyState.pnl;
       });
 
       // Droughts update AFTER every strategy has bet against this spin
       Object.keys(droughts).forEach(function (k) {
         return droughts[k]++;
       });
-      droughts[val] = 0;
+      droughts[winningNumber] = 0;
     },
     _ret;
-  for (var sp = 0; sp < spinsPerSession; sp++) {
+  for (var spinIndex = 0; spinIndex < spinsPerSession; spinIndex++) {
     _ret = _loop();
     if (_ret) return _ret.v;
   }
-  return sState.map(function (st) {
+  return sessionStates.map(function (strategyState) {
     return {
-      pnl: Math.round(st.pnl * 100) / 100,
-      wins: st.wins,
-      losses: st.losses,
-      seqLosses: st.seqLosses,
-      stopLossHits: st.stopLossHits,
-      staked: Math.round(st.staked * 100) / 100,
-      trough: Math.round(st.trough * 100) / 100,
-      peak: Math.round(st.peak * 100) / 100
+      pnl: Math.round(strategyState.pnl * 100) / 100,
+      wins: strategyState.wins,
+      losses: strategyState.losses,
+      seqLosses: strategyState.seqLosses,
+      stopLossHits: strategyState.stopLossHits,
+      staked: Math.round(strategyState.staked * 100) / 100,
+      trough: Math.round(strategyState.trough * 100) / 100,
+      peak: Math.round(strategyState.peak * 100) / 100
     };
   });
 }
