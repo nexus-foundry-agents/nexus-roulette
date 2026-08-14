@@ -5,14 +5,18 @@ import { useState, useEffect, useMemo } from "react";
 const RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 const DOZEN_LABELS = ["1st Dozen","2nd Dozen","3rd Dozen"];
 const COLUMN_LABELS = ["1st Col","2nd Col","3rd Col"];
+const DOZEN_RANGES = ["1-12","13-24","25-36"];
+const COLUMN_RANGES = ["1,4..34","2,5..35","3,6..36"];
 const DOZEN_BORDERS = ["#f59e0b","#3b82f6","#a855f7"];
 const DOZEN_TEXTS = ["#fbbf24","#60a5fa","#c084fc"];
 const COLUMN_BORDERS = ["#2dd4bf","#f472b6","#a3e635"];
 const COLUMN_TEXTS = ["#5eead4","#f9a8d4","#bef264"];
+const SOLUTION_TARGET_COLOR = "#fbbf24";
+const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered inside bets
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.45.0";
+const APP_VERSION = "0.46.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -34,6 +38,15 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.46.0", date:"Aug 14, 2026", title:"Every Track Reads Out Its Bets", changes:[
+    "Every strategy track now spells out exactly which bets it places — 1st Dozen (1-12), 2nd Col (2,5..35), Red, #17 — as colour-coded chips on the track card, in Game and Live mode",
+    "Chip colours are the same ones the dozen/column pickers and drought cards use, so a track's colour already matches the dozen or column it bets on — no more hand-matching",
+    "New tracks are automatically coloured after their first target (falls back to the old rotation when that colour is already taken by a live track)",
+    "Add Track and Edit Config show a live \"This Track Will Bet\" read-out before you commit",
+    "Bet read-outs also appear on the Full Table header and its track tabs, the Abandon Progression buttons, Resume Closed Track buttons, Session Stats, and every Experimental strategy row",
+    "Result flash names each line by the bet it placed (\"🎲 1st Dozen + 2nd Col (Prog)\") instead of just \"Prog\"",
+    "Session Stats no longer merges two Progression tracks that bet different dozens into a single row",
+  ]},
   { v:"0.45.0", date:"Jul 25, 2026", title:"Averages, Expected Loss + Repeat Experiments", changes:[
     "Averages grid in Experimental results: avg P&L per session and per sequence, avg winning vs losing session (with counts), avg sequences and avg staked per session",
     "Expected Loss panel: total staked × house edge for the wheel you ran (2.70% EU / 5.26% US), per-session expectation, and an actual-vs-expected luck delta",
@@ -338,3 +351,80 @@ const EVEN_MONEY = [
   {key:"high",  label:"19-36", color:"#fbbf24", pred: n=>n>=19},
   {key:"low",   label:"1-18",  color:"#86efac", pred: n=>n<=18},
 ];
+
+// -- Bet Targets: what is this strategy actually betting on? --
+// Single source of truth. Every surface that shows a track or a simulated
+// strategy (track cards, progression table, session stats, Experimental rows,
+// resume buttons, result flash) reads its wording AND its colours from here, so
+// a track never has to be identified by cross-referencing a coloured dot with
+// the pickers by hand. Colours deliberately reuse the dozen/column/even-money
+// palettes the pickers and drought cards already use.
+//
+// Returns [{key, label, detail, color}] — an empty array means "nothing picked".
+function betTargetList(type, config) {
+  const cfg = config || {};
+  const out = [];
+  if(type==="fibonacci") {
+    // Auto-chase (Experimental only) has no fixed target — it re-picks each sequence.
+    if(cfg.autoChase) return [{key:"autochase",label:"🔄 Auto-chase",detail:"most-missed dozen/col",color:"#c4b5fd"}];
+    (cfg.dozenTargets||[]).slice().sort((a,b)=>a-b).forEach(d=>{
+      if(DOZEN_LABELS[d]) out.push({key:"dozen:"+d,label:DOZEN_LABELS[d],detail:DOZEN_RANGES[d],color:DOZEN_TEXTS[d]});
+    });
+    (cfg.colTargets||[]).slice().sort((a,b)=>a-b).forEach(c=>{
+      if(COLUMN_LABELS[c]) out.push({key:"column:"+c,label:COLUMN_LABELS[c],detail:COLUMN_RANGES[c],color:COLUMN_TEXTS[c]});
+    });
+    (cfg.evenTargets||[]).forEach(k=>{
+      const em = EVEN_MONEY.filter(e=>e.key===k)[0];
+      if(em) out.push({key:"em:"+em.key,label:em.label,detail:"even money",color:em.color});
+    });
+    return out;
+  }
+  if(type==="solution") {
+    const bets = cfg.activeBets||[];
+    if(bets.length===0) return [{key:"sol-waiting",label:"Overdue numbers",detail:"≥"+(cfg.entryThreshold||120)+" misses",color:SOLUTION_TARGET_COLOR}];
+    // A number speaks for itself — no detail, or a 20-number track becomes a wall.
+    return bets.map(b=>({key:"s:"+b.number,label:"#"+b.number,detail:"",color:SOLUTION_TARGET_COLOR}));
+  }
+  if(type==="custom") {
+    return (cfg.positions||[]).map((p,i)=>{
+      const d = betPositionLabel(p);
+      return {key:"pos"+i+":"+p.type+":"+p.target,label:d.label,detail:d.detail,color:d.color};
+    });
+  }
+  return out;
+}
+
+// One custom-bet position, named the way a player would call it at the table.
+function betPositionLabel(p) {
+  if(p.type==="dozen")  { const d=+p.target; return {label:DOZEN_LABELS[d]||"Dozen",   detail:DOZEN_RANGES[d]||"",  color:DOZEN_TEXTS[d]||INSIDE_BET_COLOR}; }
+  if(p.type==="column") { const c=+p.target; return {label:COLUMN_LABELS[c]||"Column", detail:COLUMN_RANGES[c]||"", color:COLUMN_TEXTS[c]||INSIDE_BET_COLOR}; }
+  const em = EVEN_MONEY.filter(e=>e.key===p.type)[0];
+  if(em) return {label:em.label,detail:"even money",color:em.color};
+  if(p.type==="straight") return {label:"#"+p.target,detail:"straight",color:INSIDE_BET_COLOR};
+  const bt = BET_TYPES.filter(b=>b.key===p.type)[0];
+  return {label:(bt?bt.name:p.type),detail:betCoveredNumbers(p.type,p.target).join("/"),color:INSIDE_BET_COLOR};
+}
+
+// Plain-text form for headers, buttons and the result flash.
+// detail:true appends the covered range, e.g. "1st Dozen (1-12) + 2nd Col (2,5..35)".
+// max caps how many are spelled out before "+N more" (custom bets can be long).
+function betTargetText(type, config, detail, max) {
+  const list = betTargetList(type, config);
+  if(list.length===0) return "No bet selected";
+  const shown = max && list.length>max ? list.slice(0,max) : list;
+  const txt = shown.map(t=>detail&&t.detail?t.label+" ("+t.detail+")":t.label).join(" + ");
+  return shown.length<list.length ? txt+" +"+(list.length-shown.length)+" more" : txt;
+}
+
+// Colour a new track after the bet it actually places, so the dot on the card,
+// the chip drawn on the board and the dozen/column pickers all already agree —
+// no hand-matching. Falls back to the generic rotation when that colour is
+// already spoken for by another live track (two tracks must stay tellable apart).
+function pickTrackColor(type, config, existingTracks) {
+  const taken = (existingTracks||[]).filter(t=>t.state!=="closed").map(t=>t.color);
+  const targets = betTargetList(type, config);
+  const preferred = targets.length>0 ? targets[0].color : null;
+  if(preferred && taken.indexOf(preferred)<0) return preferred;
+  const free = TRACK_COLORS.filter(c=>taken.indexOf(c)<0)[0];
+  return free || TRACK_COLORS[(existingTracks||[]).length % TRACK_COLORS.length];
+}

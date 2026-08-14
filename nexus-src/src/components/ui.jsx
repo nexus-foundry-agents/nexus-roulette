@@ -15,6 +15,33 @@ function FieldLabel({children}) {
   );
 }
 
+// Reads out every bet a strategy places, colour-coded to match the pickers, the
+// drought cards and the board. Shown on every track so you never have to work
+// out which dozen or column a coloured dot stands for.
+function BetTargets({type, config, compact, showRanges, max, style}) {
+  const all = betTargetList(type, config);
+  if(all.length===0) {
+    return <div style={{fontSize:compact?9:10,color:"#f87171",fontWeight:700,...(style||{})}}>⚠ No bet selected</div>;
+  }
+  // The Solution can hold dozens of live numbers — cap the pills, count the rest.
+  const cap = max || 8;
+  const targets = all.length>cap ? all.slice(0,cap) : all;
+  const hidden = all.length - targets.length;
+  const fs = compact?9:10;
+  return (
+    <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center",...(style||{})}}>
+      {targets.map(t => (
+        <span key={t.key} style={{display:"inline-flex",alignItems:"center",gap:4,padding:compact?"1px 6px":"2px 7px",borderRadius:6,border:"1px solid "+t.color+"66",background:t.color+"1a",whiteSpace:"nowrap"}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:t.color,flexShrink:0}}/>
+          <span style={{fontSize:fs,fontWeight:700,color:t.color}}>{t.label}</span>
+          {showRanges!==false && t.detail && <span style={{fontSize:fs-1,color:"#64748b",fontWeight:600}}>{t.detail}</span>}
+        </span>
+      ))}
+      {hidden>0 && <span style={{fontSize:fs,color:"#64748b",fontWeight:700}}>+{hidden} more</span>}
+    </div>
+  );
+}
+
 function Modal({children, onClose}) {
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>

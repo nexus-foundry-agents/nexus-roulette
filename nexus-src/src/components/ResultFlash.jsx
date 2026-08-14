@@ -19,11 +19,11 @@ function ResultFlash({result, cur, onDismiss}) {
       )}
       {trackResults.map((r,i) => (
         <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<trackResults.length-1?"1px solid #1e2d3d":"none"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{width:10,height:10,borderRadius:"50%",background:r.color}}/>
+          <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:r.color,flexShrink:0}}/>
             <span style={{fontSize:12,color:"#94a3b8"}}>{r.name}</span>
           </div>
-          <div style={{fontSize:13,fontWeight:700,color:r.profit>0?"#4ade80":r.profit<0?"#f97316":"#64748b"}}>
+          <div style={{fontSize:13,fontWeight:700,whiteSpace:"nowrap",marginLeft:8,color:r.profit>0?"#4ade80":r.profit<0?"#f97316":"#64748b"}}>
             {r.profit>=0?"+":""}{(r.profit*(r.unit||1)).toFixed(2)} {r.outcome}
           </div>
         </div>

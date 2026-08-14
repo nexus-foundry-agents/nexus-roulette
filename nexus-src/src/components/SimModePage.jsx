@@ -435,10 +435,11 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
                 <button onClick={()=>removeStrategy(i)} style={{padding:"3px 8px",borderRadius:6,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:9,cursor:"pointer"}}>×</button>
               </div>
             </div>
+            <BetTargets type={strat.type} config={strat.config} compact style={{marginBottom:4}}/>
             <div style={{fontSize:10,color:"#64748b"}}>
               {strat.type==="fibonacci"
-                ?`${strat.config.betMode||"progression"} · ${strat.config.autoChase?"🔄 Auto-chase most-missed dozen/col":(strat.config.evenTargets||[]).length>0?(strat.config.evenTargets).join("+"):((strat.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")||"--")+(strat.config.colTargets?.length>0?" + "+(strat.config.colTargets.map(c=>COLUMN_LABELS[c]).join("+")):"")}`
-                :`Solution · entry ${strat.config.entryThreshold}`
+                ? `${strat.config.betMode||"progression"}`
+                : `Solution · entry ${strat.config.entryThreshold}`
               } · ROI {strat.config.roi}% · stop {cur.symbol}{strat.config.stopLoss}
             </div>
             {editStratIdx===i && (
@@ -501,7 +502,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
           const pnl=r?r.totalPnl:0;
           return(
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1e2d3d"}}>
-              <span style={{fontSize:11,color:TRACK_COLORS[i%TRACK_COLORS.length]}}>{strat.label}</span>
+              <span style={{fontSize:11,color:TRACK_COLORS[i%TRACK_COLORS.length]}}>{strat.label} <span style={{color:"#64748b"}}>· {betTargetText(strat.type,strat.config,false,3)}</span></span>
               <span style={{fontSize:13,fontWeight:700,color:pnl>=0?"#4ade80":"#f87171"}}>{pnl>=0?"+":"-"}{cur.symbol}{Math.abs(pnl).toFixed(2)}</span>
             </div>
           );
@@ -545,6 +546,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
               <div>
                 <div style={{fontSize:13,fontWeight:800,color}}>{strat.label}</div>
+                <BetTargets type={strat.type} config={strat.config} compact style={{marginTop:3}}/>
                 <div style={{fontSize:10,color:"#64748b",marginTop:2}}>
                   {(r.totalSequences||0).toLocaleString()} sequences · {(stats.winRate*100).toFixed(1)}% win rate
                 </div>
@@ -727,6 +729,10 @@ function SimStratEditor({strat, idx, simCfg, setSimCfg, cur, onClose}) {
   }
   return(
     <div style={{marginTop:10,padding:10,background:"#0c1520",borderRadius:10,border:"1px solid #2d4057",display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{background:"#0f1923",borderRadius:9,padding:"8px 10px",border:"1px solid #2d4057"}}>
+        <FieldLabel>Now Betting</FieldLabel>
+        <BetTargets type={strat.type} config={cfg} compact/>
+      </div>
       <ROIStepper value={cfg.roi} onChange={v=>upCfg("roi",v)} disabled={(cfg.evenTargets||[]).length>0}/>
       <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
         <button onClick={()=>upCfg("stopLoss",Math.max(25,cfg.stopLoss-25))} style={{padding:"7px 12px",background:"transparent",border:"none",color:"#60a5fa",fontSize:16,fontWeight:700,cursor:"pointer"}}>-</button>
