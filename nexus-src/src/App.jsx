@@ -255,6 +255,9 @@ export default function App() {
           const isHit=hitCount>0;
           const payMult=evts.length>0?2:3;
           const numTargets=evts.length>0?evts.length:(dts.length+cts.length)||1;
+          // Name every flash line by the bet it placed, not just the track type.
+          const flashName=TRACK_ICONS[t.type]+" "+betTargetText(t.type,t.config)
+            +" ("+(effectiveBetMode==="martingale"?"Martingale":effectiveBetMode==="flat"?"Flat":"Prog")+")";
 
           if(effectiveBetMode==="flat") {
             // No progression -- level stays 0
@@ -263,12 +266,12 @@ export default function App() {
               t.pnl+=profit; t.wins++;
               t.bets.push({spinIdx:s.spins.length-1,level:0,outcome:"win",profit,cat:"win"});
               totalDelta+=profit*(t.config.unit||1);
-              trackResults.push({name:TRACK_ICONS[t.type]+" Flat",color:t.color,profit,unit:t.config.unit||1,outcome:"Win",cat:"win"});
+              trackResults.push({name:flashName,color:t.color,profit,unit:t.config.unit||1,outcome:"Win",cat:"win"});
             } else {
               t.pnl-=numTargets;
               t.bets.push({spinIdx:s.spins.length-1,level:0,outcome:"loss",profit:-numTargets,cat:"loss"});
               totalDelta-=numTargets*(t.config.unit||1);
-              trackResults.push({name:TRACK_ICONS[t.type]+" Flat",color:t.color,profit:-numTargets,unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
+              trackResults.push({name:flashName,color:t.color,profit:-numTargets,unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
             }
           } else {
             // Progression or Martingale
@@ -279,7 +282,7 @@ export default function App() {
               t.pnl+=spinDelta; t.wins++; t.sequences++; t.level=0;
               t.bets.push({spinIdx:s.spins.length-1,level:t.level,outcome:"win",profit,cat});
               totalDelta+=spinDelta*(t.config.unit||1);
-              trackResults.push({name:TRACK_ICONS[t.type]+(effectiveBetMode==="martingale"?" Martingale":effectiveBetMode==="flat"?" Flat":" Prog"),color:t.color,profit,unit:t.config.unit||1,outcome:cat==="jackpot"?"Jackpot!":"Win",cat});
+              trackResults.push({name:flashName,color:t.color,profit,unit:t.config.unit||1,outcome:cat==="jackpot"?"Jackpot!":"Win",cat});
             } else {
               const betChips=(row?row.c:1)*numTargets;
               t.pnl-=betChips;
@@ -287,7 +290,7 @@ export default function App() {
               const bc=betChips*(t.config.unit||1);
               totalDelta-=bc;
               if(t.level<tbl.length-1) t.level++; else{ t.state="closed"; t.closedAtSpin=s.spins.length-1; }
-              trackResults.push({name:TRACK_ICONS[t.type]+(effectiveBetMode==="martingale"?" Martingale":" Prog"),color:t.color,profit:-(row?row.c:1),unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
+              trackResults.push({name:flashName,color:t.color,profit:-(row?row.c:1),unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
             }
           }
         }
@@ -324,19 +327,20 @@ export default function App() {
           });
           var totalReturn=payout*mult;
           var betMode=t.config.betMode||"flat";
+          var customName="🃏 "+betTargetText(t.type,t.config,false,3);
           if(payout>0) {
             var spinDelta=totalReturn-baseTotalBet*mult;
             if(betMode==="flat") {
               t.pnl+=spinDelta; t.wins++;
               t.bets.push({spinIdx:s.spins.length-1,level:0,outcome:"win",profit:spinDelta,cat:"win"});
               totalDelta+=spinDelta*(t.config.unit||1);
-              trackResults.push({name:"🃏 Custom",color:t.color,profit:spinDelta,unit:t.config.unit||1,outcome:"Win",cat:"win"});
+              trackResults.push({name:customName+" (Flat)",color:t.color,profit:spinDelta,unit:t.config.unit||1,outcome:"Win",cat:"win"});
             } else {
               var seqProfit=totalReturn-(row?row.totalInvest:baseTotalBet);
               t.pnl+=spinDelta; t.wins++; t.sequences++; t.level=0;
               t.bets.push({spinIdx:s.spins.length-1,level:t.level,outcome:"win",profit:seqProfit,cat:"win"});
               totalDelta+=spinDelta*(t.config.unit||1);
-              trackResults.push({name:"🃏 Custom Prog",color:t.color,profit:seqProfit,unit:t.config.unit||1,outcome:"Win",cat:"win"});
+              trackResults.push({name:customName+" (Prog)",color:t.color,profit:seqProfit,unit:t.config.unit||1,outcome:"Win",cat:"win"});
             }
           } else {
             var lossCost=baseTotalBet*mult;
@@ -346,7 +350,7 @@ export default function App() {
             if(betMode!=="flat") {
               if(t.level<tbl.length-1) t.level++; else{ t.state="closed"; t.closedAtSpin=s.spins.length-1; }
             }
-            trackResults.push({name:"🃏 Custom"+(betMode!=="flat"?" Prog":""),color:t.color,profit:-lossCost,unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
+            trackResults.push({name:customName+(betMode!=="flat"?" (Prog)":" (Flat)"),color:t.color,profit:-lossCost,unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
           }
         }
       });
@@ -399,7 +403,7 @@ export default function App() {
     });
   }
 
-  function addTrack(type, config) { updSess(s=>{s.tracks.push(newTrack(type,nextColorIdx,config));}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
+  function addTrack(type, config) { updSess(s=>{s.tracks.push(newTrack(type,nextColorIdx,config,pickTrackColor(type,config,s.tracks)));}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
   function undoLastSpin() {
     if(!prevSessState) return;
     if(!window.confirm("Undo last tracked spin? This reverses the bankroll and progression but session time continues.")) return;
@@ -437,7 +441,7 @@ export default function App() {
       t.state = "parked";
       const mergedCfg = {...t.config, ...newCfg, activeBets: []};
       const colorIdx = s.tracks.length % TRACK_COLORS.length;
-      const nt = newTrack(t.type, colorIdx, mergedCfg);
+      const nt = newTrack(t.type, colorIdx, mergedCfg, pickTrackColor(t.type, mergedCfg, s.tracks));
       nt.state = "active";
       s.tracks.push(nt);
     });
@@ -822,8 +826,8 @@ export default function App() {
           <button onClick={()=>{
             const posMap={}; manualBets.forEach(function(b){ const key=b.type==="straight"?"s:"+b.target:b.type+(b.target!==undefined?":"+b.target:""); if(!posMap[key])posMap[key]={type:b.type,target:b.target,baseAmount:0}; posMap[key].baseAmount+=b.amount; });
             const positions=Object.values(posMap); const hasInside=positions.some(function(p){return isInsideBet(p.type);});
-            if(!hasInside){ var dts=[],cts=[],evts=[]; positions.forEach(function(p){ if(p.type==="dozen")dts.push(p.target);else if(p.type==="column")cts.push(p.target);else evts.push(p.type); }); var cfg=defaultFibCfg(); cfg.betMode="flat";cfg.dozenTargets=dts;cfg.colTargets=cts;cfg.evenTargets=evts; updSess(s=>{s.tracks.push(newTrack("fibonacci",s.tracks.length,cfg));}); }
-            else{ var cfg={type:"custom",unit:1,roi:15,betMode:"flat",stopLoss:200,positions:positions}; updSess(s=>{ s.tracks.push({id:generateId(),type:"custom",color:TRACK_COLORS[s.tracks.length%TRACK_COLORS.length],state:"active",config:cfg,level:0,pnl:0,bets:[],createdAtSpin:s.spins.length,closedAtSpin:null,wins:0,sequences:0}); }); }
+            if(!hasInside){ var dts=[],cts=[],evts=[]; positions.forEach(function(p){ if(p.type==="dozen")dts.push(p.target);else if(p.type==="column")cts.push(p.target);else evts.push(p.type); }); var cfg=defaultFibCfg(); cfg.betMode="flat";cfg.dozenTargets=dts;cfg.colTargets=cts;cfg.evenTargets=evts; updSess(s=>{s.tracks.push(newTrack("fibonacci",s.tracks.length,cfg,pickTrackColor("fibonacci",cfg,s.tracks)));}); }
+            else{ var cfg={type:"custom",unit:1,roi:15,betMode:"flat",stopLoss:200,positions:positions}; updSess(s=>{ s.tracks.push({id:generateId(),type:"custom",color:pickTrackColor("custom",cfg,s.tracks),state:"active",config:cfg,level:0,pnl:0,bets:[],createdAtSpin:s.spins.length,closedAtSpin:null,wins:0,sequences:0}); }); }
             clearBets(); if(settings.vibration!==false&&navigator.vibrate)navigator.vibrate([20,10,20]);
           }} style={{width:"100%",padding:"8px 0",borderRadius:8,border:"2px dashed #7c3aed",background:"#1e1040",color:"#c4b5fd",fontSize:11,fontWeight:700,cursor:"pointer"}}>🃏 Create Strategy from Bets</button>
         )}
@@ -872,10 +876,10 @@ export default function App() {
             </div>
             <div style={{borderTop:"1px solid #2d4057",marginTop:2,paddingTop:6,display:"flex",flexDirection:"column",gap:4}}>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"d"+i} label={DOZEN_LABELS[i]} range={["1-12","13-24","25-36"][i]} drought={dozD[i]} colorBd={DOZEN_BORDERS[i]} colorTx={DOZEN_TEXTS[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"d"+i} label={DOZEN_LABELS[i]} range={DOZEN_RANGES[i]} drought={dozD[i]} colorBd={DOZEN_BORDERS[i]} colorTx={DOZEN_TEXTS[i]}/>)}
               </div>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"c"+i} label={COLUMN_LABELS[i]} range={["1,4..34","2,5..35","3,6..36"][i]} drought={colD[i]} colorBd={COLUMN_BORDERS[i]} colorTx={COLUMN_TEXTS[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"c"+i} label={COLUMN_LABELS[i]} range={COLUMN_RANGES[i]} drought={colD[i]} colorBd={COLUMN_BORDERS[i]} colorTx={COLUMN_TEXTS[i]}/>)}
               </div>
             </div>
           </div>
@@ -898,6 +902,7 @@ export default function App() {
                     <span style={{fontSize:9,color:t.state==="active"?"#4ade80":"#fbbf24",fontWeight:700}}>[{t.state.toUpperCase()}]</span>
                     <span style={{fontSize:12,fontWeight:800,color:dolPnl>=0?"#4ade80":"#f87171"}}>{dolPnl>=0?"+":"-"}{cur.symbol}{formatNumber(dolPnl)}</span>
                   </div>
+                  <BetTargets type={t.type} config={t.config} style={{marginBottom:6}}/>
                   <div style={{display:"flex",gap:8,marginBottom:6}}>
                     <span style={{fontSize:10,color:"#94a3b8"}}>Lvl <strong style={{color:t.level>=10?"#f87171":t.level>=6?"#fbbf24":"#e2e8f0"}}>{t.level}</strong>/{tbl.length}</span>
                     {row && <span style={{fontSize:10,color:"#60a5fa"}}>Bet: {formatChips(row.totalBet,t.config.unit,currency)}/spin</span>}
@@ -1036,10 +1041,10 @@ export default function App() {
             </div>
             <div style={{borderTop:"1px solid #2d4057",marginTop:2,paddingTop:6,display:"flex",flexDirection:"column",gap:4}}>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"d"+i} label={DOZEN_LABELS[i]} range={["1-12","13-24","25-36"][i]} drought={dozD[i]} colorBd={DOZEN_BORDERS[i]} colorTx={DOZEN_TEXTS[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"d"+i} label={DOZEN_LABELS[i]} range={DOZEN_RANGES[i]} drought={dozD[i]} colorBd={DOZEN_BORDERS[i]} colorTx={DOZEN_TEXTS[i]}/>)}
               </div>
               <div style={{display:"flex",gap:4}}>
-                {[0,1,2].map(i=><DCard key={"c"+i} label={COLUMN_LABELS[i]} range={["1,4..34","2,5..35","3,6..36"][i]} drought={colD[i]} colorBd={COLUMN_BORDERS[i]} colorTx={COLUMN_TEXTS[i]}/>)}
+                {[0,1,2].map(i=><DCard key={"c"+i} label={COLUMN_LABELS[i]} range={COLUMN_RANGES[i]} drought={colD[i]} colorBd={COLUMN_BORDERS[i]} colorTx={COLUMN_TEXTS[i]}/>)}
               </div>
             </div>
           </div>
@@ -1071,6 +1076,7 @@ export default function App() {
                     <span style={{fontSize:9,color:t.state==="active"?"#4ade80":t.state==="parked"?"#fbbf24":"#94a3b8",fontWeight:700}}>[{t.state.toUpperCase()}]</span>
                     <span style={{fontSize:12,fontWeight:800,color:dolPnl>=0?"#4ade80":"#f87171"}}>{dolPnl>=0?"+":"-"}{cur.symbol}{formatNumber(dolPnl)}</span>
                   </div>
+                  <BetTargets type={t.type} config={t.config} style={{marginBottom:6}}/>
                   <div style={{display:"flex",gap:8,marginBottom:6}}>
                     <span style={{fontSize:10,color:"#94a3b8"}}>Lvl <strong style={{color:t.level>=10?"#f87171":t.level>=6?"#fbbf24":"#e2e8f0"}}>{t.level}</strong>/{tbl.length}</span>
                   </div>
@@ -1219,7 +1225,7 @@ export default function App() {
                   <button key={t.id} onClick={()=>{if(window.confirm(`Abandon progression at level ${t.level}?`))updSess(s=>{const tr=s.tracks.find(x=>x.id===t.id);if(tr){tr.pnl-=row?row.totalInvest:0;tr.bets.push({type:"abandon",level:tr.level});tr.level=0;}});}}
                     style={{flex:1,padding:"8px 10px",borderRadius:9,border:"1px solid "+(t.color+"66"),background:"#0f1923",color:t.color,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
                     <div style={{width:8,height:8,borderRadius:"50%",background:t.color,flexShrink:0}}/>
-                    {TRACK_ICONS[t.type]} Lvl {t.level}
+                    {TRACK_ICONS[t.type]} {betTargetText(t.type,t.config,false,2)} · Lvl {t.level}
                   </button>
                 );
               })}
@@ -1249,14 +1255,19 @@ export default function App() {
           <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4}}>
             {nonClosedTracks.map(t => (
               <button key={t.id} onClick={()=>setSelectedTrackId(t.id)} style={{padding:"7px 12px",borderRadius:9,border:"2px solid "+(selectedTrackId===t.id?t.color:"#2d4057"),background:selectedTrackId===t.id?"#0f1923":"transparent",color:selectedTrackId===t.id?t.color:"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
-                {TRACK_ICONS[t.type]} {t.type==="fibonacci"?"Fib":"Sol"}
+                {TRACK_ICONS[t.type]} {betTargetText(t.type,t.config,false,2)}
               </button>
             ))}
           </div>
         )}
         <Card>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:selTrack.color,flexShrink:0}}/>
+            <span style={{fontSize:11,fontWeight:700,color:selTrack.color}}>{TRACK_ICONS[selTrack.type]} {selTrack.type==="fibonacci"?"Progression Bet":selTrack.type==="custom"?"Custom Bet":"The Solution"}</span>
+          </div>
+          <BetTargets type={selTrack.type} config={selTrack.config} style={{marginBottom:4}}/>
           <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
-            <span style={{color:selTrack.color}}>•</span> {selTrack.type==="fibonacci"?((selTrack.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")+((selTrack.config.colTargets||[]).length>0?" + "+(selTrack.config.colTargets||[]).map(c=>COLUMN_LABELS[c]).join("+"):"")+" · "+selTrack.config.roi+"% ROI"):"Single # · "+selTrack.config.roi+"% ROI"} · {tbl.length} levels · {cur.symbol}{selTrack.config.stopLoss} stop
+            {selTrack.config.roi}% ROI · {tbl.length} levels · {cur.symbol}{selTrack.config.stopLoss} stop
           </div>
           <div style={{background:"#0f1923",borderRadius:8,padding:"8px 10px",marginBottom:8,border:"1px solid #2d4057",display:"flex",flexDirection:"column",gap:3}}>
             {legendRows.map(([abbr,desc]) => (
@@ -1341,15 +1352,19 @@ export default function App() {
     const trackGroups = useMemo(() => {
       const groups = {};
       sess.tracks.forEach(t => {
-        const key = `${t.type}|${t.config.roi}|${t.config.stopLoss}|${t.config.unit}`;
-        if(!groups[key]) groups[key] = {key, type:t.type, roi:t.config.roi, stopLoss:t.config.stopLoss, unit:t.config.unit||1, tracks:[], totalPnl:0, wins:0, losses:0, lastTargets:null};
+        // Targets are part of the identity: two Progression tracks on different
+        // dozens are different strategies and must not collapse into one row.
+        // The Solution is exempt — its numbers churn as bets resolve.
+        const targetKey = t.type==="solution" ? "" : betTargetText(t.type, t.config);
+        const key = `${t.type}|${targetKey}|${t.config.roi}|${t.config.stopLoss}|${t.config.unit}`;
+        if(!groups[key]) groups[key] = {key, type:t.type, roi:t.config.roi, stopLoss:t.config.stopLoss, unit:t.config.unit||1, tracks:[], totalPnl:0, wins:0, losses:0, lastConfig:null, color:t.color};
         const g = groups[key];
         g.tracks.push(t);
         g.totalPnl += t.pnl*(t.config.unit||1);
         g.wins += t.bets.filter(b=>b.outcome==="win").length;
         g.losses += t.bets.filter(b=>b.outcome==="loss").length;
-        // Track last targets used
-        if(t.type==="fibonacci") g.lastTargets = {doz:t.config.dozenTargets||[], col:t.config.colTargets||[]};
+        g.lastConfig = t.config;
+        g.color = t.color;
       });
       return Object.values(groups);
     }, [sess.tracks]);
@@ -1408,15 +1423,13 @@ export default function App() {
               const parkedInGroup=g.tracks.filter(t=>t.state==="parked");
               const activeInGroup=g.tracks.filter(t=>t.state==="active");
               const typeLabel=g.type==="fibonacci"?"🎲 Progression Bet":g.type==="custom"?"🃏 Custom Bet":"🎯 Solution";
-              const targetLabel=g.type==="fibonacci"&&g.lastTargets
-                ?((g.lastTargets.doz||[]).map(d=>DOZEN_LABELS[d]).join("+")+(g.lastTargets.col&&g.lastTargets.col.length>0?" + "+(g.lastTargets.col.map(c=>COLUMN_LABELS[c]).join("+")):""))
-                :"";
               return(
-                <div key={g.key} style={{background:"#0f1923",borderRadius:10,padding:"12px",border:"1px solid #2d4057",marginBottom:8}}>
+                <div key={g.key} style={{background:"#0f1923",borderRadius:10,padding:"12px",border:"1px solid "+(g.color?g.color+"66":"#2d4057"),marginBottom:8}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                     <div>
                       <div style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{typeLabel} · {g.roi}% ROI · {cur.symbol}{g.stopLoss} stop</div>
-                      {targetLabel&&<div style={{fontSize:10,color:"#64748b",marginTop:1}}>{targetLabel} · {cur.symbol}{g.unit.toFixed(2)}/chip</div>}
+                      <BetTargets type={g.type} config={g.lastConfig} compact style={{marginTop:3}}/>
+                      <div style={{fontSize:10,color:"#64748b",marginTop:2}}>{cur.symbol}{g.unit.toFixed(2)}/chip</div>
                       <div style={{fontSize:10,color:"#64748b",marginTop:2}}>
                         {activeInGroup.length>0&&<span style={{color:"#4ade80"}}>{activeInGroup.length} active </span>}
                         {parkedInGroup.length>0&&<span style={{color:"#fbbf24"}}>{parkedInGroup.length} parked </span>}

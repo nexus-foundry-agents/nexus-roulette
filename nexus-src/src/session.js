@@ -10,9 +10,11 @@ function newSession(roulette, bankroll) {
   };
 }
 
-function newTrack(type, colorIdx, config) {
+// `color` overrides the generic rotation — pass pickTrackColor(...) so the
+// track is coloured after the dozen/column it actually bets on.
+function newTrack(type, colorIdx, config, color) {
   return {
-    id:generateId(), type, color:TRACK_COLORS[colorIdx%TRACK_COLORS.length],
+    id:generateId(), type, color:color||TRACK_COLORS[colorIdx%TRACK_COLORS.length],
     state:"active", config:{...config}, level:0, pnl:0, bets:[],
     createdAtSpin:0, closedAtSpin:null, wins:0, sequences:0,
   };

@@ -12,6 +12,10 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
   return(
     <div style={{marginTop:4,padding:12,background:"#1e2d3d",borderRadius:10,border:"1px solid #60a5fa",display:"flex",flexDirection:"column",gap:10}}>
       <div style={{fontSize:11,fontWeight:700,color:"#60a5fa"}}>✏️ Edit Config</div>
+      <div style={{background:"#0f1923",borderRadius:9,padding:"8px 10px",border:"1px solid #2d4057"}}>
+        <FieldLabel>Now Betting</FieldLabel>
+        <BetTargets type={track.type} config={cfg} compact/>
+      </div>
       <div style={{display:"flex",gap:8}}>
         {UNITS.map(u=>{
           const sel=cfg.unit===u;
@@ -86,16 +90,11 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
         <div>
           <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Resume Closed Track</div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
-            {closedTracks.slice(-5).reverse().map(t=>{
-              const label=t.type==="fibonacci"
-                ?((t.config.dozenTargets||[]).map(d=>DOZEN_LABELS[d]).join("+")+(t.config.colTargets&&t.config.colTargets.length>0?" + "+(t.config.colTargets.map(c=>COLUMN_LABELS[c]).join("+")):"")+" · "+t.config.roi+"% ROI")
-                :"Solution · "+t.config.roi+"% ROI";
-              return(
-                <button key={t.id} onClick={()=>resumeFromClosed(t)} style={{padding:"8px 12px",borderRadius:9,border:"1px solid "+t.color,background:"#0f1923",color:t.color,fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"left"}}>
-                  {TRACK_ICONS[t.type]} {label} · {cur&&cur.symbol}{(t.config.unit||1).toFixed(2)}/chip
-                </button>
-              );
-            })}
+            {closedTracks.slice(-5).reverse().map(t=>(
+              <button key={t.id} onClick={()=>resumeFromClosed(t)} style={{padding:"8px 12px",borderRadius:9,border:"1px solid "+t.color,background:"#0f1923",color:t.color,fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"left"}}>
+                {TRACK_ICONS[t.type]} {betTargetText(t.type,t.config,false,3)} · {t.config.roi}% ROI · {cur&&cur.symbol}{(t.config.unit||1).toFixed(2)}/chip
+              </button>
+            ))}
           </div>
           <div style={{borderTop:"1px solid #2d4057",marginTop:10,paddingTop:10}}>
             <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Or create new</div>
@@ -189,6 +188,12 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
           </div>
         </div>
       )}
+      {/* Read-out of exactly what this track will place, in the same colours the
+          pickers above and the board below use — no guessing after it's added. */}
+      <div style={{background:"#0f1923",borderRadius:10,padding:"9px 11px",border:"1px solid #2d4057"}}>
+        <FieldLabel>This Track Will Bet</FieldLabel>
+        <BetTargets type={type} config={cfg}/>
+      </div>
       {(()=>{
         // No targets picked = nothing to bet on; the inline hint above explains
         // why, so the button simply stays disabled (no blocking dialogs).
