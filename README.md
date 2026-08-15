@@ -48,3 +48,19 @@ Serve the repo root with any static server to run it locally.
 Every release must bump all three in lockstep, or the update poller loops:
 `APP_VERSION` in `nexus-src/src/constants.js` (plus a `CHANGELOG` entry),
 `version.json`, and `CACHE` in `sw.js`.
+
+## Deploy
+
+```
+./deploy.sh --check      # every preflight, ships nothing — run this first
+./deploy.sh --prod       # staff-gated nexus-foundry.ai/roulette/
+./deploy.sh --mirror     # public GitHub Pages friend mirror
+./deploy.sh --all        # both, production first
+```
+
+Run from the repo root on `main` with a clean tree. The script enforces the version lockstep
+above, refuses to ship an `index.html` that does not rebuild from `nexus-src/src`, refuses to
+ship changed bytes under an unchanged version, and verifies md5 per artifact on the server
+afterwards. `--help` lists the environment overrides.
+
+Surfaces, the auth gate and the branch flow: `docs/DEPLOYMENT-MAP.md`.
