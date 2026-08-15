@@ -20,6 +20,17 @@ bundle, a broken version lockstep, or new bytes under an old version, and it ver
 artifact on the server afterwards. Full behaviour: `docs/DEPLOYMENT-MAP.md`, which is the living
 map — **update it whenever a surface, path or mechanism changes.**
 
+`--prod` needs key-based ssh to `nexus-foundry-ts`. `--mirror` needs a remote that git does not
+clone, so add it once per clone:
+
+```sh
+git remote add public-pages https://github.com/nexus-foundry-agents/nexus-roulette.git
+```
+
+If `--prod` aborts with "index.html changed but version.json/APP_VERSION still …", that is the
+lockstep guard doing its job: bump the three below and re-run. Do not reach for `--force` unless
+you know the content is genuinely unchanged.
+
 Deployed artifact set, exactly these and nothing else:
 `index.html`, `sw.js`, `manifest.json`, `version.json`, `icon.svg`.
 
