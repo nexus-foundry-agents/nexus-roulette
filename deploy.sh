@@ -213,17 +213,30 @@ else
     ${DIM}(--prefix . or npm walks up and installs into a parent; one command or the second --no-save prunes the first.)${RESET}"
   fi
 
-  BEFORE_MD5="$(md5_of index.html)"
   node nexus-src/build.js >/dev/null || die "Build failed."
-  AFTER_MD5="$(md5_of index.html)"
 
-  if [ "$BEFORE_MD5" != "$AFTER_MD5" ]; then
+  # Compare through git, not raw md5: git applies .gitattributes normalisation, so
+  # this stays correct on a checkout whose eol config differs from the committer's.
+  if ! git diff --quiet -- index.html; then
     git checkout -- index.html 2>/dev/null || true
     die "Committed index.html does not match a fresh build of nexus-src/src.
     ${DIM}The commit is stale. Run 'node nexus-src/build.js', commit the rebuilt index.html, then deploy.${RESET}"
   fi
   ok "index.html rebuilds byte-identical from nexus-src/src"
 fi
+
+# What gets tarred is the working tree, so it must equal the commit byte for byte.
+# On Git for Windows without .gitattributes this is exactly where a CRLF checkout
+# would otherwise ship 603,306 bytes of index.html against 589,736 committed.
+for f in "${ARTIFACTS[@]}"; do
+  eol="$(git ls-files --eol -- "$f" | awk '{print $2}')"
+  if [ "$eol" != "w/lf" ] && [ "$eol" != "w/none" ]; then
+    die "$f is checked out as ${eol#w/} in the working tree, but the commit stores LF.
+    ${DIM}The tar would ship bytes nobody committed. Ensure .gitattributes is present, then:
+    git rm --cached -r -q . && git reset --hard${RESET}"
+  fi
+done
+ok "Artifacts checked out LF — what ships is what was committed"
 
 if [ $CHECK_ONLY -eq 1 ]; then
   step "Check only — nothing shipped"

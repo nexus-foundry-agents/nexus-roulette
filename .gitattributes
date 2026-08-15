@@ -1,3 +1,17 @@
-# Shell scripts must stay LF. Checked out with CRLF they fail at the shebang
-# with a literal $'\r': command not found, on Linux and in Git Bash alike.
-*.sh text eol=lf
+# This repo deploys its working tree verbatim — deploy.sh tars index.html, sw.js,
+# manifest.json, version.json and icon.svg straight from disk. So a checkout must
+# produce the exact bytes that ship, on every platform.
+#
+# Without this, Git for Windows (core.autocrlf=true by default) checks index.html
+# out as CRLF: 603,306 bytes in the working tree against 589,736 in the commit.
+# That ships a bundle nobody committed, and no md5 ever matches a Linux-built copy.
+# Shell scripts fare worse — CRLF breaks them at the shebang with a literal
+# $'\r': command not found.
+* text=auto eol=lf
+
+# Genuinely binary, never touch.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
