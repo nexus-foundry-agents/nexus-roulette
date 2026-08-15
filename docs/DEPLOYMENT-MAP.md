@@ -56,7 +56,15 @@ A mismatch between 1 and 2 causes a spurious update banner/reload loop.
 nginx (`/etc/nginx/nvc-sites/nexus-foundry.conf` — durable include, NEVER the global nginx.conf):
 `location /roulette/` carries `auth_request /_roulette_auth`, which sub-requests `GET /api/connect/whoami` on the NVC API (:3002) with the browser's cookies. Valid Connect staff session → 200, serve; otherwise → 302 `/connect.html`. The GitHub Pages mirror is intentionally ungated.
 
-Dependency (indirect consumer): the gate depends on the NVC connect router's `/whoami` staying `requireConnectAuth`-guarded and cheap. Silent-failure test: `curl -s -o /dev/null -w "%{http_code}" https://nexus-foundry.ai/roulette/` with no cookie must return 302 (not 200, not 500).
+Dependency (indirect consumer): the gate depends on the NVC connect router's `/whoami` staying `requireConnectAuth`-guarded and cheap. Silent-failure test: `curl -s -o /dev/null -w "%{http_code}" https://nexus-foundry.ai/roulette/` with no cookie must **not** return 200 (and not 5xx). `deploy.sh --prod` runs this after every upload.
+
+⚠️ **Observed 2026-08-14: the gate returns `401`, not the `302` documented above.** Access is denied
+either way — anonymous requests get nothing, including for the artifacts — so this is not an
+exposure. But it is a UX regression: a staff member opening the URL without a live session sees a
+bare 401 instead of being sent to the login page. `auth_request` returns 401 on its own; the 302
+needs an `error_page 401 = @connect` (or equivalent) on `location /roulette/`, which is currently
+not in effect. Whoever restores it should re-check this line. Until then `deploy.sh` accepts 401
+and warns, because failing the deploy on it would block releases over a redirect.
 
 ## Future (operator roadmap)
 

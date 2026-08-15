@@ -253,19 +253,46 @@ if [ $DO_PROD -eq 1 ]; then
   ok "ssh to $SSH_HOST"
 
   # What is live right now, so we can refuse to ship new bytes under an old version.
-  REMOTE_STATE="$(ssh "$SSH_HOST" "cd '$REMOTE_DIR' 2>/dev/null && { node -e 'process.stdout.write(require(\"./version.json\").version||\"\")' 2>/dev/null || sed -n 's/.*\"version\":\"\([^\"]*\)\".*/\1/p' version.json; echo; sed -n \"s/^const CACHE = '\(.*\)';\$/\1/p\" sw.js | head -1; md5sum index.html 2>/dev/null | cut -d' ' -f1; } || true" 2>/dev/null || true)"
-  REMOTE_VERSION="$(printf '%s' "$REMOTE_STATE" | sed -n '1p')"
-  REMOTE_CACHE="$(printf '%s' "$REMOTE_STATE" | sed -n '2p')"
-  REMOTE_INDEX_MD5="$(printf '%s' "$REMOTE_STATE" | sed -n '3p')"
+  # Sent over stdin as a literal script (quoted heredoc) rather than squeezed into a
+  # nested-quoted ssh argument, and every read is tr -d '\r' first: deploys made from
+  # a Windows clone before .gitattributes landed left CRLF files on the server, which
+  # silently defeated a $-anchored match on the CACHE line.
+  REMOTE_STATE="$(ssh "$SSH_HOST" "ROULETTE_DIR='$REMOTE_DIR' bash -s" 2>/dev/null <<'REMOTE_PROBE' || true
+cd "$ROULETTE_DIR" 2>/dev/null || exit 0
+tr -d '\r' < version.json 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/version=\1/p' | head -1
+tr -d '\r' < sw.js 2>/dev/null | sed -n "s/^const CACHE = '\(.*\)';$/cache=\1/p" | head -1
+md5sum index.html 2>/dev/null | sed 's/^\([0-9a-f]*\) .*/md5=\1/'
+wc -c < index.html 2>/dev/null | sed 's/^[[:space:]]*/bytes=/'
+REMOTE_PROBE
+)"
+  REMOTE_VERSION="$(printf '%s\n'  "$REMOTE_STATE" | sed -n 's/^version=//p' | head -1)"
+  REMOTE_CACHE="$(printf '%s\n'    "$REMOTE_STATE" | sed -n 's/^cache=//p'   | head -1)"
+  REMOTE_INDEX_MD5="$(printf '%s\n' "$REMOTE_STATE" | sed -n 's/^md5=//p'    | head -1)"
+  REMOTE_BYTES="$(printf '%s\n'    "$REMOTE_STATE" | sed -n 's/^bytes=//p'   | head -1)"
   LOCAL_INDEX_MD5="$(md5_of index.html)"
 
   if [ -z "$REMOTE_VERSION" ]; then
     warn "No readable deploy at $REMOTE_DIR yet — treating this as a first deploy."
   else
-    say "    live now: version ${BOLD}${REMOTE_VERSION}${RESET}, cache ${BOLD}${REMOTE_CACHE:-<unknown>}${RESET}"
+    say "    live now: version ${BOLD}${REMOTE_VERSION}${RESET}, cache ${BOLD}${REMOTE_CACHE:-<unknown>}${RESET}, ${REMOTE_BYTES:-?} bytes"
     if [ "$LOCAL_INDEX_MD5" = "$REMOTE_INDEX_MD5" ]; then
       warn "index.html is byte-identical to what is already live — this deploy is a no-op."
     else
+      # A pre-.gitattributes deploy from a Windows clone left CRLF on the server, so the
+      # first LF deploy differs in bytes while the app is unchanged. Say so, or the
+      # version-bump abort below reads as a mystery.
+      LOCAL_BYTES="$(wc -c < index.html | tr -d '[:space:]')"
+      LOCAL_LINES="$(wc -l < index.html | tr -d '[:space:]')"
+      if [ -n "$REMOTE_BYTES" ] && [ "$REMOTE_BYTES" -gt "$LOCAL_BYTES" ] 2>/dev/null; then
+        # CRLF adds exactly one byte per line, so a delta equal to the line count is
+        # the signature of a CRLF checkout rather than a real content change.
+        if [ "$((REMOTE_BYTES - LOCAL_BYTES))" -eq "$LOCAL_LINES" ]; then
+          say "    ${DIM}live copy is exactly ${LOCAL_LINES} bytes larger — one per line, the signature of a"
+          say "    CRLF deploy made before .gitattributes pinned LF. Content is unchanged; the next"
+          say "    release ships the committed LF bytes and the md5s line up from then on.${RESET}"
+        fi
+      fi
+
       # Content changed. Both the version and the cache name must have moved with it.
       STALE=""
       [ "$REMOTE_VERSION" = "$APP_VERSION" ] && STALE="version.json/APP_VERSION still $APP_VERSION"
@@ -324,12 +351,22 @@ if [ $DO_PROD -eq 1 ]; then
 
   # The auth gate is a separate, silently-failing dependency: it lives in nginx and
   # sub-requests the NVC connect router, so it can break without this repo changing.
+  # The invariant that matters is "anonymous never gets 200". 302 is the documented
+  # behaviour; 401 is what nginx auth_request returns on its own, and means the gate
+  # is closed but the error_page mapping to /connect.html is not in effect.
   CB="$(date +%s)"
   GATE_CODE="$(curl -s -o /dev/null -w '%{http_code}' "${PROD_URL}?cb=${CB}" || true)"
   case "$GATE_CODE" in
     302) ok "Auth gate intact — anonymous request 302s to /connect.html" ;;
-    200) die "Auth gate is OPEN: anonymous request returned 200. ${DIM}Check location /roulette/ auth_request in /etc/nginx/nvc-sites/nexus-foundry.conf (never the global nginx.conf).${RESET}" ;;
-    *)   die "Auth gate returned $GATE_CODE (expected 302). ${DIM}A 5xx usually means /api/connect/whoami on :3002 is down or slow.${RESET}" ;;
+    401) ok "Auth gate closed — anonymous request 401s"
+         warn "Gate returns 401, not the documented 302 to /connect.html. Access is denied either"
+         warn "way, but staff hitting the URL without a session get a bare 401 instead of the login"
+         warn "page. Restoring it needs an 'error_page 401 = @connect' on location /roulette/ in"
+         warn "/etc/nginx/nvc-sites/nexus-foundry.conf (the durable include, never the global nginx.conf)." ;;
+    200) die "Auth gate is OPEN: anonymous request returned 200.
+    ${DIM}Check location /roulette/ auth_request in /etc/nginx/nvc-sites/nexus-foundry.conf (never the global nginx.conf).${RESET}" ;;
+    *)   die "Auth gate returned $GATE_CODE (expected 302 or 401).
+    ${DIM}A 5xx usually means /api/connect/whoami on :3002 is down or slow.${RESET}" ;;
   esac
 
   # Optional end-to-end pass through nginx as a real staff session.
