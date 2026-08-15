@@ -6,8 +6,8 @@ Living map (per SDD v1.1 §11). Update this whenever a surface, path, or mechani
 
 | Surface | URL | Access | Source of truth | Deploy mechanism |
 |---|---|---|---|---|
-| **Production** | nexus-foundry.ai/roulette/ | 🔒 Staff only — nginx `auth_request` against the Connect session cookie (`nvc_connect_session`); unauthenticated → 302 to /connect.html | `main` branch | tar-over-ssh of the 5 root artifacts to `nexus-foundry-ts:/var/www/html/roulette/`, chown www-data, verify cache-busted curl + md5 vs local |
-| **Friend mirror** | nexus-foundry-agents.github.io/nexus-roulette/ | Public (deliberately — operator's friend uses this link) | `public-pages` remote, `main` branch | `git push public-pages main:main` (GitHub Pages serves it) |
+| **Production** | nexus-foundry.ai/roulette/ | 🔒 Staff only — nginx `auth_request` against the Connect session cookie (`nvc_connect_session`); unauthenticated → 302 to /connect.html | `main` branch | **`./deploy.sh --prod`** — tar-over-ssh of the 5 root artifacts to `nexus-foundry-ts:/var/www/html/roulette/`, chown www-data, verify md5 per artifact + re-assert the 302 gate |
+| **Friend mirror** | nexus-foundry-agents.github.io/nexus-roulette/ | Public (deliberately — operator's friend uses this link) | `public-pages` remote, `main` branch | **`./deploy.sh --mirror`** — `git push public-pages main:main` (GitHub Pages serves it) |
 | **Local dev** | localhost (any static server over repo root) | local | working tree | `node nexus-src/build.js` then serve repo root |
 
 ## Build
@@ -15,6 +15,29 @@ Living map (per SDD v1.1 §11). Update this whenever a surface, path, or mechani
 `node nexus-src/build.js` — concatenates `nexus-src/src/*` in dependency order (list inside build.js), Babel-compiles, inlines React 18 UMD → single self-contained `index.html` at repo root. Requires `npm install --no-save react@18 react-dom@18 @babel/core @babel/preset-react @babel/preset-env` at repo root (gitignored; no package.json by design).
 
 Deployed artifact set (exactly these, nothing else): `index.html`, `sw.js`, `manifest.json`, `version.json`, `icon.svg`.
+
+## Deploy script (`./deploy.sh`)
+
+`./deploy.sh --prod | --mirror | --all`, plus `--check` to run every preflight and ship nothing.
+It exists so the production path is not a remembered sequence of shell commands; this map stays
+the narrative, the script is the executable copy. Overridable via `ROULETTE_SSH_HOST`,
+`ROULETTE_REMOTE_DIR`, `ROULETTE_WEB_USER`, `ROULETTE_URL`, `ROULETTE_PAGES_REMOTE`.
+
+Refuses to ship unless: run from repo root on `main`, working tree clean, not diverged from
+`origin/main`, `APP_VERSION` == `version.json`, a CHANGELOG entry exists for it, and `index.html`
+rebuilds byte-identical from `nexus-src/src` (the check that catches a stale committed bundle).
+Before uploading it reads the live `version.json` and `sw.js` off the server and **aborts if
+`index.html` changed but the version or `CACHE` name did not** — the failure where new bytes ship
+under an old version and no client ever picks them up. `--force` downgrades that to a warning.
+
+After uploading it compares md5 per artifact against the server, then re-runs the silent-failure
+test below. Note the gate makes an *anonymous* `curl` + md5 of the artifacts impossible — it 302s
+before serving — so verification is server-side `md5sum` over ssh. Set `ROULETTE_CONNECT_COOKIE`
+to an `nvc_connect_session` value to additionally fetch each artifact through nginx as a real
+staff session and compare md5 end to end.
+
+`--mirror` warns before pushing: the mirror is public and carries the whole repo, including this
+file and the ssh host it names.
 
 ## Version lockstep (all three, every release)
 
