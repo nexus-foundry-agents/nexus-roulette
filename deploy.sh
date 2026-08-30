@@ -354,19 +354,37 @@ REMOTE_PROBE
   # The invariant that matters is "anonymous never gets 200". 302 is the documented
   # behaviour; 401 is what nginx auth_request returns on its own, and means the gate
   # is closed but the error_page mapping to /connect.html is not in effect.
+  # The gate splits on request shape, so BOTH shapes must be probed or the check
+  # answers a neighbouring question. A navigation must be redirected to Connect; a
+  # subresource must get a bare 401, because handing an installed PWA's manifest or
+  # worker an HTML login page breaks the install. Probing only one shape is what
+  # made this step warn on every single deploy about a gate that was working — and a
+  # warning that always fires is one nobody reads.
   CB="$(date +%s)"
-  GATE_CODE="$(curl -s -o /dev/null -w '%{http_code}' "${PROD_URL}?cb=${CB}" || true)"
-  case "$GATE_CODE" in
-    302) ok "Auth gate intact — anonymous request 302s to /connect.html" ;;
-    401) ok "Auth gate closed — anonymous request 401s"
-         warn "Gate returns 401, not the documented 302 to /connect.html. Access is denied either"
-         warn "way, but staff hitting the URL without a session get a bare 401 instead of the login"
-         warn "page. Restoring it needs an 'error_page 401 = @connect' on location /roulette/ in"
-         warn "/etc/nginx/nvc-sites/nexus-foundry.conf (the durable include, never the global nginx.conf)." ;;
-    200) die "Auth gate is OPEN: anonymous request returned 200.
-    ${DIM}Check location /roulette/ auth_request in /etc/nginx/nvc-sites/nexus-foundry.conf (never the global nginx.conf).${RESET}" ;;
-    *)   die "Auth gate returned $GATE_CODE (expected 302 or 401).
+  gate_probe() { curl -s -o /dev/null -w '%{http_code}' "$@" || true; }
+
+  NAV_CODE="$(gate_probe -H 'Sec-Fetch-Mode: navigate' -H 'Accept: text/html' "${PROD_URL}?cb=${CB}")"
+  SUB_CODE="$(gate_probe "${PROD_URL}sw.js?cb=${CB}")"
+
+  case "$NAV_CODE" in
+    302) ok "Auth gate — anonymous navigation 302s to /connect.html" ;;
+    200) die "Auth gate is OPEN: anonymous navigation returned 200.
+    ${DIM}Check location ^~ /roulette/ auth_request in /etc/nginx/nvc-sites/nexus-foundry.conf (never the global nginx.conf).${RESET}" ;;
+    401) die "Anonymous navigation got a bare 401 instead of the login redirect.
+    ${DIM}Access is denied, but staff without a session hit a dead end instead of Connect —
+    and a service worker forwarding that navigation cannot recover from it. Needs
+    'error_page 401 403 = @roulette_denied' on location ^~ /roulette/.${RESET}" ;;
+    *)   die "Auth gate returned $NAV_CODE for a navigation (expected 302).
     ${DIM}A 5xx usually means /api/connect/whoami on :3002 is down or slow.${RESET}" ;;
+  esac
+
+  case "$SUB_CODE" in
+    401|403) ok "Auth gate — anonymous subresource gets an honest $SUB_CODE, not HTML" ;;
+    200)     die "Auth gate is OPEN: anonymous subresource returned 200." ;;
+    302)     die "Anonymous subresource is being REDIRECTED (302).
+    ${DIM}An installed PWA would receive the login page as its manifest/worker and break.
+    The navigate/subresource split in @roulette_denied has been lost.${RESET}" ;;
+    *)       die "Auth gate returned $SUB_CODE for a subresource (expected 401)." ;;
   esac
 
   # Optional end-to-end pass through nginx as a real staff session.
