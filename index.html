@@ -21,7 +21,7 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.46.0";
+  var MY_V="0.46.1";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -395,7 +395,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.46.0";
+var APP_VERSION = "0.46.1";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -499,6 +499,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.46.1",
+  date: "Aug 29, 2026",
+  title: "Fixes The Lockout On A Signed-In Phone",
+  changes: ["Fixed the bug where the app answered \"401 Authorization Required\" on your own phone even while you were signed in to Connect, and only a private window would open it", "The offline worker was rebuilding each page request before sending it, which stripped the marker the staff gate uses to tell a page open from a background file fetch — so the gate refused it instead of sending you to the sign-in page", "It then stored that refusal offline, so the lockout survived signing in; the app now refuses to cache any error, and an expired session takes you to the Connect sign-in page instead of a dead end", "Installing the app no longer aborts when a file is fetched without a session, which used to leave the old broken worker in charge"]
+}, {
   v: "0.46.0",
   date: "Aug 14, 2026",
   title: "Every Track Reads Out Its Bets",
