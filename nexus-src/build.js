@@ -128,9 +128,33 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
         sessionStorage.setItem("nexus_updating","1");
-        if('caches' in window) caches.keys().then(function(k){k.forEach(function(c){caches.delete(c);});});
-        if('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(sw){sw.unregister();});});
-        setTimeout(function(){window.location.href=window.location.pathname+"?v="+Date.now();},500);
+        // Do NOT delete caches or unregister here. The worker is versioned: a new
+        // sw.js installs under a new cache name and its activate handler retires the
+        // old one only AFTER the new required shell is cached. Deleting first opened
+        // a window where a client that lost connectivity had no cache at all — and
+        // the old code did it origin-wide, taking every other app on the host with it.
+        //
+        // Reload only once the new worker is ACTIVATED. update() resolves as soon as
+        // the worker reaches "installing", well before its precache finishes, so
+        // reloading on that promise can land a cache-busted URL on the old worker
+        // with nothing cached under that query string. On failure we stay put: the
+        // page keeps working on the version it already has and retries next launch.
+        var go=function(){window.location.href=window.location.pathname+"?v="+Date.now();};
+        var stay=function(){try{sessionStorage.removeItem("nexus_updating");}catch(e){}};
+        if('serviceWorker' in navigator&&navigator.serviceWorker.getRegistration){
+          navigator.serviceWorker.getRegistration().then(function(reg){
+            if(!reg){go();return;}
+            return reg.update().then(function(){
+              var sw=reg.installing||reg.waiting;
+              if(!sw){go();return;}
+              if(sw.state==="activated"){go();return;}
+              sw.addEventListener("statechange",function(){
+                if(sw.state==="activated")go();
+                else if(sw.state==="redundant")stay();
+              });
+            });
+          }).catch(stay);
+        } else { go(); }
       } else {
         sessionStorage.removeItem("nexus_updating");
       }
