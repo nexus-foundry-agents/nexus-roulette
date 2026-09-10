@@ -1,6 +1,8 @@
 // -- Main App Component --
 export default function App() {
   const [appState, setAppState] = useState(loadApp);
+  const casinoSync = useCasinoAccountSync(appState,setAppState);
+  const [initialUiState] = useState(loadRouletteUiState);
   const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
   React.useEffect(()=>{
     function checkOrientation(){setIsLandscape(window.innerWidth > window.innerHeight);}
@@ -8,9 +10,10 @@ export default function App() {
     window.addEventListener("orientationchange",()=>setTimeout(checkOrientation,100));
     return ()=>{window.removeEventListener("resize",checkOrientation);};
   },[]);
-  const [driveSyncStatus, setDriveSyncStatus] = useState(getDriveToken()?"connected":"disconnected");
   const [tab, setTab] = useState(0);
   const [appMode, setAppMode] = useState("game"); // "game" | "live" | "sim"
+  const gameRecording = useCasinoRecording("game",appMode==="game");
+  const liveRecording = useCasinoRecording("live",appMode==="live");
   const [livePausedAt, setLivePausedAt] = useState(Date.now()); // paused since app starts in game mode
   const [livePausedTotal, setLivePausedTotal] = useState(0);
 
@@ -43,24 +46,24 @@ export default function App() {
   const [highlightTrackId, setHighlightTrackId] = useState(null);
   const [editTrackId, setEditTrackId] = useState(null);
   const [gameSpinning, setGameSpinning] = useState(false);
-  const [gameResult, setGameResult] = useState(()=>{try{var s=localStorage.getItem("nexus_ui");if(s){var d=JSON.parse(s);return d.gameResult||null;}}catch(e){}return null;});
+  const [gameResult, setGameResult] = useState(()=>initialUiState.gameResult||null);
   const [lastSpinDelta, setLastSpinDelta] = useState(null);
-  const [selectedChip, setSelectedChip] = useState(()=>{try{var s=localStorage.getItem("nexus_ui");if(s){var d=JSON.parse(s);return d.selectedChip||1;}}catch(e){}return 1;});
-  const [manualBets, setManualBets] = useState(()=>{try{var s=localStorage.getItem("nexus_ui");if(s){var d=JSON.parse(s);return d.manualBets||[];}}catch(e){}return [];});
-  const [lastBets, setLastBets] = useState(()=>{try{var s=localStorage.getItem("nexus_ui");if(s){var d=JSON.parse(s);return d.lastBets||[];}}catch(e){}return [];});
+  const [selectedChip, setSelectedChip] = useState(()=>initialUiState.selectedChip||1);
+  const [manualBets, setManualBets] = useState(()=>initialUiState.manualBets||[]);
+  const [lastBets, setLastBets] = useState(()=>initialUiState.lastBets||[]);
   const [betResults, setBetResults] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
   const [animNumber, setAnimNumber] = useState(null);
   const clearTimerRef = React.useRef(null);
   const [liveSelectingWinner, setLiveSelectingWinner] = useState(true);
   const [liveWinNumber, setLiveWinNumber] = useState(null);
-  const [liveManualBets, setLiveManualBets] = useState(()=>{try{var s=localStorage.getItem("nexus_ui");if(s){var d=JSON.parse(s);return d.liveManualBets||[];}}catch(e){}return [];});
-  const [liveLastBets, setLiveLastBets] = useState(()=>{try{var s=localStorage.getItem("nexus_ui");if(s){var d=JSON.parse(s);return d.liveLastBets||[];}}catch(e){}return [];});
+  const [liveManualBets, setLiveManualBets] = useState(()=>initialUiState.liveManualBets||[]);
+  const [liveLastBets, setLiveLastBets] = useState(()=>initialUiState.liveLastBets||[]);
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
     function saveUIState(){
-      try{localStorage.setItem("nexus_ui",JSON.stringify({manualBets,lastBets,liveManualBets,liveLastBets,selectedChip,gameResult}));}catch(e){}
+      saveRouletteUiState({manualBets,lastBets,liveManualBets,liveLastBets,selectedChip,gameResult});
     }
     function onVisibilityChange(){ if(document.hidden) saveUIState(); }
     document.addEventListener("visibilitychange",onVisibilityChange);
@@ -70,6 +73,19 @@ export default function App() {
       window.removeEventListener("beforeunload",saveUIState);
     };
   },[manualBets,lastBets,liveManualBets,liveLastBets,selectedChip,gameResult]);
+  React.useEffect(()=>{
+    function loadScopedUi(){
+      const value=loadRouletteUiState();
+      setGameResult(value.gameResult||null);
+      setSelectedChip(value.selectedChip||1);
+      setManualBets(value.manualBets||[]);
+      setLastBets(value.lastBets||[]);
+      setLiveManualBets(value.liveManualBets||[]);
+      setLiveLastBets(value.liveLastBets||[]);
+    }
+    window.addEventListener('nexus-account-scope-ready',loadScopedUi);
+    return ()=>window.removeEventListener('nexus-account-scope-ready',loadScopedUi);
+  },[]);
   const [liveBetResults, setLiveBetResults] = useState(null);
   const [liveUndoStack, setLiveUndoStack] = useState([]);
   const liveClearTimerRef = React.useRef(null);
@@ -169,6 +185,8 @@ export default function App() {
   }, [sess.spins]);
 
   // Onboarding -- AFTER all hooks so rules of hooks are satisfied
+  if(window.parent===window&&new URLSearchParams(window.location.search).get("enableNotifications")==="1") return <NotificationEnablePage/>;
+  if(window.parent!==window&&casinoSync.status==="checking") return <div role="status" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#0f1923",color:"#94a3b8",fontSize:13}}>Loading your Roulette account…</div>;
   if(!settings.onboarded) {
     return (
       <OnboardingScreen
@@ -218,7 +236,7 @@ export default function App() {
   const pnlVal = sess.bankrollCurrent + totalCashedOut - totalInvested;
   const pnlColor = pnlVal>0?"#4ade80":pnlVal<0?"#f87171":"#e2e8f0";
 
-  function tapNumber(val, fromTracker) {
+  function tapNumber(val, fromTracker, deferCasinoRecord) {
     if(fromTracker) {
       setPrevSessState(JSON.parse(JSON.stringify(sess)));
       // Auto-start session clock on first tracked spin
@@ -357,6 +375,11 @@ export default function App() {
       s.bankrollCurrent = Math.round((s.bankrollCurrent + totalDelta)*100)/100;
     });
     if(trackResults.length>0) { setResult({val,trackResults,totalDelta}); setLastSpinDelta(totalDelta); }
+    if(!deferCasinoRecord&&(appMode==="live"||appMode==="game")) {
+      const wager=fromTracker?summarizeTrackWagers(sess.tracks,val):mergeWagerSummaries();
+      const recording=recordingForMode(appMode,gameRecording,liveRecording);
+      recording.record({segment:String(val),...wager,watched:wager.staked===0});
+    }
     // Visual flash
     setFlashNum(val);
     setTimeout(()=>setFlashNum(null), 400);
@@ -459,18 +482,8 @@ export default function App() {
   }
 
   function autoExport(allSessions) {
-    // Always save to Google Drive first if connected
-    if(getDriveToken()) {
-      const driveData = { ...appState, savedSessions: allSessions };
-      driveSave(driveData).then(ok=>{
-        setDriveSyncStatus(ok ? "connected" : "error");
-        if(!ok) setTimeout(()=>setDriveSyncStatus("connected"), 3000);
-      }).catch(()=>{
-        setDriveSyncStatus("error");
-        setTimeout(()=>setDriveSyncStatus("connected"), 3000);
-      });
-    }
-    // Then attempt local download (user can cancel, won't affect cloud)
+    // Keep the automatic backup on the user's filesystem. Cancelling the download never changes
+    // the saved session itself.
     try {
       const data = {
         exportedAt: new Date().toISOString(),
@@ -522,6 +535,7 @@ export default function App() {
       s[sk] = newSession(s[sk].roulette, s[sk].bankrollCurrent);
     });
     setTimeout(()=>autoExport(allSessions),300);
+    if(appMode==="live") liveRecording.stop(); else if(appMode==="game") gameRecording.stop();
     setTab(0);
   }
 
@@ -534,6 +548,8 @@ export default function App() {
       nd[val]=0;
       s.droughts=nd;
     });
+    const recording=recordingForMode(appMode,gameRecording,liveRecording);
+    recording.record({segment:String(val),...mergeWagerSummaries(),watched:true});
     setFlashNum(val);
     setTimeout(()=>setFlashNum(null), 300);
     if(settings.vibration!==false && navigator.vibrate) navigator.vibrate(15);
@@ -547,11 +563,13 @@ export default function App() {
   function tearSession() {
     if(!window.confirm("Tear this session?")) return;
     updApp(s=>{s.currentSession=newSession(s.currentSession.roulette,s.currentSession.bankroll);});
+    liveRecording.stop();
     setTab(0);
   }
 
   function newEmptySession() {
     updApp(s=>{s.currentSession=newSession("american",500);});
+    liveRecording.stop();
     setTab(0);
   }
 
@@ -583,7 +601,7 @@ export default function App() {
       reader.onload = ev => {
         try {
           const data = JSON.parse(ev.target.result);
-          // Handle both export format (sessions) and drive backup format (appState/savedSessions)
+          // Handle session exports and older whole-app snapshot files.
           const sessions = data.sessions || data.savedSessions || (data.appState && data.appState.savedSessions) || [];
           if (!sessions.length) { alert("No sessions found in file."); return; }
           let added = 0, skipped = 0, lastAdded = null;
@@ -754,9 +772,10 @@ export default function App() {
         if(ticks>=15){
           clearInterval(iv);
           const val = nums[Math.floor(Math.random()*nums.length)];
+          const casinoWager=mergeWagerSummaries(summarizeTrackWagers(sess.tracks,val),summarizeManualWagers(spinBets,val));
           setAnimNumber(null);
           setGameResult(val); // final result - board highlights winning number
-          if(hasActiveTracks) tapNumber(val, true);
+          if(hasActiveTracks) tapNumber(val, true, true);
           else { updSess(s=>{s.spins.push(val);const nd={...s.droughts};Object.keys(nd).forEach(k=>nd[k]++);nd[val]=0;s.droughts=nd;}); }
           if(spinBets.length>0){
             var totalWin=0, totalBet=0, posResults={};
@@ -776,6 +795,7 @@ export default function App() {
             setUndoStack([]);
             clearTimerRef.current = setTimeout(()=>{ setBetResults(null); setManualBets([]); clearTimerRef.current=null; },3000);
           }
+          gameRecording.record({segment:String(val),...casinoWager,watched:casinoWager.staked===0});
           if(settings.vibration!==false&&navigator.vibrate) navigator.vibrate(30);
           setGameSpinning(false);
         }
@@ -1005,10 +1025,10 @@ export default function App() {
             if(t.type==="custom"){(t.config.positions||[]).forEach(function(p){var pk=p.type==="straight"?"s:"+p.target:p.type+(p.target!==undefined?":"+p.target:"");if(!stratBets[pk])stratBets[pk]=t.color;});}
           });
           function livePlaceBet(type,target){
-            if(liveSelectingWinner){var val=type==="straight"?target:null;if(!val)return;setLiveWinNumber(val);tapNumber(val,nonClosedTracks.some(t=>t.state==="active"));
+            if(liveSelectingWinner){var val=type==="straight"?target:null;if(!val)return;var casinoWager=mergeWagerSummaries(summarizeTrackWagers(sess.tracks,val),summarizeManualWagers(liveManualBets,val));setLiveWinNumber(val);tapNumber(val,nonClosedTracks.some(t=>t.state==="active"),true);
               if(liveManualBets.length>0){var totalWin=0,totalBet=0,posResults={};liveManualBets.forEach(function(b){totalBet+=b.amount;var posKey=b.type==="straight"?"s:"+b.target:b.type+(b.target!==undefined?":"+b.target:"");var covered=betCoveredNumbers(b.type,b.target);if(covered.indexOf(val)>=0){totalWin+=b.amount*betPayoutMult(b.type);posResults[posKey]="won";}else{if(!posResults[posKey])posResults[posKey]="lost";}});
               updSess(s=>{s.bankrollCurrent=Math.round((s.bankrollCurrent+(totalWin-totalBet))*100)/100;});setLiveBetResults(posResults);setLiveLastBets([...liveManualBets]);setLiveUndoStack([]);liveClearTimerRef.current=setTimeout(()=>{setLiveBetResults(null);setLiveManualBets([]);liveClearTimerRef.current=null;},3000);}
-              setLiveSelectingWinner(true);return;}
+              liveRecording.record({segment:String(val),...casinoWager,watched:casinoWager.staked===0});setLiveSelectingWinner(true);return;}
             if(liveBetResults){if(liveClearTimerRef.current){clearTimeout(liveClearTimerRef.current);liveClearTimerRef.current=null;}setLiveBetResults(null);setLiveManualBets([]);}
             setLiveWinNumber(null);setLiveManualBets(prev=>[...prev,{id:Date.now()+Math.random(),type:type,target:target,amount:selectedChip}]);setLiveUndoStack(prev=>[...prev,1]);if(settings.vibration!==false&&navigator.vibrate)navigator.vibrate(10);
           }
@@ -1301,384 +1321,7 @@ export default function App() {
     );
   }
 
-  // -- Spin Log Page --
-  function SpinPage() {
-    const [showAll, setShowAll] = useState(false);
-    const displaySpins = showAll ? [...sess.spins].reverse() : [...sess.spins].reverse().slice(0,60);
-    return (
-      <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
-        <Card>
-          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
-            <span style={{fontSize:12,color:"#64748b",flex:1}}>Total Spins: <strong style={{color:"#e2e8f0"}}>{sess.spins.length}</strong></span>
-            {sess.spins.length>0 && <button onClick={()=>{if(window.confirm("Clear all spins from session history?"))updSess(s=>{s.spins=[];s.droughts=initDroughts(s.roulette);});}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#1e2d3d",color:"#f87171",fontSize:12,cursor:"pointer"}}>Clear History</button>}
-          </div>
-          {sess.spins.length===0
-            ? <div style={{textAlign:"center",padding:"20px 0",color:"#475569",fontSize:12}}>No spins logged yet. Enter numbers on the Tracker tab.</div>
-            : (
-              <>
-                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                  {displaySpins.map((val,i)=>{
-                    const isZ=val==="0"||val==="00", r=!isZ&&RED.has(+val);
-                    const hitTracks=(trackOverlays||[]).filter(o=>{
-                      if(isZ)return false;
-                      if(o.type==="fibonacci")return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(columnOf(val));
-                      if(o.type==="solution")return (o.activeBets||[]).some(b=>b.number===val);
-                      return false;
-                    });
-                    const borderColor=i===0?"#ffffff":hitTracks.length>0?hitTracks[0].color:isZ?"#22c55e":r?"#ef4444":"#1f2937";
-                    return(
-                      <div key={i} style={{width:30,height:30,borderRadius:6,background:isZ?"#166534":r?"#7f1d1d":"#0d1117",border:"2px solid "+borderColor,color:isZ?"#bbf7d0":r?"#fecaca":"#f1f5f9",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        {val}
-                      </div>
-                    );
-                  })}
-                </div>
-                {sess.spins.length>60 && (
-                  <button onClick={()=>setShowAll(v=>!v)} style={{marginTop:8,width:"100%",padding:"7px 0",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:"#60a5fa",fontSize:12,cursor:"pointer"}}>
-                    {showAll?"Show less":"Show all "+sess.spins.length+" spins"}
-                  </button>
-                )}
-              </>
-            )
-          }
-        </Card>
-      </div>
-    );
-  }
-
-  // -- Session Stats Page --
-  function StatsPage() {
-    // Group tracks by type + roi + stopLoss for consolidated view
-    const trackGroups = useMemo(() => {
-      const groups = {};
-      sess.tracks.forEach(t => {
-        // Targets are part of the identity: two Progression tracks on different
-        // dozens are different strategies and must not collapse into one row.
-        // The Solution is exempt — its numbers churn as bets resolve.
-        const targetKey = t.type==="solution" ? "" : betTargetText(t.type, t.config);
-        const key = `${t.type}|${targetKey}|${t.config.roi}|${t.config.stopLoss}|${t.config.unit}`;
-        if(!groups[key]) groups[key] = {key, type:t.type, roi:t.config.roi, stopLoss:t.config.stopLoss, unit:t.config.unit||1, tracks:[], totalPnl:0, wins:0, losses:0, lastConfig:null, color:t.color};
-        const g = groups[key];
-        g.tracks.push(t);
-        g.totalPnl += t.pnl*(t.config.unit||1);
-        g.wins += t.bets.filter(b=>b.outcome==="win").length;
-        g.losses += t.bets.filter(b=>b.outcome==="loss").length;
-        g.lastConfig = t.config;
-        g.color = t.color;
-      });
-      return Object.values(groups);
-    }, [sess.tracks]);
-
-    return (
-      <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
-        <Card>
-          <FieldLabel>Current Session</FieldLabel>
-          <div style={{fontSize:13,color:"#e2e8f0",fontWeight:700,marginBottom:4}}>{sess.name}</div>
-          <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>{new Date(sess.created).toLocaleString()} · {sess.spins.length} spins · {sess.tracks.length} tracks</div>
-          {sess.sessionStartedAt && (
-            <div style={{background:"#0c1520",borderRadius:9,padding:"8px 12px",border:"1px solid #2d4057",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,color:"#64748b"}}>Session Time</span>
-              <SessionClock startedAt={sess.sessionStartedAt} endedAt={sess.sessionEndedAt} pauseOffset={livePauseOffset} style={{fontSize:14,fontWeight:800,color:"#4ade80",fontVariantNumeric:"tabular-nums"}}/>
-              {(()=>{
-                const hrs=((sess.sessionEndedAt||Date.now())-sess.sessionStartedAt)/3600000;
-                const rate=hrs>0.01?pnlVal/hrs:null;
-                return rate!==null?(
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:10,color:"#64748b"}}>$/hr</div>
-                    <div style={{fontSize:14,fontWeight:800,color:rate>=0?"#4ade80":"#f87171"}}>{rate>=0?"+":"-"}{cur.symbol}{Math.abs(rate).toFixed(cur.dec)}</div>
-                  </div>
-                ):null;
-              })()}
-            </div>
-          )}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-            {[
-              {l:"Initial Bankroll",v:formatMoney(sess.bankroll,currency),c:"#60a5fa"},
-              {l:"Current",v:formatMoney(sess.bankrollCurrent,currency),c:"#60a5fa"},
-              {l:"Total Buy Ins",v:"+"+formatMoney(sess.totalBuyIn||0,currency),c:"#a78bfa"},
-              {l:"Total Cash Outs",v:sess.totalCashOut>0?formatMoney(sess.totalCashOut||0,currency):formatMoney(0,currency),c:"#f97316"},
-              {l:"Net Money In",v:formatMoney((sess.totalBuyIn||0)-(sess.totalCashOut||0),currency),c:(sess.totalBuyIn||0)>=(sess.totalCashOut||0)?"#f87171":"#4ade80"},
-              {l:"Net P&L",v:(pnlVal>=0?"+":"-")+cur.symbol+formatNumber(pnlVal),c:pnlColor},
-            ].map(({l,v,c}) => (
-              <div key={l} style={{background:"#0f1923",borderRadius:10,padding:"10px 8px",border:"1px solid #2d4057",textAlign:"center"}}>
-                <div style={{fontSize:8,color:"#64748b",textTransform:"uppercase",marginBottom:3}}>{l}</div>
-                <div style={{fontSize:15,fontWeight:800,color:c}}>{v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={saveSession} style={{flex:1,padding:11,borderRadius:10,border:"none",background:"#16a34a",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>Save</button>
-            <button onClick={newEmptySession} style={{flex:1,padding:11,borderRadius:10,border:"1px solid #2d4057",background:"#1e2d3d",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>New</button>
-            <button onClick={tearSession} style={{flex:1,padding:11,borderRadius:10,border:"1px solid #7f1d1d",background:"#1e2d3d",color:"#f87171",fontSize:13,cursor:"pointer"}}>Tear</button>
-          </div>
-        </Card>
-
-        {trackGroups.length>0 && (
-          <Card>
-            <FieldLabel>Strategy Performance</FieldLabel>
-            {trackGroups.map(g => {
-              const winRate=g.wins+g.losses>0?(g.wins/(g.wins+g.losses)*100).toFixed(0)+"%":"--";
-              const hasInactive=g.tracks.some(t=>t.state==="closed"||t.state==="parked");
-              const closedInGroup=g.tracks.filter(t=>t.state==="closed");
-              const parkedInGroup=g.tracks.filter(t=>t.state==="parked");
-              const activeInGroup=g.tracks.filter(t=>t.state==="active");
-              const typeLabel=g.type==="fibonacci"?"🎲 Progression Bet":g.type==="custom"?"🃏 Custom Bet":"🎯 Solution";
-              return(
-                <div key={g.key} style={{background:"#0f1923",borderRadius:10,padding:"12px",border:"1px solid "+(g.color?g.color+"66":"#2d4057"),marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{typeLabel} · {g.roi}% ROI · {cur.symbol}{g.stopLoss} stop</div>
-                      <BetTargets type={g.type} config={g.lastConfig} compact style={{marginTop:3}}/>
-                      <div style={{fontSize:10,color:"#64748b",marginTop:2}}>{cur.symbol}{g.unit.toFixed(2)}/chip</div>
-                      <div style={{fontSize:10,color:"#64748b",marginTop:2}}>
-                        {activeInGroup.length>0&&<span style={{color:"#4ade80"}}>{activeInGroup.length} active </span>}
-                        {parkedInGroup.length>0&&<span style={{color:"#fbbf24"}}>{parkedInGroup.length} parked </span>}
-                        {closedInGroup.length>0&&<span style={{color:"#64748b"}}>{closedInGroup.length} closed</span>}
-                      </div>
-                    </div>
-                    <div style={{fontSize:16,fontWeight:800,color:g.totalPnl>=0?"#4ade80":"#f87171"}}>{g.totalPnl>=0?"+":"-"}{cur.symbol}{Math.abs(g.totalPnl).toFixed(cur.dec)}</div>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                    {[["Wins",g.wins,"#4ade80"],["Losses",g.losses,"#f87171"],["Win Rate",winRate,"#86efac"]].map(([l,v,c])=>(
-                      <div key={l} style={{textAlign:"center"}}>
-                        <div style={{fontSize:8,color:"#64748b",textTransform:"uppercase"}}>{l}</div>
-                        <div style={{fontSize:14,fontWeight:700,color:c}}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {(closedInGroup.length>0||parkedInGroup.length>0) && (
-                    <div style={{display:"flex",gap:6}}>
-                      {closedInGroup.slice(-1).map(t=>(
-                        <button key={t.id} onClick={()=>reactivateTrack(t.id)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1px solid #16a34a",background:"#0d2a0d",color:"#4ade80",fontSize:11,fontWeight:700,cursor:"pointer"}}>▶ Restart Closed</button>
-                      ))}
-                      {parkedInGroup.map(t=>(
-                        <button key={t.id} onClick={()=>reactivateTrack(t.id)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1px solid #fbbf24",background:"#1c1000",color:"#fbbf24",fontSize:11,fontWeight:700,cursor:"pointer"}}>▶ Resume Parked</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </Card>
-        )}
-
-        <Card>
-          <FieldLabel>{"Saved Sessions ("+saved.length+")"}</FieldLabel>
-          {saved.length===0
-            ? <div style={{textAlign:"center",padding:"16px 0",color:"#475569",fontSize:12}}>No saved sessions yet.</div>
-            : (
-              <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:"40vh",overflowY:"auto"}}>
-                {[...saved].reverse().map(s => {
-                  const pnl=computeMetrics(s).netPnL, isCurrent=s.id===sess.id;
-                  return (
-                    <div key={s.id} style={{background:"#0f1923",borderRadius:10,padding:"10px 12px",border:"1px solid "+(isCurrent?"#86efac":"#2d4057")}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                        <div>
-                          <div style={{fontSize:12,fontWeight:700,color:isCurrent?"#86efac":"#e2e8f0"}}>{s.name}{isCurrent?" (current)":""}</div>
-                          <div style={{fontSize:10,color:"#64748b"}}>
-                            {new Date(s.modified).toLocaleString()} · {s.spins.length} spins
-                            {s.sessionStartedAt&&s.sessionEndedAt&&(
-                              <span> · {formatElapsed(s.sessionEndedAt-s.sessionStartedAt)}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{fontSize:13,fontWeight:800,color:pnl>=0?"#4ade80":"#f87171"}}>{pnl>=0?"+":"-"}{cur.symbol}{Math.abs(pnl).toFixed(cur.dec)}</div>
-                      </div>
-                      {!isCurrent && <button onClick={()=>loadSession(s.id)} style={{width:"100%",padding:"7px 0",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Resume</button>}
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          }
-        </Card>
-
-        {saved.length>0 && (
-          <Card>
-            <button onClick={exportJSON} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",background:"#1e3a5f",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}}>Export All Sessions (.json)</button>
-          </Card>
-        )}
-      </div>
-    );
-  }
-
-  // -- Settings Page --
-  function SettingsPage() {
-    const [localBuyIn, setLocalBuyIn] = useState(settings.defaultBuyIn || 100);
-
-    function saveBuyIn() {
-      updSettings(s => { s.defaultBuyIn = localBuyIn; });
-    }
-
-    return (
-      <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
-        <Card>
-          <FieldLabel>Currency</FieldLabel>
-          <button onClick={()=>setCurrencyOpen(true)} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px",borderRadius:12,border:"1px solid #2d4057",background:"#0f1923",cursor:"pointer",textAlign:"left"}}>
-            <span style={{fontSize:22}}>{getCurrency(currency).flag}</span>
-            <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0"}}>{getCurrency(currency).name}</div>
-              <div style={{fontSize:11,color:"#475569"}}>{currency} · {cur.symbol}</div>
-            </div>
-            <span style={{color:"#64748b",fontSize:18}}>›</span>
-          </button>
-        </Card>
-
-        <Card>
-          <FieldLabel>Default Buy In</FieldLabel>
-          <MoneyInput value={localBuyIn} onChange={setLocalBuyIn} currCode={currency}/>
-          <button onClick={saveBuyIn} style={{width:"100%",marginTop:10,padding:"12px 0",borderRadius:10,border:"none",background:"#16a34a",color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>Save Default</button>
-        </Card>
-
-        <Card>
-          <FieldLabel>Roulette Type</FieldLabel>
-          <div style={{display:"flex",gap:8}}>
-            {[["american","🇺🇸 American (00)"],["european","🇪🇺 European"]].map(([v,label]) => (
-              <button key={v} onClick={()=>updSess(s=>{s.roulette=v;s.droughts=initDroughts(v);})} style={{flex:1,padding:"10px 4px",borderRadius:9,border:"1px solid "+(sess.roulette===v?"#60a5fa":"#2d4057"),cursor:"pointer",fontSize:11,fontWeight:700,background:sess.roulette===v?"#0c1a2e":"#0f1923",color:sess.roulette===v?"#60a5fa":"#64748b"}}>{label}</button>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <FieldLabel>Info</FieldLabel>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <button onClick={()=>setChangelogOpen(true)} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>📋 Changelog</button>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
-              <span style={{fontSize:13,color:"#94a3b8"}}>📳 Vibration Feedback</span>
-              <button onClick={()=>updApp(s=>{s.settings.vibration=!s.settings.vibration;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.vibration!==false?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.vibration!==false?"ON":"OFF"}</button>
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <FieldLabel>Table Limits</FieldLabel>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {[
-              {label:"Min Bet", key:"tableMinBet", color:"#4ade80"},
-              {label:"Max Bet (per position)", key:"tableMaxBet", color:"#fbbf24"},
-              {label:"Max Total (per spin)", key:"tableMaxTotal", color:"#f87171"},
-            ].map(({label,key,color})=>{
-              const val=settings[key]||1;
-              function dec(){
-                if(key==="tableMinBet"){
-                  if(val>10)return updApp(s=>{s.settings[key]=val<=100?val-5:val<=1000?val-25:val-1000;});
-                  if(val>1)return updApp(s=>{s.settings[key]=val-1;});
-                  if(val>0.5)return updApp(s=>{s.settings[key]=0.5;});
-                  if(val>0.25)return updApp(s=>{s.settings[key]=0.25;});
-                } else {
-                  updApp(s=>{s.settings[key]=Math.max(1,val<=10?val-1:val<=100?val-5:val<=1000?val-25:val-1000);});
-                }
-              }
-              function inc(){
-                if(key==="tableMinBet"&&val<1)return updApp(s=>{s.settings[key]=val===0.25?0.5:1;});
-                updApp(s=>{s.settings[key]=val<10?val+1:val<100?val+5:val<1000?val+25:val+1000;});
-              }
-              const displayVal=val<1?`${cur.symbol}${val.toFixed(2)}`:val<10?`${cur.symbol}${val}`:val>=1000?`${cur.symbol}${(val/1000).toFixed(val%1000===0?0:1)}K`:`${cur.symbol}${val}`;
-              return(
-                <div key={key}>
-                  <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>{label}</div>
-                  <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
-                    <button onClick={dec} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>-</button>
-                    <div style={{flex:1,textAlign:"center",fontSize:16,fontWeight:800,color}}>{displayVal}</div>
-                    <button onClick={inc} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
-                  </div>
-                </div>
-              );
-            })}
-            <div>
-              <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Quick Presets</div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                {TABLE_LIMIT_PRESETS.map((p,i)=>(
-                  <button key={i} onClick={()=>updApp(s=>{s.settings.tableMinBet=p.minBet;s.settings.tableMaxBet=p.maxBet;s.settings.tableMaxTotal=p.maxTotal;})} style={{padding:"8px 12px",borderRadius:9,border:"1px solid #2d4057",background:"#0f1923",color:"#94a3b8",fontSize:11,cursor:"pointer",textAlign:"left"}}>{p.label} · max/spin ${p.maxTotal.toLocaleString()}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{fontSize:10,color:"#374151",marginTop:2}}>
-              Unit bets of $0.25 or $0.50 are only available when your table minimum allows it.
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <FieldLabel>Google Drive Backup</FieldLabel>
-          <div style={{padding:"10px 12px",borderRadius:10,border:"1px solid "+(getDriveToken()?"#4ade80":"#2d4057"),background:getDriveToken()?"#0a1f0a":"#0f1923"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:getDriveToken()?"#4ade80":"#94a3b8"}}>
-                  {driveSyncStatus==="restoring"?"☁️ Restoring...":getDriveToken()?"☁️ Connected":"☁️ Not Connected"}
-                </div>
-                <div style={{fontSize:10,color:"#64748b",marginTop:2}}>
-                  {getDriveToken()?"Auto-saves on every session save/end":"Sign in to enable cloud backup"}
-                </div>
-              </div>
-              <button onClick={async()=>{
-                if(getDriveToken()){
-                  driveSignOut();
-                  setDriveSyncStatus("disconnected");
-                } else {
-                  try{
-                    await driveSignIn();
-                    setDriveSyncStatus("connected");
-                  }catch(e){alert("Sign in failed: "+e.message);}
-                }
-              }} style={{padding:"7px 14px",borderRadius:8,border:"none",background:getDriveToken()?"#374151":"#16a34a",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                {getDriveToken()?"Disconnect":"Connect"}
-              </button>
-            </div>
-            {getDriveToken() && (
-              <div style={{display:"flex",gap:6,marginTop:8}}>
-                <button onClick={async()=>{
-                  setDriveSyncStatus("syncing");
-                  try{
-                    const ok = await driveSave(appState);
-                    setDriveSyncStatus(ok?"connected":"error");
-                    if(ok) alert("Backup saved to Google Drive!");
-                    else alert("Drive save failed — unknown error");
-                  }catch(e){
-                    setDriveSyncStatus("error");
-                    alert("Drive save failed:\n"+e.message);
-                  }
-                }} style={{flex:1,padding:"8px 0",borderRadius:8,border:"1px solid #22c55e",background:"transparent",color:"#4ade80",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  ☁️ Backup Now
-                </button>
-                <button onClick={async()=>{
-                  if(!window.confirm("Restore from Google Drive? This will replace all local session data.")) return;
-                  setDriveSyncStatus("restoring");
-                  try{
-                    const data = await driveRestore();
-                    if(data && data.savedSessions && data.savedSessions.length > 0) {
-                      // End active session and park all tracks - don't auto-start after restore
-                      if(data.currentSession && data.currentSession.sessionStartedAt) {
-                        data.currentSession.sessionEndedAt = data.currentSession.modified || Date.now();
-                      }
-                      if(data.currentSession && data.currentSession.tracks) {
-                        data.currentSession.tracks.forEach(function(tr){ if(tr.state==="active") tr.state="parked"; });
-                      }
-                      setAppState(data);
-                      saveApp(data);
-                      setDriveSyncStatus("connected");
-                      alert("Restored "+data.savedSessions.length+" sessions from Google Drive!");
-                    } else {
-                      setDriveSyncStatus("connected");
-                      alert("No backup found on Google Drive.");
-                    }
-                  }catch(e){setDriveSyncStatus("connected");alert("Restore failed: "+e.message);}
-                }} style={{flex:1,padding:"8px 0",borderRadius:8,border:"1px solid #60a5fa",background:"transparent",color:"#60a5fa",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  📥 Restore from Cloud
-                </button>
-              </div>
-            )}
-          </div>
-        </Card>
-        <Card>
-          <FieldLabel>Info</FieldLabel>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <button onClick={()=>{if(window.confirm("Restart onboarding? Your current bankroll will be your new starting point."))updApp(s=>{const curBankroll=s.currentSession.bankrollCurrent;s.settings.onboarded=false;s.settings._restartBankroll=curBankroll;});}} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:13,cursor:"pointer"}}>Restart Onboarding</button>
-            <button onClick={importJSON} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}}>📥 Import Session Data</button>
-            <button onClick={()=>setHardResetOpen(true)} style={{width:"100%",padding:"14px 0",borderRadius:10,border:"2px solid #991b1b",background:"#200505",color:"#f87171",fontSize:14,fontWeight:900,cursor:"pointer",letterSpacing:0.5}}>⚠️ Hard Reset -- Wipe All Data</button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
 
   // -- Bankroll Edit --
   function BankrollEdit({onClose}) {
@@ -1731,6 +1374,9 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {window.parent!==window&&(appMode==="live"||appMode==="game") && <CasinoRecordingBar recording={appMode==="live"?liveRecording:gameRecording} label={appMode==="live"?"Live mode":"Game mode"}/>}
+        <CasinoSyncBar sync={casinoSync}/>
 
         {/* Storage failure banner */}
         {saveError && (
@@ -1802,9 +1448,9 @@ export default function App() {
             </div>
             {tab===0 && <TrackerPage/>}
             {tab===1 && <TablePage/>}
-            {tab===2 && <SpinPage/>}
-            {tab===3 && <StatsPage/>}
-            {tab===4 && <SettingsPage/>}
+            {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays}/>}
+            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} loadSession={loadSession} exportJSON={exportJSON}/>}
+            {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
           </div>
         )}
 

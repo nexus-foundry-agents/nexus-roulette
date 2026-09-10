@@ -1,4 +1,4 @@
-const CACHE = 'nexus-roulette-v132';
+const CACHE = 'nexus-roulette-v133';
 const CACHE_PREFIX = 'nexus-roulette-';
 // './' is the manifest's start_url — the URL an installed app actually launches.
 // Both it and index.html are REQUIRED, so activation can never delete a populated
@@ -37,9 +37,8 @@ const LOGIN_URL = new URL('/connect.html?next=%2Froulette%2F', self.location.ori
 //   3. Cache only a same-origin, in-scope, non-redirected, ok response. Cache.put,
 //      unlike add/addAll, will happily store a 401, and a followed 302 to a login
 //      page arrives as a perfectly ok 200.
-//   4. Do not intercept anything outside this scope at all. The app talks to the
-//      Google Drive API with an Authorization header; caching those replies would
-//      serve one account's backup to the next and make "no files" sticky.
+//   4. Do not intercept anything outside this scope at all. Caching authenticated
+//      third-party replies could serve one account's private data to the next.
 //
 // KNOWN LIMIT, deliberate: a client still running the OLD worker cannot heal from
 // inside the app. Its sw.js update request is a non-navigation, so an expired
@@ -92,7 +91,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
 
   if (req.method !== 'GET') return;                 // cache.put rejects non-GET
-  if (!req.url.startsWith(SCOPE_URL)) return;       // rule 4 — Drive et al. untouched
+  if (!req.url.startsWith(SCOPE_URL)) return;       // rule 4 — external requests untouched
 
   // Never cache version.json — always fetch fresh for update detection. The app
   // appends ?t=Date.now(), which is what actually defeats the HTTP cache.

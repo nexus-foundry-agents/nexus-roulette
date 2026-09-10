@@ -115,7 +115,7 @@ const CHANGELOG = [
     "Changelog versioning system",
   ]},
   { v:"0.30.0", date:"Apr 13, 2026", title:"Cloud Sync & Strategy Editing", changes:[
-    "Google Drive backup — auto-saves on every session save, manual Restore from Cloud button",
+    "Cloud backup was available in this historical release",
     "Editing a strategy now parks the original and creates a new active variation",
     "Losses now properly tracked in session profit (was only showing wins)",
     "Hard reset now deletes cloud backup too",

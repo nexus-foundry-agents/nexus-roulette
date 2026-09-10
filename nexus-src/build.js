@@ -9,21 +9,23 @@ const path = require('path');
 const SRC = path.join(__dirname, 'src');
 const REACT = path.join(__dirname, '../node_modules/react/umd/react.production.min.js');
 const REACTDOM = path.join(__dirname, '../node_modules/react-dom/umd/react-dom.production.min.js');
+const NF_TOKENS = path.join(__dirname, '../node_modules/@nexus-foundry/nf-ui/src/tokens.css');
+const NF_UI = path.join(__dirname, '../node_modules/@nexus-foundry/nf-ui/src/nf-ui.css');
 const OUT = path.join(__dirname, '../index.html');
 
 // Files concatenated in dependency order
 const FILES = [
   // Pure data / constants
   'constants.js',
+  'account-storage.mjs',
   // Engine — depends on constants
   'engine.js',
   // Session factories — depends on engine
   'session.js',
-  // Google Drive sync
-  'drive-sync.js',
   // Simulation engine — depends on engine + constants
   'simulation.js',
   // Base UI — depends on constants
+  'roulette-bets.mjs',
   'components/ui.jsx',
   'components/RouletteIcon.jsx',
   // Grids — depends on engine + constants + ui
@@ -35,6 +37,12 @@ const FILES = [
   'components/modals.jsx',
   // Sim UI — depends on simulation + ui + engine
   'components/SimModePage.jsx',
+  // Secondary pages split from App.jsx before the Casino bridge was added.
+  'components/SecondaryPages.jsx',
+  // Exact-origin Casino recording client and wager accounting.
+  'casino-recording.mjs',
+  // Local-first, revision-aware account synchronization through the pinned shell bridge.
+  'casino-sync.mjs',
   // Page components — inner functions, depend on everything above
   // These are defined as inner functions of App, included via App.jsx
   // App — depends on everything
@@ -71,6 +79,8 @@ try {
 
 const react = fs.readFileSync(REACT, 'utf8');
 const reactdom = fs.readFileSync(REACTDOM, 'utf8');
+const nfTokens = fs.readFileSync(NF_TOKENS, 'utf8');
+const nfUi = fs.readFileSync(NF_UI, 'utf8');
 
 const iife = `(function(){
   function require(m){
@@ -111,9 +121,10 @@ const html = `<!DOCTYPE html>
 <meta name="theme-color" content="#0f1923">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <title>Nexus Roulette Tracker</title>
 <style>
+${nfTokens}
+${nfUi}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{background:#0f1923;min-height:100%;}
 button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-family:inherit;cursor:pointer;}
@@ -174,6 +185,9 @@ ${iife}
 </body>
 </html>`;
 
-fs.writeFileSync(OUT, html);
+// Generated artifacts are canonical LF on every host. Several source inputs predate the build and
+// carry mixed endings; writing those through unchanged made a Windows build differ from CI bytes.
+const canonicalHtml = html.replace(/\r\n?/g, '\n');
+fs.writeFileSync(OUT, canonicalHtml, 'utf8');
 console.log(`\n✓ Built: ${OUT}`);
-console.log(`  Size: ${Math.round(html.length / 1024)}KB`);
+console.log(`  Size: ${Math.round(canonicalHtml.length / 1024)}KB`);

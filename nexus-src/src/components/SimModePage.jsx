@@ -1,4 +1,27 @@
 // -- Simulation Mode UI --
+function NotificationEnablePage() {
+  const supported='Notification' in window;
+  const [permission,setPermission]=useState(supported?Notification.permission:'unsupported');
+  async function enable(){
+    if(!supported)return;
+    try{setPermission(await Notification.requestPermission());}
+    catch(e){setPermission('error');}
+  }
+  function returnToRoulette(){window.location.replace(window.location.origin+window.location.pathname);}
+  const message=permission==='granted'?'Completion notifications are enabled.':permission==='denied'?'Notifications are blocked in this browser. Change the site permission to enable them.':permission==='unsupported'?'This browser does not support notifications.':permission==='error'?'The browser could not change the notification permission.':'The browser requires this second, top-level click before it can ask.';
+  return (
+    <div style={{minHeight:'100vh',background:'#080d13',color:'#e2e8f0',display:'flex',alignItems:'center',justifyContent:'center',padding:20,boxSizing:'border-box'}}>
+      <div style={{width:'100%',maxWidth:460,background:'#111c27',border:'1px solid #2d4057',borderRadius:16,padding:22,textAlign:'center'}}>
+        <div style={{fontSize:28,marginBottom:8}}>🔔</div>
+        <h1 style={{fontSize:20,margin:'0 0 8px'}}>Roulette completion notifications</h1>
+        <p role="status" style={{fontSize:13,color:'#94a3b8',lineHeight:1.5,margin:'0 0 16px'}}>{message}</p>
+        {supported&&permission!=='granted'&&<button className="nf-btn nf-btn--primary nf-btn--lg nf-btn--block" onClick={enable}>Enable notifications</button>}
+        <button className="nf-btn nf-btn--ghost nf-btn--lg nf-btn--block" onClick={returnToRoulette} style={{marginTop:8}}>Return to Roulette</button>
+      </div>
+    </div>
+  );
+}
+
 function StatContextBar({simResults, simCfg, sess, cur, pnlVal}) {
   // Match live tracks to sim strategies by type+roi+stopLoss
   const liveTracks = sess.tracks.filter(t=>t.state!=="closed");
@@ -339,7 +362,15 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
   }
 
   function stopSim(){simStopRef.current=true;setSimRunning(false);}
-  function requestNotifPermission(){if('Notification' in window)Notification.requestPermission();}
+  function requestNotifPermission(){
+    if(window.parent!==window){
+      // Browsers refuse permission prompts from cross-origin frames. Open this same committed app
+      // at its own origin so the user's gesture reaches a surface that is allowed to ask.
+      window.open(window.location.origin+'/?enableNotifications=1','_blank','noopener,noreferrer');
+      return;
+    }
+    if('Notification' in window)Notification.requestPermission();
+  }
 
   // -- Setup View --
   if(view==="setup") return (
@@ -466,7 +497,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
         </div>
       )}
       <button onClick={requestNotifPermission} style={{width:"100%",padding:"10px 0",borderRadius:10,border:"1px solid #2d4057",background:"transparent",color:"#64748b",fontSize:11,cursor:"pointer"}}>
-        🔔 Enable completion notification
+        🔔 {window.parent!==window?"Open app to enable completion notifications":"Enable completion notification"}
       </button>
       {simDone && <button onClick={()=>setView("results")} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:"#134e2a",color:"#4ade80",fontSize:14,fontWeight:700,cursor:"pointer"}}>📊 View Last Results</button>}
     </div>
