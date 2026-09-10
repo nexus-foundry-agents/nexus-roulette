@@ -619,7 +619,7 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.46.1";
+  var MY_V="0.47.0";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -1045,7 +1045,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.46.1";
+var APP_VERSION = "0.47.0";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -1149,6 +1149,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.47.0",
+  date: "Sep 9, 2026",
+  title: "Nexus Casino Integration",
+  changes: ["Roulette now launches as a complete module inside Nexus Casino while the standalone application remains available", "Signed-in Casino accounts synchronize Roulette sessions and preferences across devices, with conflict-safe local-first storage", "Casino recording covers Live and Game play with exact stakes, returns, duration controls, and retry-safe spins", "Google sign-in and Drive backup are retired; JSON download and import remain available for manual backups"]
+}, {
   v: "0.46.1",
   date: "Aug 29, 2026",
   title: "Fixes The Lockout On A Signed-In Phone",

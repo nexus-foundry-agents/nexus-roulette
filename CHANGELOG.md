@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-09-09
+
 ### Added
 
 - A Casino module declaration and dedicated module deployment target, preserving the complete

@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.46.1";
+const APP_VERSION = "0.47.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,12 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.47.0", date:"Sep 9, 2026", title:"Nexus Casino Integration", changes:[
+    "Roulette now launches as a complete module inside Nexus Casino while the standalone application remains available",
+    "Signed-in Casino accounts synchronize Roulette sessions and preferences across devices, with conflict-safe local-first storage",
+    "Casino recording covers Live and Game play with exact stakes, returns, duration controls, and retry-safe spins",
+    "Google sign-in and Drive backup are retired; JSON download and import remain available for manual backups",
+  ]},
   { v:"0.46.1", date:"Aug 29, 2026", title:"Fixes The Lockout On A Signed-In Phone", changes:[
     "Fixed the bug where the app answered \"401 Authorization Required\" on your own phone even while you were signed in to Connect, and only a private window would open it",
     "The offline worker was rebuilding each page request before sending it, which stripped the marker the staff gate uses to tell a page open from a background file fetch — so the gate refused it instead of sending you to the sign-in page",

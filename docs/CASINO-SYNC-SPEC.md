@@ -2,7 +2,7 @@
 
 Last Updated: 2026-09-09
 
-Status: Implemented and locally verified on `feature/casino-module`; production deployment pending
+Status: Verified on `develop`; production deployment pending
 
 ## Function
 
