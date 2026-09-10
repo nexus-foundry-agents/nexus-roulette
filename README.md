@@ -1,8 +1,11 @@
 # nexus-roulette
 Nexus Roulette Tracker
 
+Last Updated: 2026-09-09
+
 Staff URL (Connect login required): https://nexus-foundry.ai/roulette/
 Public friend mirror (GitHub Pages): https://nexus-foundry-agents.github.io/nexus-roulette/
+Nexus Casino module: https://roulette.nexus-foundry.ai/
 
 Build, deploy surfaces, branch flow: docs/DEPLOYMENT-MAP.md
 
@@ -30,18 +33,13 @@ up. The `BetTargets` chip component lives in `nexus-src/src/components/ui.jsx`.
 ## Build
 
 ```
-npm install --no-save --prefix . react@18 react-dom@18 @babel/core @babel/preset-react @babel/preset-env
+npm ci --ignore-scripts
 node nexus-src/build.js      # concatenates nexus-src/src/* -> index.html at repo root
+node nexus-src/module-manifest.mjs --write  # deterministic Casino declaration
 ```
 
-`node_modules` is gitignored and there is no `package.json` by design, which has
-two consequences worth knowing before you build:
-
-- Pass `--prefix .` or npm walks up and installs into a parent directory, and the
-  build then fails on a missing `node_modules/react/umd/react.production.min.js`.
-- List every package in one `--no-save` command. A second `--no-save` install
-  prunes the packages from the first one (there is no manifest to remember them),
-  which silently breaks the next build.
+`node_modules` is gitignored. `package.json` and `package-lock.json` pin the build inputs so a clean
+CI checkout and a release workstation generate the same artifact.
 
 Serve the repo root with any static server to run it locally.
 
@@ -55,12 +53,15 @@ Every release must bump all three in lockstep, or the update poller loops:
 ./deploy.sh --check      # every preflight, ships nothing — run this first
 ./deploy.sh --prod       # staff-gated nexus-foundry.ai/roulette/
 ./deploy.sh --mirror     # public GitHub Pages friend mirror
-./deploy.sh --all        # both, production first
+./deploy.sh --module     # dedicated Nexus Casino module origin
+./deploy.sh --all        # established staff surface + public mirror
+./deploy.sh --module     # separately transacted Casino module surface
 ```
 
 Run from the repo root on `main` with a clean tree. The script enforces the version lockstep
-above, refuses to ship an `index.html` that does not rebuild from `nexus-src/src`, refuses to
-ship changed bytes under an unchanged version, and verifies md5 per artifact on the server
-afterwards. `--help` lists the environment overrides.
+above, runs the full test suite, refuses to ship an `index.html` or `module.json` that does not
+rebuild deterministically, refuses to ship changed app bytes under an unchanged version, and
+verifies each deployed artifact on the server and through the public edge. Production destinations
+are fixed in the script; `--help` names the optional authenticated verification credential.
 
 Surfaces, the auth gate and the branch flow: `docs/DEPLOYMENT-MAP.md`.

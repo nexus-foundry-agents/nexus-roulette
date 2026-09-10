@@ -48,10 +48,48 @@ function defaultSettings() {
   return{ currency:"USD", defaultBuyIn:100, onboarded:false, vibration:true, tableMinBet:10, tableMaxBet:500, tableMaxTotal:10000 };
 }
 
+// Standalone keeps the historical keys. Embedded storage stays closed until the authenticated
+// shell supplies an opaque account scope, so one account can never render or overwrite another
+// account's device-local state on a shared browser.
+let rouletteAccountStorageScope=window.parent===window?'standalone':null;
+let rouletteAccountStorageWritable=window.parent===window;
+function rouletteStorageKey(base){
+  if(rouletteAccountStorageScope==='standalone')return base;
+  return rouletteAccountStorageScope?base+':account:'+rouletteAccountStorageScope:null;
+}
+function beginRouletteAccountStorage(scope){
+  if(typeof scope!=='string'||!/^[A-Za-z0-9_-]{32}$/.test(scope))return false;
+  rouletteAccountStorageScope=scope;
+  rouletteAccountStorageWritable=false;
+  try{window.dispatchEvent(new CustomEvent('nexus-account-scope-ready'));}catch(_error){}
+  return true;
+}
+function enableRouletteAccountStorage(){rouletteAccountStorageWritable=!!rouletteAccountStorageScope;}
+function freshAppState(){
+  return {savedSessions:[],currentSession:newSession(),gameSession:newSession(),settings:defaultSettings()};
+}
+function loadRouletteUiState(){
+  const key=rouletteStorageKey('nexus_ui');
+  if(!key)return {};
+  try{return JSON.parse(localStorage.getItem(key)||'{}')||{};}catch(_error){return {};}
+}
+function saveRouletteUiState(value){
+  const key=rouletteStorageKey('nexus_ui');
+  if(!key||!rouletteAccountStorageWritable)return;
+  try{localStorage.setItem(key,JSON.stringify(value));}catch(_error){}
+}
+function clearRouletteLocalState(){
+  const appKey=rouletteStorageKey(STORAGE_KEY),uiKey=rouletteStorageKey('nexus_ui');
+  if(appKey)localStorage.removeItem(appKey);
+  if(uiKey)localStorage.removeItem(uiKey);
+}
+
 function loadApp() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw) { console.warn("NEXUS: No saved data found in localStorage (key="+STORAGE_KEY+")"); return { savedSessions:[], currentSession:newSession(), gameSession:newSession(), settings:defaultSettings() }; }
+    const key=rouletteStorageKey(STORAGE_KEY);
+    if(!key)return freshAppState();
+    const raw = localStorage.getItem(key);
+    if(!raw) { console.warn("NEXUS: No saved data found in localStorage (key="+key+")"); return freshAppState(); }
     const d = JSON.parse(raw);
     if(d) {
       if(!d.settings) d.settings = defaultSettings();
@@ -88,18 +126,20 @@ function loadApp() {
       return d;
     }
   } catch(e) { console.error("NEXUS: loadApp crashed:", e); }
-  return { savedSessions:[], currentSession:newSession(), gameSession:newSession(), settings:defaultSettings() };
+  return freshAppState();
 }
 
 function saveApp(state) {
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }catch(e){
+  const key=rouletteStorageKey(STORAGE_KEY);
+  if(!key||!rouletteAccountStorageWritable)return false;
+  const saved=writeRouletteStorage(localStorage,key,state,function(e){
     console.error("NEXUS: saveApp FAILED:", e);
     // Surfaced as an in-app banner (App listens for this event) — never a
     // blocking browser dialog.
     try{ window.dispatchEvent(new CustomEvent("nexus-save-error",{detail:e.message})); }catch(_e){}
-  }
+  });
+  try{window.dispatchEvent(new CustomEvent(saved?"nexus-save-success":"nexus-save-failed"));}catch(_error){}
+  return saved;
 }
 
 function computeMetrics(session) {

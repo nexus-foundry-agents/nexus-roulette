@@ -1,0 +1,89 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  file-size-guardrail:
+    name: Enforce 1500-line ceiling on tracked source files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - name: Check file sizes
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          threshold=1500
+          warn_at=1200
+          base=""
+          if [ -n "${PR_BASE_SHA:-}" ] && git cat-file -e "${PR_BASE_SHA}^{commit}" 2>/dev/null; then
+            base="$PR_BASE_SHA"
+          elif git rev-parse --verify -q origin/main >/dev/null; then
+            base="$(git merge-base origin/main HEAD 2>/dev/null || true)"
+          fi
+          baseline_lines() {
+            [ -z "$base" ] && { echo 0; return; }
+            git cat-file -e "$base:$1" 2>/dev/null || { echo 0; return; }
+            git show "$base:$1" | wc -l
+          }
+          is_source() {
+            case "$1" in *.html|*.js|*.mjs|*.cjs|*.ts|*.tsx|*.css|*.scss) ;; *) return 1 ;; esac
+            case "$1" in node_modules/*|*/node_modules/*|vendor/*|*/vendor/*|.refactor-archive/*|*/.refactor-archive/*) return 1 ;; esac
+            case "$1" in index.html) return 1 ;; esac
+          }
+          regressions=0
+          debt=0
+          while IFS= read -r file; do
+            is_source "$file" || continue
+            [ -f "$file" ] || continue
+            lines=$(wc -l < "$file")
+            if [ "$lines" -ge "$threshold" ]; then
+              was=$(baseline_lines "$file")
+              if [ "$lines" -gt "$was" ]; then
+                echo "::error file=$file,line=1::$file is $lines lines (was $was; ceiling $threshold). Split it before adding more."
+                regressions=$((regressions + 1))
+              else
+                echo "::warning file=$file,line=1::$file is $lines lines, over the ceiling but unchanged or smaller."
+                debt=$((debt + 1))
+              fi
+            elif [ "$lines" -ge "$warn_at" ]; then
+              echo "::warning file=$file,line=1::$file is $lines lines, approaching the $threshold-line ceiling."
+            fi
+          done < <(git ls-files)
+          echo "File-size guardrail: $regressions regression(s), $debt pre-existing debt file(s)."
+          [ "$regressions" -eq 0 ]
+
+  test:
+    name: Test and rebuild generated artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Node.js
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
+        with:
+          node-version: 24.14.0
+      - name: Install build dependencies
+        run: npm ci --ignore-scripts
+      - name: Test
+        run: node --test test/*.test.mjs
+      - name: Rebuild application
+        run: |
+          node nexus-src/build.js
+          git diff --exit-code -- index.html
+      - name: Rebuild module declaration
+        run: |
+          node nexus-src/module-manifest.mjs --write
+          git diff --exit-code -- module.json
+      - name: Check deployment script
+        run: bash -n deploy.sh

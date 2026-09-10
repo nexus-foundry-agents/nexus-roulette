@@ -1,0 +1,19 @@
+{
+  "name": "nexus-roulette",
+  "version": "0.0.0-private",
+  "private": true,
+  "dependencies": {
+    "@nexus-foundry/nf-ui": "file:vendor/nexus-foundry-nf-ui-0.4.0.tgz"
+  },
+  "scripts": {
+    "build": "node nexus-src/build.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@babel/core": "8.0.1",
+    "@babel/preset-env": "8.0.2",
+    "@babel/preset-react": "8.0.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
