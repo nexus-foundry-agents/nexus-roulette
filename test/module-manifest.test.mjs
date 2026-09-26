@@ -149,3 +149,14 @@ test('CONTROL: the exact zero-sector check notices a plausible but nonexistent s
   assert.equal(zeroIds.includes('split-0-3'), false);
   assert.equal(zeroIds.includes('split-0-1'), true);
 });
+
+test('module icon is the official Roulette icon, served from this module\'s own origin', async () => {
+  const { buildModuleManifest } = await import('../nexus-src/module-manifest.mjs');
+  const { readFileSync } = await import('node:fs');
+  const icon = buildModuleManifest().identity.icon;
+  assert.equal(icon.kind, 'image');
+  const url = new URL(icon.src);
+  assert.equal(url.origin, 'https://roulette.nexus-foundry.ai', 'the Casino loads the icon from the module origin');
+  const shipped = readFileSync(new URL(`..${url.pathname}`, import.meta.url), 'utf8');
+  assert.match(shipped, /<image [^>]*href="data:image\/jpeg;base64,/, 'the shipped file carries the embedded icon art');
+});

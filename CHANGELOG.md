@@ -1,11 +1,17 @@
 # Changelog
 
-Last Updated: 2026-09-09
+Last Updated: 2026-09-26
 
 Notable code and documentation changes are recorded here. Release versions are assigned only when
 `develop` is promoted to `main`; feature-branch work remains under Unreleased.
 
 ## [Unreleased]
+
+### Changed
+
+- The official Nexus Roulette icon, which is also its module icon in Nexus Casino, is now the crystal wheel on an aurora-glass tile. The pockets are drawn in code in true American wheel order (0 and 00 green, red pockets in NF magenta, black pockets in NF blue), with the Nexus Foundry fox mark at the hub. Master: `images/Nexus_Roulette_App_Icon.png` (1024 px, rounded-tile alpha, no cyan).
+- `icon.svg` keeps its name, so the favicon, the PWA manifest, the service worker, the Simulation-complete notification and the deploy ship list all pick up the new art unchanged. It now embeds the new icon (512 px), clipped to the rounded tile.
+- The module declaration's icon changed from the glyph `◉` to an image (`https://roulette.nexus-foundry.ai/icon.svg`), which the Casino gallery draws. The service-worker cache is now `nexus-roulette-v134`, so installed copies fetch the new icon. The release version still changes only at promotion.
 
 ## [0.47.0] - 2026-09-09
 
