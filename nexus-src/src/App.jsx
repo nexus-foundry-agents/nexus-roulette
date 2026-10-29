@@ -62,6 +62,19 @@ export default function App() {
   const [clearOpen, setClearOpen] = useState(false);
   const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
   const [spinCorrection, setSpinCorrection] = useState(null); // {index} while the number picker for a recent spin is open
+  // A board photo read returns in location.hash. It is taken once, here, and removed from the URL at once. A numbers
+  // return waits as a review (live mode only) and a status shows under the spin tools. Nothing is added until Add.
+  const [boardReturn, setBoardReturn] = useState(() => takeBoardReturn(window.location, window.history, appState.currentSession.roulette));
+  const [boardAdd, setBoardAdd] = useState([]); // numbers still to enter, oldest first; one is entered per render
+  // Add enters the read numbers one tap at a time through tapNumber, the path a live tap takes. Each step is its own
+  // render, so each tap settles on the session the one before it left, as a run of taps does. A mode change mid-run drops the rest.
+  useEffect(() => {
+    if(boardAdd.length===0) return;
+    if(appMode!=="live") { setBoardAdd([]); return; }
+    const [val, ...rest] = boardAdd;
+    tapNumber(val, true);
+    setBoardAdd(rest);
+  }, [boardAdd]);
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
@@ -218,6 +231,7 @@ export default function App() {
   const pnlColor = pnlVal>0?"#4ade80":pnlVal<0?"#f87171":"#e2e8f0";
 
   function tapNumber(val, fromTracker, deferCasinoRecord) {
+    if(boardReturn&&boardReturn.kind==="status") setBoardReturn(null); // a spin entered by hand ends a photo status
     if(fromTracker) {
       setPrevSessState(JSON.parse(JSON.stringify(sess)));
       // Auto-start session clock on first tracked spin
@@ -306,6 +320,11 @@ export default function App() {
     setPrevSessState(snapshot.prevSessState);
     setLastSpinDelta(snapshot.lastSpinDelta);
     setClearUndo(null);
+  }
+  // Add on the board photo review: leave the review and queue the numbers, which the effect above enters oldest first.
+  function addBoardNumbers(listBoardOrder) {
+    setBoardReturn(null);
+    setBoardAdd(boardAddOrder(listBoardOrder));
   }
   // Long-press a recent number to correct it. spin-apply.js replays the session with the corrected spin; a session
   // whose record cannot be replayed is refused and nothing changes. The picker reads the same refusal to show it.
@@ -502,7 +521,8 @@ export default function App() {
             <button onClick={()=>{if(window.confirm("End session and save?"))endSession();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
           )}
         </div>
-        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers}/>
+        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={()=>openBoardPhoto(window.location,sess.roulette)}/>
+        <BoardPhotoStatus result={boardReturn}/>
         <SpinCorrectionContext.Provider value={openSpinCorrection}>
           <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
         </SpinCorrectionContext.Provider>
@@ -837,6 +857,7 @@ export default function App() {
         )}
 
       {/* Modals */}
+      {appMode==="live" && boardReturn && boardReturn.kind==="numbers" && <BoardPhotoReview numbers={boardReturn.numbers} roulette={sess.roulette} onAdd={addBoardNumbers} onCancel={()=>setBoardReturn(null)}/>}
       {result && <ResultFlash result={result} cur={cur} onDismiss={()=>setResult(null)}/>}
       {buyInOpen && <BuyInModal defaultAmount={settings.defaultBuyIn||100} currency={currency} currentBankroll={sess.bankrollCurrent} onBuyIn={doBuyIn} onClose={()=>setBuyInOpen(false)}/>}
       {cashOutOpen && <CashOutModal maxAmount={sess.bankrollCurrent} currency={currency} currentBankroll={sess.bankrollCurrent} onCashOut={doCashOut} onClose={()=>setCashOutOpen(false)}/>}
