@@ -22,6 +22,8 @@ const FILES = [
   'engine.js',
   // Session factories — depends on engine
   'session.js',
+  // Spin application — the one settlement path for a live tap and for the replay that corrects a spin. Depends on engine + constants + session.
+  'spin-apply.js',
   // Simulation engine — depends on engine + constants
   'simulation.js',
   // Base UI — depends on constants
