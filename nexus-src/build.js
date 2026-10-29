@@ -43,9 +43,15 @@ const FILES = [
   'casino-recording.mjs',
   // Local-first, revision-aware account synchronization through the pinned shell bridge.
   'casino-sync.mjs',
-  // Page components — inner functions, depend on everything above
-  // These are defined as inner functions of App, included via App.jsx
-  // App — depends on everything
+  // Helpers and page views split out of App.jsx. Each depends only on files listed above it.
+  'components/strat-chips.jsx',
+  'components/session-files.jsx',
+  'components/onboarding-apply.jsx',
+  'components/UpdateBanner.jsx',
+  'components/DroughtPanel.jsx',
+  'components/GamePage.jsx',
+  'components/TablePage.jsx',
+  // App — depends on everything. Keeps the coordinator, the hooks and the live Tracker page.
   'App.jsx',
 ];
 

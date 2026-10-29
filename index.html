@@ -2975,11 +2975,36 @@ function BetTargets(_ref3) {
     }
   }, "+", hidden, " more"));
 }
+
+// Dismiss on a click, never on pointerup alone. Touch browsers fire a click after pointerup at the
+// same spot; if the dialog had already unmounted on pointerup, that click would land on whatever is
+// underneath. A click fires on the nearest common ancestor of its press and release, so a press that
+// starts inside the dialog and releases on the backdrop arrives here as a backdrop click. The press
+// flag (started on the backdrop, primary button) and the release flag (ended on the backdrop) reject
+// both that case and a press that starts on the backdrop and releases inside the dialog.
 function Modal(_ref4) {
   var children = _ref4.children,
     onClose = _ref4.onClose;
+  var downOnBackdrop = React.useRef(false);
+  var upOnBackdrop = React.useRef(false);
   return /*#__PURE__*/React.createElement("div", {
-    onClick: onClose,
+    onPointerDown: function onPointerDown(e) {
+      downOnBackdrop.current = e.target === e.currentTarget && e.button === 0;
+      upOnBackdrop.current = false;
+    },
+    onPointerUp: function onPointerUp(e) {
+      upOnBackdrop.current = e.target === e.currentTarget;
+    },
+    onPointerCancel: function onPointerCancel() {
+      downOnBackdrop.current = false;
+      upOnBackdrop.current = false;
+    },
+    onClick: function onClick(e) {
+      var go = downOnBackdrop.current && upOnBackdrop.current && e.target === e.currentTarget;
+      downOnBackdrop.current = false;
+      upOnBackdrop.current = false;
+      if (go) onClose();
+    },
     style: {
       position: "fixed",
       inset: 0,
@@ -11254,6 +11279,1444 @@ function CasinoSyncBar(_ref81) {
   }, sync.problem) : null);
 }
 
+// ===== components/strat-chips.jsx =====
+// Strategy bet chips shown on the roulette board. Moved from App.jsx; the only change is that the tracks
+// are a parameter instead of an App closure.
+function computeStratChips(nonClosedTracks) {
+  var chips = {};
+  function addChip(posKey, amount, color) {
+    if (!chips[posKey]) chips[posKey] = [];
+    // Merge with existing chip of same color
+    var existing = chips[posKey].find(function (c) {
+      return c.color === color;
+    });
+    if (existing) existing.amount += amount;else chips[posKey].push({
+      amount: amount,
+      color: color
+    });
+  }
+  nonClosedTracks.filter(function (t) {
+    return t.state === "active";
+  }).forEach(function (t) {
+    var tbl = computeTableForTrack(t);
+    var row = tbl[Math.min(t.level, tbl.length - 1)];
+    if (!row) return;
+    var betAmt = row.c * (t.config.unit || 1);
+    if (t.type === "fibonacci") {
+      var dts = t.config.dozenTargets || [],
+        cts = t.config.colTargets || [],
+        evts = t.config.evenTargets || [];
+      dts.forEach(function (d) {
+        addChip("dozen:" + d, betAmt, t.color);
+      });
+      cts.forEach(function (c) {
+        addChip("column:" + c, betAmt, t.color);
+      });
+      evts.forEach(function (key) {
+        addChip(key, betAmt, t.color);
+      });
+    }
+    if (t.type === "solution") {
+      (t.config.activeBets || []).forEach(function (b) {
+        var bRow = tbl[Math.min(b.level, tbl.length - 1)];
+        if (bRow) addChip("s:" + b.number, bRow.c * (t.config.unit || 1), t.color);
+      });
+    }
+    if (t.type === "custom") {
+      (t.config.positions || []).forEach(function (p) {
+        var chipAmt = p.baseAmount * row.c * (t.config.unit || 1);
+        if (isInsideBet(p.type)) {
+          // For inside bets, place chip on first number of the group
+          var nums = betCoveredNumbers(p.type, p.target);
+          if (nums.length > 0) addChip("s:" + nums[0], chipAmt, t.color);
+        } else {
+          var posKey = p.type + (p.target !== undefined ? ":" + p.target : "");
+          addChip(posKey, chipAmt, t.color);
+        }
+      });
+    }
+  });
+  return chips;
+}
+
+// ===== components/session-files.jsx =====
+// Session backup, export and import helpers. Moved from App.jsx; the only changes are parameters.
+
+function autoExport(allSessions) {
+  // Keep the automatic backup on the user's filesystem. Cancelling the download never changes
+  // the saved session itself.
+  try {
+    var data = {
+      exportedAt: new Date().toISOString(),
+      autoExport: true,
+      sessions: allSessions.map(function (s) {
+        return _objectSpread(_objectSpread({}, s), {}, {
+          metrics: computeMetrics(s)
+        });
+      }),
+      aggregate: {
+        totalSessions: allSessions.length,
+        totalSpins: allSessions.reduce(function (a, s) {
+          return a + s.spins.length;
+        }, 0),
+        netPnL: allSessions.reduce(function (a, s) {
+          return a + computeMetrics(s).netPnL;
+        }, 0)
+      }
+    };
+    var blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json"
+    });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "nexus-roulette-autosave-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {/* silently fail if download blocked */}
+}
+function exportSessionsJSON(saved) {
+  var data = {
+    exportedAt: new Date().toISOString(),
+    sessions: saved.map(function (s) {
+      return _objectSpread(_objectSpread({}, s), {}, {
+        metrics: computeMetrics(s)
+      });
+    }),
+    aggregate: {
+      totalSessions: saved.length,
+      totalSpins: saved.reduce(function (a, s) {
+        return a + s.spins.length;
+      }, 0),
+      netPnL: saved.reduce(function (a, s) {
+        return a + computeMetrics(s).netPnL;
+      }, 0)
+    }
+  };
+  var blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json"
+  });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "nexus-roulette-export-" + Date.now() + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function pickSessionsFile(updApp, setTab) {
+  var input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json,application/json";
+  input.onchange = function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        // Handle session exports and older whole-app snapshot files.
+        var sessions = data.sessions || data.savedSessions || data.appState && data.appState.savedSessions || [];
+        if (!sessions.length) {
+          alert("No sessions found in file.");
+          return;
+        }
+        var added = 0,
+          skipped = 0,
+          lastAdded = null;
+        updApp(function (s) {
+          sessions.forEach(function (sess) {
+            if (!s.savedSessions.find(function (x) {
+              return x.id === sess.id;
+            })) {
+              s.savedSessions.push(sess);
+              added++;
+              lastAdded = sess;
+            } else {
+              skipped++;
+            }
+          });
+          // Load the most recent imported session as current (paused)
+          if (lastAdded) {
+            var loaded = JSON.parse(JSON.stringify(lastAdded));
+            // Always end the session - don't auto-start after import
+            if (loaded.sessionStartedAt) {
+              loaded.sessionEndedAt = loaded.modified || Date.now();
+            }
+            // Park all tracks
+            (loaded.tracks || []).forEach(function (tr) {
+              if (tr.state === "active") tr.state = "parked";
+            });
+            s.currentSession = loaded;
+          }
+        });
+        setTab(0);
+        alert("Import complete!\n".concat(added, " session").concat(added !== 1 ? "s" : "", " added").concat(skipped ? ", " + skipped + " already existed (skipped)" : "", ".\n\nLoaded \"").concat(lastAdded ? lastAdded.name : "", "\"."));
+      } catch (err) {
+        alert("Failed to parse file: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  document.body.appendChild(input);
+  input.click();
+  document.body.removeChild(input);
+}
+
+// ===== components/onboarding-apply.jsx =====
+// Applies the first-run setup choices to app state. Moved from App.jsx; the only change is that updApp is a parameter.
+function completeOnboarding(updApp, _ref82) {
+  var roulette = _ref82.roulette,
+    bankroll = _ref82.bankroll,
+    defaultBuyIn = _ref82.defaultBuyIn,
+    curr = _ref82.currency,
+    tableMinBet = _ref82.tableMinBet,
+    tableMaxBet = _ref82.tableMaxBet,
+    tableMaxTotal = _ref82.tableMaxTotal;
+  updApp(function (s) {
+    var prevBankroll = s.settings._restartBankroll;
+    s.settings.onboarded = true;
+    s.settings.currency = curr;
+    s.settings.defaultBuyIn = defaultBuyIn;
+    if (tableMinBet) s.settings.tableMinBet = tableMinBet;
+    if (tableMaxBet) s.settings.tableMaxBet = tableMaxBet;
+    if (tableMaxTotal) s.settings.tableMaxTotal = tableMaxTotal;
+    delete s.settings._restartBankroll;
+    if (prevBankroll !== undefined) {
+      // Restart -- adjust existing session's bankroll
+      var delta = bankroll - prevBankroll;
+      s.currentSession.roulette = roulette;
+      s.currentSession.droughts = initDroughts(roulette);
+      if (delta > 0) {
+        // Added money → Buy In
+        s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent + delta) * 100) / 100;
+        s.currentSession.totalBuyIn = (s.currentSession.totalBuyIn || 0) + delta;
+        if (!s.currentSession.buyIns) s.currentSession.buyIns = [];
+        s.currentSession.buyIns.push({
+          amount: delta,
+          at: Date.now(),
+          spin: s.currentSession.spins.length,
+          note: "onboarding restart"
+        });
+      } else if (delta < 0) {
+        // Removed money → Cash Out
+        var cashAmt = Math.abs(delta);
+        s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent - cashAmt) * 100) / 100;
+        s.currentSession.totalCashOut = (s.currentSession.totalCashOut || 0) + cashAmt;
+        if (!s.currentSession.cashOuts) s.currentSession.cashOuts = [];
+        s.currentSession.cashOuts.push({
+          amount: cashAmt,
+          at: Date.now(),
+          spin: s.currentSession.spins.length,
+          note: "onboarding restart"
+        });
+      }
+    } else {
+      // Fresh start
+      s.currentSession = newSession(roulette, bankroll);
+      s.gameSession = newSession(roulette, bankroll);
+    }
+  });
+}
+
+// ===== components/UpdateBanner.jsx =====
+// App update prompt. Moved from App.jsx; the only change is that appState and updateAvailable are props.
+function UpdateBanner(_ref83) {
+  var appState = _ref83.appState,
+    updateAvailable = _ref83.updateAvailable;
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      saveApp(appState);
+      // Ask the worker to check for a new sw.js, then reload. Deliberately NOT
+      // a cache purge: the worker is versioned, so the new one installs under a
+      // new cache name and retires the old one only after its required shell is
+      // cached. Purging first left a client that lost connectivity mid-update
+      // with no cache at all — and the old code purged the whole ORIGIN,
+      // unregistering every other app hosted here.
+      // Reload only once the new worker is ACTIVATED. update() resolves at
+      // "installing", before the new cache is populated, so reloading on it can
+      // land a cache-busted URL on the OLD worker with nothing cached under that
+      // query. On failure we stay on this page — it still works — rather than
+      // navigating somewhere that may not resolve offline.
+      var go = function go() {
+        window.location.href = window.location.pathname + "?update=" + Date.now();
+      };
+      if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistration) {
+        navigator.serviceWorker.getRegistration().then(function (reg) {
+          if (!reg) {
+            go();
+            return;
+          }
+          return reg.update().then(function () {
+            var sw = reg.installing || reg.waiting;
+            if (!sw) {
+              go();
+              return;
+            }
+            if (sw.state === "activated") {
+              go();
+              return;
+            }
+            sw.addEventListener("statechange", function () {
+              if (sw.state === "activated") go();
+            });
+          });
+        }).catch(function () {});
+      } else {
+        go();
+      }
+    },
+    style: {
+      width: "100%",
+      padding: "12px 16px",
+      borderRadius: 12,
+      border: "2px solid #7c3aed",
+      background: "linear-gradient(135deg,#1e1040,#2d1060)",
+      color: "white",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800
+    }
+  }, "\uD83C\uDF89 Update Available \u2014 v", updateAvailable.version), updateAvailable.notes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#e9d5ff",
+      marginTop: 4,
+      lineHeight: 1.4
+    }
+  }, updateAvailable.notes), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#c4b5fd",
+      marginTop: 3
+    }
+  }, "Tap to update. No data will be lost.")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 22
+    }
+  }, "\u21BB"));
+}
+
+// ===== components/DroughtPanel.jsx =====
+// Even-money, dozen and column drought counts. Both play pages render it; moved from App.jsx unchanged.
+function DroughtPanel(_ref84) {
+  var emDroughts = _ref84.emDroughts,
+    dozD = _ref84.dozD,
+    colD = _ref84.colD;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(6,1fr)",
+      gap: 3
+    }
+  }, emDroughts.map(function (em) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: em.key,
+      style: {
+        borderRadius: 7,
+        border: "1px solid " + (em.drought >= 8 ? "#dc2626" : em.drought >= 5 ? "#f59e0b" : "#2d4057"),
+        background: em.drought >= 8 ? "#200505" : em.drought >= 5 ? "#1c1000" : "#0f1923",
+        padding: "6px 2px",
+        textAlign: "center"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: em.color,
+        fontWeight: 700,
+        textTransform: "uppercase"
+      }
+    }, em.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 15,
+        fontWeight: 800,
+        color: em.drought >= 8 ? "#f87171" : em.drought >= 5 ? "#fbbf24" : "#94a3b8"
+      }
+    }, em.drought));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: "1px solid #2d4057",
+      marginTop: 2,
+      paddingTop: 6,
+      display: "flex",
+      flexDirection: "column",
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4
+    }
+  }, [0, 1, 2].map(function (i) {
+    return /*#__PURE__*/React.createElement(DCard, {
+      key: "d" + i,
+      label: DOZEN_LABELS[i],
+      range: DOZEN_RANGES[i],
+      drought: dozD[i],
+      colorBd: DOZEN_BORDERS[i],
+      colorTx: DOZEN_TEXTS[i]
+    });
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4
+    }
+  }, [0, 1, 2].map(function (i) {
+    return /*#__PURE__*/React.createElement(DCard, {
+      key: "c" + i,
+      label: COLUMN_LABELS[i],
+      range: COLUMN_RANGES[i],
+      drought: colD[i],
+      colorBd: COLUMN_BORDERS[i],
+      colorTx: COLUMN_TEXTS[i]
+    });
+  }))));
+}
+
+// ===== components/GamePage.jsx =====
+// -- Game Page --
+// Moved from App.jsx. App renders it through a wrapper that passes every App value the page reads.
+// Body unchanged except two marked edits: the drought grid is now DroughtPanel, and the strategy chips
+// take the tracks as an argument.
+function GamePageView(_ref85) {
+  var addOpen = _ref85.addOpen,
+    addTrack = _ref85.addTrack,
+    animNumber = _ref85.animNumber,
+    betResults = _ref85.betResults,
+    clearTimerRef = _ref85.clearTimerRef,
+    closeTrack = _ref85.closeTrack,
+    colD = _ref85.colD,
+    cur = _ref85.cur,
+    currency = _ref85.currency,
+    dozD = _ref85.dozD,
+    editTrackId = _ref85.editTrackId,
+    emDroughts = _ref85.emDroughts,
+    endSession = _ref85.endSession,
+    recordGameSpin = _ref85.recordGameSpin,
+    gameResult = _ref85.gameResult,
+    gameSpinning = _ref85.gameSpinning,
+    isLandscape = _ref85.isLandscape,
+    lastBets = _ref85.lastBets,
+    lastSpinDelta = _ref85.lastSpinDelta,
+    manualBets = _ref85.manualBets,
+    nextColorIdx = _ref85.nextColorIdx,
+    nonClosedTracks = _ref85.nonClosedTracks,
+    parkToggle = _ref85.parkToggle,
+    pendingTrackCfg = _ref85.pendingTrackCfg,
+    pendingTrackType = _ref85.pendingTrackType,
+    pnlVal = _ref85.pnlVal,
+    saveSession = _ref85.saveSession,
+    selectedChip = _ref85.selectedChip,
+    sess = _ref85.sess,
+    setAddOpen = _ref85.setAddOpen,
+    setAnimNumber = _ref85.setAnimNumber,
+    setBetResults = _ref85.setBetResults,
+    setEditTrackId = _ref85.setEditTrackId,
+    setGameResult = _ref85.setGameResult,
+    setGameSpinning = _ref85.setGameSpinning,
+    setLastBets = _ref85.setLastBets,
+    setLastSpinDelta = _ref85.setLastSpinDelta,
+    setManualBets = _ref85.setManualBets,
+    setPendingTrackCfg = _ref85.setPendingTrackCfg,
+    setPendingTrackType = _ref85.setPendingTrackType,
+    setSelectedChip = _ref85.setSelectedChip,
+    setUndoStack = _ref85.setUndoStack,
+    settings = _ref85.settings,
+    tapNumber = _ref85.tapNumber,
+    updSess = _ref85.updSess,
+    updateTrackConfig = _ref85.updateTrackConfig,
+    wheelNums = _ref85.wheelNums;
+  var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
+  var hasActiveTracks = nonClosedTracks.some(function (t) {
+    return t.state === "active";
+  });
+  var tMin = settings.tableMinBet || 1;
+  var CHIPS = CHIP_DENOMS.filter(function (c) {
+    return c.val >= tMin;
+  });
+  var totalBetAmt = manualBets.reduce(function (s, b) {
+    return s + b.amount;
+  }, 0);
+  var canSpin = manualBets.length > 0 || hasActiveTracks;
+  function cancelPendingClear() {
+    if (clearTimerRef.current) {
+      clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = null;
+    }
+    if (betResults) {
+      setBetResults(null);
+      setManualBets([]);
+    }
+  }
+  function placeBet(type, target) {
+    if (gameSpinning) return;
+    if (betResults) cancelPendingClear();
+    setManualBets(function (prev) {
+      return [].concat(_toConsumableArray(prev), [{
+        id: Date.now() + Math.random(),
+        type: type,
+        target: target,
+        amount: selectedChip
+      }]);
+    });
+    setUndoStack(function (prev) {
+      return [].concat(_toConsumableArray(prev), [1]);
+    });
+    if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(10);
+  }
+  function undoBet() {
+    if (betResults) return;
+    setUndoStack(function (prev) {
+      if (prev.length === 0) return prev;
+      var count = prev[prev.length - 1];
+      setManualBets(function (mb) {
+        return mb.slice(0, -count);
+      });
+      return prev.slice(0, -1);
+    });
+  }
+  function clearBets() {
+    setManualBets([]);
+    setUndoStack([]);
+  }
+  function doubleBets() {
+    if (betResults) return;
+    setManualBets(function (prev) {
+      var doubled = prev.map(function (b) {
+        return _objectSpread(_objectSpread({}, b), {}, {
+          id: Date.now() + Math.random()
+        });
+      });
+      setUndoStack(function (us) {
+        return [].concat(_toConsumableArray(us), [prev.length]);
+      });
+      return [].concat(_toConsumableArray(prev), _toConsumableArray(doubled));
+    });
+  }
+  function repeatBets() {
+    if (lastBets.length === 0) return;
+    cancelPendingClear();
+    var repeated = lastBets.map(function (b) {
+      return _objectSpread(_objectSpread({}, b), {}, {
+        id: Date.now() + Math.random()
+      });
+    });
+    setManualBets(repeated);
+    setUndoStack([repeated.length]);
+  }
+
+  // Aggregate bets by position for display
+  var boardBets = {};
+  manualBets.forEach(function (b) {
+    var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+    boardBets[key] = (boardBets[key] || 0) + b.amount;
+  });
+  function resolveManualBets(winVal) {
+    var totalWin = 0,
+      totalBet = 0,
+      posResults = {};
+    manualBets.forEach(function (b) {
+      totalBet += b.amount;
+      var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+      var covered = betCoveredNumbers(b.type, b.target);
+      var won = covered.indexOf(winVal) >= 0;
+      if (won) {
+        totalWin += b.amount * betPayoutMult(b.type);
+        posResults[posKey] = "won";
+      } else {
+        if (!posResults[posKey]) posResults[posKey] = "lost";
+      }
+    });
+    return {
+      totalWin: totalWin,
+      totalBet: totalBet,
+      profit: totalWin - totalBet,
+      posResults: posResults
+    };
+  }
+  function doGameSpin() {
+    if (gameSpinning || betResults) return;
+    setGameSpinning(true);
+    setAnimNumber(null);
+    if (!sess.sessionStartedAt) updSess(function (s) {
+      s.sessionStartedAt = Date.now();
+    });
+    var nums = wheelNums;
+    var spinBets = _toConsumableArray(manualBets);
+    var ticks = 0;
+    var iv = setInterval(function () {
+      ticks++;
+      // Only update the animation display number, NOT gameResult
+      setAnimNumber(nums[Math.floor(Math.random() * nums.length)]);
+      if (ticks >= 15) {
+        clearInterval(iv);
+        var val = nums[Math.floor(Math.random() * nums.length)];
+        var casinoWager = mergeWagerSummaries(summarizeTrackWagers(sess.tracks, val), summarizeManualWagers(spinBets, val));
+        setAnimNumber(null);
+        setGameResult(val); // final result - board highlights winning number
+        if (hasActiveTracks) tapNumber(val, true, true);else {
+          updSess(function (s) {
+            s.spins.push(val);
+            var nd = _objectSpread({}, s.droughts);
+            Object.keys(nd).forEach(function (k) {
+              return nd[k]++;
+            });
+            nd[val] = 0;
+            s.droughts = nd;
+          });
+        }
+        if (spinBets.length > 0) {
+          var totalWin = 0,
+            totalBet = 0,
+            posResults = {};
+          spinBets.forEach(function (b) {
+            totalBet += b.amount;
+            var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+            var covered = betCoveredNumbers(b.type, b.target);
+            if (covered.indexOf(val) >= 0) {
+              totalWin += b.amount * betPayoutMult(b.type);
+              posResults[posKey] = "won";
+            } else {
+              if (!posResults[posKey]) posResults[posKey] = "lost";
+            }
+          });
+          var profit = totalWin - totalBet;
+          updSess(function (s) {
+            s.bankrollCurrent = Math.round((s.bankrollCurrent + profit) * 100) / 100;
+          });
+          if (hasActiveTracks) setLastSpinDelta(function (prev) {
+            return (prev || 0) + profit;
+          });else setLastSpinDelta(profit);
+          setBetResults(posResults);
+          setLastBets(_toConsumableArray(spinBets));
+          setUndoStack([]);
+          clearTimerRef.current = setTimeout(function () {
+            setBetResults(null);
+            setManualBets([]);
+            clearTimerRef.current = null;
+          }, 3000);
+        }
+        recordGameSpin(val, casinoWager);
+        if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(30);
+        setGameSpinning(false);
+      }
+    }, 70);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center"
+    }
+  }, function () {
+    var displayNum = gameSpinning ? animNumber : gameResult;
+    if (!displayNum) return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        background: "#1e2d3d",
+        border: "3px solid #2d4057",
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#64748b",
+        flexShrink: 0
+      }
+    }, "--");
+    var isZ = displayNum === "0" || displayNum === "00";
+    var r = !isZ && RED.has(+displayNum);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        background: isZ ? "#166534" : r ? "#991b1b" : "#1e293b",
+        border: "3px solid " + (isZ ? "#4ade80" : r ? "#f87171" : "#64748b"),
+        fontSize: 20,
+        fontWeight: 900,
+        color: "white",
+        animation: gameSpinning ? "pulse 0.15s infinite" : "none",
+        flexShrink: 0
+      }
+    }, displayNum);
+  }(), /*#__PURE__*/React.createElement("button", {
+    onClick: doGameSpin,
+    disabled: gameSpinning || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "12px 0" : "12px 0",
+      borderRadius: 10,
+      border: "none",
+      background: gameSpinning || betResults ? "#374151" : "linear-gradient(135deg,#16a34a,#059669)",
+      color: "white",
+      fontSize: isLandscape ? 15 : 16,
+      fontWeight: 900,
+      cursor: gameSpinning || betResults ? "not-allowed" : "pointer",
+      opacity: gameSpinning ? 0.7 : 1
+    }
+  }, gameSpinning ? "Spinning..." : "🎰 SPIN"), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      flexShrink: 0,
+      minWidth: 55
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 7,
+      color: "#64748b",
+      textTransform: "uppercase"
+    }
+  }, "Last"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 900,
+      color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
+    }
+  }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), function () {
+    var stratBets = {};
+    nonClosedTracks.filter(function (t) {
+      return t.state === "active";
+    }).forEach(function (t) {
+      if (t.type === "fibonacci") {
+        var dts = t.config.dozenTargets || [],
+          cts = t.config.colTargets || [],
+          evts = t.config.evenTargets || [];
+        dts.forEach(function (d) {
+          stratBets["dozen:" + d] = t.color;
+        });
+        cts.forEach(function (c) {
+          stratBets["column:" + c] = t.color;
+        });
+        evts.forEach(function (key) {
+          stratBets[key] = t.color;
+        });
+      }
+      if (t.type === "solution") {
+        (t.config.activeBets || []).forEach(function (b) {
+          if (!stratBets["s:" + b.number]) stratBets["s:" + b.number] = t.color;
+        });
+      }
+      if (t.type === "custom") {
+        (t.config.positions || []).forEach(function (p) {
+          var pk = p.type === "straight" ? "s:" + p.target : p.type + (p.target !== undefined ? ":" + p.target : "");
+          if (!stratBets[pk]) stratBets[pk] = t.color;
+        });
+      }
+    });
+    return /*#__PURE__*/React.createElement(RouletteBoard, {
+      roulette: sess.roulette,
+      winningNumber: gameSpinning ? null : gameResult,
+      stratBets: stratBets,
+      spinning: false,
+      onBet: placeBet,
+      boardBets: boardBets,
+      chipColor: (CHIPS.find(function (c) {
+        return c.val === selectedChip;
+      }) || CHIPS[0]).color,
+      betResults: betResults,
+      stratChips: computeStratChips(nonClosedTracks),
+      landscape: isLandscape
+    });
+  }(), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: isLandscape ? 6 : 3,
+      justifyContent: "center",
+      flexWrap: "wrap"
+    }
+  }, CHIPS.map(function (c) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: c.val,
+      onClick: function onClick() {
+        return setSelectedChip(c.val);
+      },
+      style: {
+        width: isLandscape ? 38 : 34,
+        height: isLandscape ? 38 : 34,
+        borderRadius: "50%",
+        border: (isLandscape ? "3" : "2") + "px solid " + (selectedChip === c.val ? "#fbbf24" : c.border),
+        background: c.color,
+        color: c.val >= 100 ? "#fff" : c.val <= 0.5 ? "#1e293b" : "#1e293b",
+        fontSize: isLandscape ? c.val < 1 ? 9 : 11 : c.val < 1 ? 7 : 8,
+        fontWeight: 900,
+        cursor: "pointer",
+        boxShadow: selectedChip === c.val ? "0 0 8px #fbbf24" : "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, c.label);
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: isLandscape ? 6 : 3
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: undoBet,
+    disabled: manualBets.length === 0 || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: manualBets.length > 0 && !betResults ? "#60a5fa" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "\u21A9Undo"), /*#__PURE__*/React.createElement("button", {
+    onClick: clearBets,
+    disabled: manualBets.length === 0 || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: manualBets.length > 0 && !betResults ? "#f87171" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "\u2715Clear"), /*#__PURE__*/React.createElement("button", {
+    onClick: doubleBets,
+    disabled: manualBets.length === 0 || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: manualBets.length > 0 && !betResults ? "#fbbf24" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "2\xD7"), /*#__PURE__*/React.createElement("button", {
+    onClick: repeatBets,
+    disabled: lastBets.length === 0,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: lastBets.length > 0 ? "#86efac" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "\u267BRpt")), totalBetAmt > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      fontSize: 10,
+      fontWeight: 800,
+      color: "#fbbf24"
+    }
+  }, "Bet: ", cur.symbol, formatNumber(totalBetAmt)), totalBetAmt > 0 && !betResults && /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      var posMap = {};
+      manualBets.forEach(function (b) {
+        var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+        if (!posMap[key]) posMap[key] = {
+          type: b.type,
+          target: b.target,
+          baseAmount: 0
+        };
+        posMap[key].baseAmount += b.amount;
+      });
+      var positions = Object.values(posMap);
+      var hasInside = positions.some(function (p) {
+        return isInsideBet(p.type);
+      });
+      if (!hasInside) {
+        var dts = [],
+          cts = [],
+          evts = [];
+        positions.forEach(function (p) {
+          if (p.type === "dozen") dts.push(p.target);else if (p.type === "column") cts.push(p.target);else evts.push(p.type);
+        });
+        var cfg = defaultFibCfg();
+        cfg.betMode = "flat";
+        cfg.dozenTargets = dts;
+        cfg.colTargets = cts;
+        cfg.evenTargets = evts;
+        updSess(function (s) {
+          s.tracks.push(newTrack("fibonacci", s.tracks.length, cfg, pickTrackColor("fibonacci", cfg, s.tracks)));
+        });
+      } else {
+        var cfg = {
+          type: "custom",
+          unit: 1,
+          roi: 15,
+          betMode: "flat",
+          stopLoss: 200,
+          positions: positions
+        };
+        updSess(function (s) {
+          s.tracks.push({
+            id: generateId(),
+            type: "custom",
+            color: pickTrackColor("custom", cfg, s.tracks),
+            state: "active",
+            config: cfg,
+            level: 0,
+            pnl: 0,
+            bets: [],
+            createdAtSpin: s.spins.length,
+            closedAtSpin: null,
+            wins: 0,
+            sequences: 0
+          });
+        });
+      }
+      clearBets();
+      if (settings.vibration !== false && navigator.vibrate) navigator.vibrate([20, 10, 20]);
+    },
+    style: {
+      width: "100%",
+      padding: "8px 0",
+      borderRadius: 8,
+      border: "2px dashed #7c3aed",
+      background: "#1e1040",
+      color: "#c4b5fd",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "\uD83C\uDCCF Create Strategy from Bets"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      fontSize: 8,
+      color: "#374151"
+    }
+  }, "center=straight \xB7 edge=split \xB7 corner=corner"), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4,
+      overflowX: "auto",
+      paddingBottom: 2,
+      WebkitOverflowScrolling: "touch",
+      width: "100%",
+      maxWidth: "100%",
+      minWidth: 0,
+      boxSizing: "border-box"
+    }
+  }, recentSpins.map(function (val, i) {
+    var isZ = val === "0" || val === "00",
+      r = !isZ && RED.has(+val);
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        flexShrink: 0,
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
+        border: "2px solid " + (i === 0 ? "#ffffff" : isZ ? "#22c55e" : r ? "#ef4444" : "#374151"),
+        color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
+        fontSize: 10,
+        fontWeight: 800,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, val);
+  })), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: pnlVal >= 0 ? "#0a1f0a" : "#200505",
+      borderRadius: 12,
+      padding: "14px 10px",
+      border: "2px solid " + (pnlVal >= 0 ? "#16a34a" : "#991b1b"),
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#64748b",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 2
+    }
+  }, "Session Profit"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 28,
+      fontWeight: 900,
+      color: pnlVal >= 0 ? "#4ade80" : "#f87171"
+    }
+  }, pnlVal >= 0 ? "+" : "-", cur.symbol, formatNumber(pnlVal))), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 100,
+      background: lastSpinDelta > 0 ? "#0a1f0a" : lastSpinDelta < 0 ? "#200505" : "#0f1923",
+      borderRadius: 12,
+      padding: "14px 10px",
+      border: "2px solid " + (lastSpinDelta > 0 ? "#16a34a" : lastSpinDelta < 0 ? "#991b1b" : "#2d4057"),
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#64748b",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 2
+    }
+  }, "Last Spin"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 900,
+      color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
+    }
+  }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), sess.spins.length > 0 && /*#__PURE__*/React.createElement(DroughtPanel, {
+    emDroughts: emDroughts,
+    dozD: dozD,
+    colD: colD
+  }), /*#__PURE__*/React.createElement(FieldLabel, null, "Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, nonClosedTracks.map(function (t) {
+    var tbl = computeTableForTrack(t);
+    var isEditing = editTrackId === t.id;
+    var dolPnl = t.pnl * (t.config.unit || 1);
+    var row = tbl[Math.min(t.level, tbl.length - 1)];
+    return /*#__PURE__*/React.createElement("div", {
+      key: t.id
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#0f1923",
+        borderRadius: 12,
+        padding: "10px 12px",
+        border: "2px solid " + (isEditing ? "#60a5fa" : t.color + "66")
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 4
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 10,
+        height: 10,
+        borderRadius: "50%",
+        background: t.color,
+        flexShrink: 0
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: t.color,
+        flex: 1
+      }
+    }, TRACK_ICONS[t.type], " ", t.type === "fibonacci" ? "Progression" : t.type === "custom" ? "Custom Bet" : "The Solution"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: t.state === "active" ? "#4ade80" : "#fbbf24",
+        fontWeight: 700
+      }
+    }, "[", t.state.toUpperCase(), "]"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: dolPnl >= 0 ? "#4ade80" : "#f87171"
+      }
+    }, dolPnl >= 0 ? "+" : "-", cur.symbol, formatNumber(dolPnl))), /*#__PURE__*/React.createElement(BetTargets, {
+      type: t.type,
+      config: t.config,
+      style: {
+        marginBottom: 6
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#94a3b8"
+      }
+    }, "Lvl ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: t.level >= 10 ? "#f87171" : t.level >= 6 ? "#fbbf24" : "#e2e8f0"
+      }
+    }, t.level), "/", tbl.length), row && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#60a5fa"
+      }
+    }, "Bet: ", formatChips(row.totalBet, t.config.unit, currency), "/spin"), t.type === "custom" && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#8b5cf6"
+      }
+    }, (t.config.betMode || "flat") === "flat" ? "Flat" : "Prog", " \xB7 ", (t.config.positions || []).length, " pos")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 5
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: function onClick() {
+        return parkToggle(t.id);
+      },
+      style: {
+        flex: 1,
+        padding: "4px 0",
+        borderRadius: 6,
+        border: "1px solid #2d4057",
+        background: t.state === "parked" ? "#134e2a" : "#1e2d3d",
+        color: t.state === "parked" ? "#4ade80" : "#94a3b8",
+        fontSize: 9,
+        fontWeight: 700,
+        cursor: "pointer"
+      }
+    }, t.state === "parked" ? "▶ Resume" : "⏸ Park"), /*#__PURE__*/React.createElement("button", {
+      onClick: function onClick() {
+        return setEditTrackId(isEditing ? null : t.id);
+      },
+      style: {
+        padding: "4px 8px",
+        borderRadius: 6,
+        border: "1px solid " + (isEditing ? "#60a5fa" : "#1e3a5f"),
+        background: isEditing ? "#1e3a5f" : "transparent",
+        color: "#60a5fa",
+        fontSize: 9,
+        cursor: "pointer"
+      }
+    }, "\u270F\uFE0F Edit"), /*#__PURE__*/React.createElement("button", {
+      onClick: function onClick() {
+        if (window.confirm("Close track?")) closeTrack(t.id);
+      },
+      style: {
+        padding: "4px 8px",
+        borderRadius: 6,
+        border: "1px solid #7f1d1d",
+        background: "transparent",
+        color: "#f87171",
+        fontSize: 9,
+        cursor: "pointer"
+      }
+    }, "\xD7"))), isEditing && /*#__PURE__*/React.createElement(EditTrackCfg, {
+      track: t,
+      currency: currency,
+      tableMinBet: settings.tableMinBet || 1,
+      onSave: function onSave(cfg) {
+        return updateTrackConfig(t.id, cfg);
+      },
+      onCancel: function onCancel() {
+        return setEditTrackId(null);
+      }
+    }));
+  }), !addOpen && /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      return setAddOpen(true);
+    },
+    style: {
+      padding: "10px 0",
+      borderRadius: 12,
+      border: "2px dashed #2d4057",
+      background: "transparent",
+      color: "#64748b",
+      fontSize: 13,
+      cursor: "pointer"
+    }
+  }, "+ Add Strategy"), addOpen && /*#__PURE__*/React.createElement(AddTrackPanel, {
+    onAdd: addTrack,
+    onClose: function onClose() {
+      return setAddOpen(false);
+    },
+    nextColor: nextColorIdx,
+    type: pendingTrackType,
+    cfg: pendingTrackCfg,
+    onTypeChange: function onTypeChange(t) {
+      setPendingTrackType(t);
+      setPendingTrackCfg(t === "fibonacci" ? defaultFibCfg() : defaultSolCfg());
+    },
+    onCfgChange: setPendingTrackCfg,
+    closedTracks: sess.tracks.filter(function (t) {
+      return t.state === "closed";
+    }),
+    currency: currency,
+    tableMinBet: settings.tableMinBet || 1
+  })), sess.sessionStartedAt && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: saveSession,
+    style: {
+      flex: 1,
+      padding: 11,
+      borderRadius: 10,
+      border: "none",
+      background: "#16a34a",
+      color: "white",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "Save"), /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      if (window.confirm("End session and save?")) endSession();
+    },
+    style: {
+      flex: 1,
+      padding: 11,
+      borderRadius: 10,
+      border: "1px solid #7f1d1d",
+      background: "#200505",
+      color: "#f87171",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "End Session")));
+}
+
+// ===== components/TablePage.jsx =====
+// -- Full table page --
+// Moved from App.jsx unchanged. App renders it through a wrapper that passes the App values it reads.
+function TablePageView(_ref86) {
+  var sess = _ref86.sess,
+    selectedTrackId = _ref86.selectedTrackId,
+    setSelectedTrackId = _ref86.setSelectedTrackId,
+    nonClosedTracks = _ref86.nonClosedTracks,
+    cur = _ref86.cur;
+  var selTrack = sess.tracks.find(function (t) {
+    return t.id === selectedTrackId;
+  }) || nonClosedTracks[0] || null;
+  if (!selTrack) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#1e2d3d",
+      borderRadius: 14,
+      padding: "30px 20px",
+      textAlign: "center",
+      border: "1px dashed #2d4057",
+      color: "#64748b",
+      fontSize: 13
+    }
+  }, "Add a track to see the progression table");
+  var tbl = computeTableForTrack(selTrack);
+  var hasMix = selTrack.type === "fibonacci" && (selTrack.config.dozenTargets || []).length > 0 && (selTrack.config.colTargets || []).length > 0;
+  var unit = selTrack.config.unit || 1;
+  var headers = hasMix ? ["#", "Bet", "Invested", "PW Ret", "PW Profit", "JP Ret", "JP Profit"] : ["#", "Bet", "Invested", "Return", "Profit", "ROI"];
+  var hColors = ["#94a3b8", "#60a5fa", "#f87171", "#a78bfa", "#4ade80", "#fbbf24", "#fbbf24"];
+  var gridCols = hasMix ? "22px 1fr 1fr 1fr 1fr 1fr 1fr" : "22px 1fr 1fr 1fr 1fr 1fr";
+  var legendRows = hasMix ? [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["PW Ret", "Return if 1 bet hits"], ["PW Profit", "Profit on partial win"], ["JP Ret", "Return if dozen AND column hit"], ["JP Profit", "Profit on jackpot"]] : [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["Return", "Gross payout if you win"], ["Profit", "Net profit after all invested"], ["ROI", "Profit divided by invested"]];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+      width: "100%"
+    }
+  }, nonClosedTracks.length > 1 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      overflowX: "auto",
+      paddingBottom: 4
+    }
+  }, nonClosedTracks.map(function (t) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: function onClick() {
+        return setSelectedTrackId(t.id);
+      },
+      style: {
+        padding: "7px 12px",
+        borderRadius: 9,
+        border: "2px solid " + (selectedTrackId === t.id ? t.color : "#2d4057"),
+        background: selectedTrackId === t.id ? "#0f1923" : "transparent",
+        color: selectedTrackId === t.id ? t.color : "#64748b",
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      }
+    }, TRACK_ICONS[t.type], " ", betTargetText(t.type, t.config, false, 2));
+  })), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 10,
+      height: 10,
+      borderRadius: "50%",
+      background: selTrack.color,
+      flexShrink: 0
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: selTrack.color
+    }
+  }, TRACK_ICONS[selTrack.type], " ", selTrack.type === "fibonacci" ? "Progression Bet" : selTrack.type === "custom" ? "Custom Bet" : "The Solution")), /*#__PURE__*/React.createElement(BetTargets, {
+    type: selTrack.type,
+    config: selTrack.config,
+    style: {
+      marginBottom: 4
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#64748b",
+      marginBottom: 8
+    }
+  }, selTrack.config.roi, "% ROI \xB7 ", tbl.length, " levels \xB7 ", cur.symbol, selTrack.config.stopLoss, " stop"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#0f1923",
+      borderRadius: 8,
+      padding: "8px 10px",
+      marginBottom: 8,
+      border: "1px solid #2d4057",
+      display: "flex",
+      flexDirection: "column",
+      gap: 3
+    }
+  }, legendRows.map(function (_ref87) {
+    var _ref88 = _slicedToArray(_ref87, 2),
+      abbr = _ref88[0],
+      desc = _ref88[1];
+    return /*#__PURE__*/React.createElement("div", {
+      key: abbr,
+      style: {
+        display: "flex",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        fontWeight: 800,
+        color: "#86efac",
+        minWidth: 55
+      }
+    }, abbr), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#475569"
+      }
+    }, desc));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: gridCols,
+      gap: 2,
+      marginBottom: 4
+    }
+  }, headers.map(function (c, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: c,
+      style: {
+        fontSize: 8,
+        color: hColors[i],
+        textTransform: "uppercase",
+        textAlign: i === 0 ? "center" : "right",
+        fontWeight: 700
+      }
+    }, c);
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 2,
+      maxHeight: "55vh",
+      overflowY: "auto"
+    }
+  }, tbl.map(function (r, i) {
+    var isA = i === selTrack.level,
+      isP = i < selTrack.level;
+    var pw = 3 * r.c - r.totalInvest,
+      jp = hasMix ? 6 * r.c - r.totalInvest : null;
+    var cols = hasMix ? [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (3 * r.c * unit).toFixed(cur.dec), (pw * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(pw * unit).toFixed(cur.dec), cur.symbol + (6 * r.c * unit).toFixed(cur.dec), jp !== null ? (jp * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(jp * unit).toFixed(cur.dec) : "--"] : [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (r.ret * unit).toFixed(cur.dec), (r.profit * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(r.profit * unit).toFixed(cur.dec), r.roi.toFixed(1) + "%"];
+    var rowColors = hasMix ? ["#60a5fa", "#f87171", "#a78bfa", pw >= 0 ? "#4ade80" : "#f97316", "#fbbf24", jp !== null && jp >= 0 ? "#fbbf24" : "#f87171"] : ["#60a5fa", "#f87171", "#a78bfa", r.profit >= 0 ? "#4ade80" : "#f97316", "#86efac"];
+    return /*#__PURE__*/React.createElement("div", {
+      key: r.level,
+      style: {
+        display: "grid",
+        gridTemplateColumns: gridCols,
+        gap: 2,
+        padding: "5px 4px",
+        borderRadius: 6,
+        background: isA ? "#134e2a" : isP ? "#0f1923" : "transparent",
+        border: "1px solid " + (isA ? "#4ade80" : isP ? "#1e2d3d" : "#2d4057"),
+        opacity: isP ? 0.4 : 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        fontWeight: 800,
+        fontSize: 10,
+        color: isA ? "#4ade80" : r.level >= 10 ? "#f87171" : r.level >= 6 ? "#fbbf24" : "#94a3b8"
+      }
+    }, r.level), cols.map(function (v, ci) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: ci,
+        style: {
+          textAlign: "right",
+          fontSize: 9,
+          color: rowColors[ci],
+          fontWeight: 600
+        }
+      }, v);
+    }));
+  }))));
+}
+
 // ===== App.jsx =====
 // -- Main App Component --
 function App() {
@@ -11699,58 +13162,8 @@ function App() {
   if (!settings.onboarded) {
     return /*#__PURE__*/React.createElement(OnboardingScreen, {
       initialBankroll: settings._restartBankroll,
-      onComplete: function onComplete(_ref82) {
-        var roulette = _ref82.roulette,
-          bankroll = _ref82.bankroll,
-          defaultBuyIn = _ref82.defaultBuyIn,
-          curr = _ref82.currency,
-          tableMinBet = _ref82.tableMinBet,
-          tableMaxBet = _ref82.tableMaxBet,
-          tableMaxTotal = _ref82.tableMaxTotal;
-        updApp(function (s) {
-          var prevBankroll = s.settings._restartBankroll;
-          s.settings.onboarded = true;
-          s.settings.currency = curr;
-          s.settings.defaultBuyIn = defaultBuyIn;
-          if (tableMinBet) s.settings.tableMinBet = tableMinBet;
-          if (tableMaxBet) s.settings.tableMaxBet = tableMaxBet;
-          if (tableMaxTotal) s.settings.tableMaxTotal = tableMaxTotal;
-          delete s.settings._restartBankroll;
-          if (prevBankroll !== undefined) {
-            // Restart -- adjust existing session's bankroll
-            var delta = bankroll - prevBankroll;
-            s.currentSession.roulette = roulette;
-            s.currentSession.droughts = initDroughts(roulette);
-            if (delta > 0) {
-              // Added money → Buy In
-              s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent + delta) * 100) / 100;
-              s.currentSession.totalBuyIn = (s.currentSession.totalBuyIn || 0) + delta;
-              if (!s.currentSession.buyIns) s.currentSession.buyIns = [];
-              s.currentSession.buyIns.push({
-                amount: delta,
-                at: Date.now(),
-                spin: s.currentSession.spins.length,
-                note: "onboarding restart"
-              });
-            } else if (delta < 0) {
-              // Removed money → Cash Out
-              var cashAmt = Math.abs(delta);
-              s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent - cashAmt) * 100) / 100;
-              s.currentSession.totalCashOut = (s.currentSession.totalCashOut || 0) + cashAmt;
-              if (!s.currentSession.cashOuts) s.currentSession.cashOuts = [];
-              s.currentSession.cashOuts.push({
-                amount: cashAmt,
-                at: Date.now(),
-                spin: s.currentSession.spins.length,
-                note: "onboarding restart"
-              });
-            }
-          } else {
-            // Fresh start
-            s.currentSession = newSession(roulette, bankroll);
-            s.gameSession = newSession(roulette, bankroll);
-          }
-        });
+      onComplete: function onComplete(choices) {
+        return completeOnboarding(updApp, choices);
       }
     });
   }
@@ -12220,41 +13633,6 @@ function App() {
       }]);
     });
   }
-  function autoExport(allSessions) {
-    // Keep the automatic backup on the user's filesystem. Cancelling the download never changes
-    // the saved session itself.
-    try {
-      var data = {
-        exportedAt: new Date().toISOString(),
-        autoExport: true,
-        sessions: allSessions.map(function (s) {
-          return _objectSpread(_objectSpread({}, s), {}, {
-            metrics: computeMetrics(s)
-          });
-        }),
-        aggregate: {
-          totalSessions: allSessions.length,
-          totalSpins: allSessions.reduce(function (a, s) {
-            return a + s.spins.length;
-          }, 0),
-          netPnL: allSessions.reduce(function (a, s) {
-            return a + computeMetrics(s).netPnL;
-          }, 0)
-        }
-      };
-      var blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json"
-      });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "nexus-roulette-autosave-" + new Date().toISOString().slice(0, 10) + ".json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (e) {/* silently fail if download blocked */}
-  }
   function saveSession() {
     var allSessions;
     updApp(function (s) {
@@ -12368,997 +13746,74 @@ function App() {
     return _submitFeedback.apply(this, arguments);
   }
   function exportJSON() {
-    var data = {
-      exportedAt: new Date().toISOString(),
-      sessions: saved.map(function (s) {
-        return _objectSpread(_objectSpread({}, s), {}, {
-          metrics: computeMetrics(s)
-        });
-      }),
-      aggregate: {
-        totalSessions: saved.length,
-        totalSpins: saved.reduce(function (a, s) {
-          return a + s.spins.length;
-        }, 0),
-        netPnL: saved.reduce(function (a, s) {
-          return a + computeMetrics(s).netPnL;
-        }, 0)
-      }
-    };
-    var blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json"
-    });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "nexus-roulette-export-" + Date.now() + ".json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    exportSessionsJSON(saved);
   }
   function importJSON() {
-    var input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".json,application/json";
-    input.onchange = function (e) {
-      var file = e.target.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function (ev) {
-        try {
-          var data = JSON.parse(ev.target.result);
-          // Handle session exports and older whole-app snapshot files.
-          var sessions = data.sessions || data.savedSessions || data.appState && data.appState.savedSessions || [];
-          if (!sessions.length) {
-            alert("No sessions found in file.");
-            return;
-          }
-          var added = 0,
-            skipped = 0,
-            lastAdded = null;
-          updApp(function (s) {
-            sessions.forEach(function (sess) {
-              if (!s.savedSessions.find(function (x) {
-                return x.id === sess.id;
-              })) {
-                s.savedSessions.push(sess);
-                added++;
-                lastAdded = sess;
-              } else {
-                skipped++;
-              }
-            });
-            // Load the most recent imported session as current (paused)
-            if (lastAdded) {
-              var loaded = JSON.parse(JSON.stringify(lastAdded));
-              // Always end the session - don't auto-start after import
-              if (loaded.sessionStartedAt) {
-                loaded.sessionEndedAt = loaded.modified || Date.now();
-              }
-              // Park all tracks
-              (loaded.tracks || []).forEach(function (tr) {
-                if (tr.state === "active") tr.state = "parked";
-              });
-              s.currentSession = loaded;
-            }
-          });
-          setTab(0);
-          alert("Import complete!\n".concat(added, " session").concat(added !== 1 ? "s" : "", " added").concat(skipped ? ", " + skipped + " already existed (skipped)" : "", ".\n\nLoaded \"").concat(lastAdded ? lastAdded.name : "", "\"."));
-        } catch (err) {
-          alert("Failed to parse file: " + err.message);
-        }
-      };
-      reader.readAsText(file);
-    };
-    document.body.appendChild(input);
-    input.click();
-    document.body.removeChild(input);
+    pickSessionsFile(updApp, setTab);
   }
 
-  // Compute strategy bet chips for display on roulette board
-  function computeStratChips() {
-    var chips = {};
-    function addChip(posKey, amount, color) {
-      if (!chips[posKey]) chips[posKey] = [];
-      // Merge with existing chip of same color
-      var existing = chips[posKey].find(function (c) {
-        return c.color === color;
-      });
-      if (existing) existing.amount += amount;else chips[posKey].push({
-        amount: amount,
-        color: color
-      });
-    }
-    nonClosedTracks.filter(function (t) {
-      return t.state === "active";
-    }).forEach(function (t) {
-      var tbl = computeTableForTrack(t);
-      var row = tbl[Math.min(t.level, tbl.length - 1)];
-      if (!row) return;
-      var betAmt = row.c * (t.config.unit || 1);
-      if (t.type === "fibonacci") {
-        var dts = t.config.dozenTargets || [],
-          cts = t.config.colTargets || [],
-          evts = t.config.evenTargets || [];
-        dts.forEach(function (d) {
-          addChip("dozen:" + d, betAmt, t.color);
-        });
-        cts.forEach(function (c) {
-          addChip("column:" + c, betAmt, t.color);
-        });
-        evts.forEach(function (key) {
-          addChip(key, betAmt, t.color);
-        });
-      }
-      if (t.type === "solution") {
-        (t.config.activeBets || []).forEach(function (b) {
-          var bRow = tbl[Math.min(b.level, tbl.length - 1)];
-          if (bRow) addChip("s:" + b.number, bRow.c * (t.config.unit || 1), t.color);
-        });
-      }
-      if (t.type === "custom") {
-        (t.config.positions || []).forEach(function (p) {
-          var chipAmt = p.baseAmount * row.c * (t.config.unit || 1);
-          if (isInsideBet(p.type)) {
-            // For inside bets, place chip on first number of the group
-            var nums = betCoveredNumbers(p.type, p.target);
-            if (nums.length > 0) addChip("s:" + nums[0], chipAmt, t.color);
-          } else {
-            var posKey = p.type + (p.target !== undefined ? ":" + p.target : "");
-            addChip(posKey, chipAmt, t.color);
-          }
-        });
-      }
-    });
-    return chips;
+  // Game-mode spin recording. GamePageView calls it once per spin.
+  function recordGameSpin(val, casinoWager) {
+    gameRecording.record(_objectSpread(_objectSpread({
+      segment: String(val)
+    }, casinoWager), {}, {
+      watched: casinoWager.staked === 0
+    }));
   }
 
   // -- Game Page --
+  // Declared inside App on purpose: a new component type on each render keeps the page remounting on every
+  // App render, as the inner function did before the split.
   function GamePage() {
-    var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
-    var hasActiveTracks = nonClosedTracks.some(function (t) {
-      return t.state === "active";
-    });
-    var tMin = settings.tableMinBet || 1;
-    var CHIPS = CHIP_DENOMS.filter(function (c) {
-      return c.val >= tMin;
-    });
-    var totalBetAmt = manualBets.reduce(function (s, b) {
-      return s + b.amount;
-    }, 0);
-    var canSpin = manualBets.length > 0 || hasActiveTracks;
-    function cancelPendingClear() {
-      if (clearTimerRef.current) {
-        clearTimeout(clearTimerRef.current);
-        clearTimerRef.current = null;
-      }
-      if (betResults) {
-        setBetResults(null);
-        setManualBets([]);
-      }
-    }
-    function placeBet(type, target) {
-      if (gameSpinning) return;
-      if (betResults) cancelPendingClear();
-      setManualBets(function (prev) {
-        return [].concat(_toConsumableArray(prev), [{
-          id: Date.now() + Math.random(),
-          type: type,
-          target: target,
-          amount: selectedChip
-        }]);
-      });
-      setUndoStack(function (prev) {
-        return [].concat(_toConsumableArray(prev), [1]);
-      });
-      if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(10);
-    }
-    function undoBet() {
-      if (betResults) return;
-      setUndoStack(function (prev) {
-        if (prev.length === 0) return prev;
-        var count = prev[prev.length - 1];
-        setManualBets(function (mb) {
-          return mb.slice(0, -count);
-        });
-        return prev.slice(0, -1);
-      });
-    }
-    function clearBets() {
-      setManualBets([]);
-      setUndoStack([]);
-    }
-    function doubleBets() {
-      if (betResults) return;
-      setManualBets(function (prev) {
-        var doubled = prev.map(function (b) {
-          return _objectSpread(_objectSpread({}, b), {}, {
-            id: Date.now() + Math.random()
-          });
-        });
-        setUndoStack(function (us) {
-          return [].concat(_toConsumableArray(us), [prev.length]);
-        });
-        return [].concat(_toConsumableArray(prev), _toConsumableArray(doubled));
-      });
-    }
-    function repeatBets() {
-      if (lastBets.length === 0) return;
-      cancelPendingClear();
-      var repeated = lastBets.map(function (b) {
-        return _objectSpread(_objectSpread({}, b), {}, {
-          id: Date.now() + Math.random()
-        });
-      });
-      setManualBets(repeated);
-      setUndoStack([repeated.length]);
-    }
-
-    // Aggregate bets by position for display
-    var boardBets = {};
-    manualBets.forEach(function (b) {
-      var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-      boardBets[key] = (boardBets[key] || 0) + b.amount;
-    });
-    function resolveManualBets(winVal) {
-      var totalWin = 0,
-        totalBet = 0,
-        posResults = {};
-      manualBets.forEach(function (b) {
-        totalBet += b.amount;
-        var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-        var covered = betCoveredNumbers(b.type, b.target);
-        var won = covered.indexOf(winVal) >= 0;
-        if (won) {
-          totalWin += b.amount * betPayoutMult(b.type);
-          posResults[posKey] = "won";
-        } else {
-          if (!posResults[posKey]) posResults[posKey] = "lost";
-        }
-      });
-      return {
-        totalWin: totalWin,
-        totalBet: totalBet,
-        profit: totalWin - totalBet,
-        posResults: posResults
-      };
-    }
-    function doGameSpin() {
-      if (gameSpinning || betResults) return;
-      setGameSpinning(true);
-      setAnimNumber(null);
-      if (!sess.sessionStartedAt) updSess(function (s) {
-        s.sessionStartedAt = Date.now();
-      });
-      var nums = wheelNums;
-      var spinBets = _toConsumableArray(manualBets);
-      var ticks = 0;
-      var iv = setInterval(function () {
-        ticks++;
-        // Only update the animation display number, NOT gameResult
-        setAnimNumber(nums[Math.floor(Math.random() * nums.length)]);
-        if (ticks >= 15) {
-          clearInterval(iv);
-          var val = nums[Math.floor(Math.random() * nums.length)];
-          var casinoWager = mergeWagerSummaries(summarizeTrackWagers(sess.tracks, val), summarizeManualWagers(spinBets, val));
-          setAnimNumber(null);
-          setGameResult(val); // final result - board highlights winning number
-          if (hasActiveTracks) tapNumber(val, true, true);else {
-            updSess(function (s) {
-              s.spins.push(val);
-              var nd = _objectSpread({}, s.droughts);
-              Object.keys(nd).forEach(function (k) {
-                return nd[k]++;
-              });
-              nd[val] = 0;
-              s.droughts = nd;
-            });
-          }
-          if (spinBets.length > 0) {
-            var totalWin = 0,
-              totalBet = 0,
-              posResults = {};
-            spinBets.forEach(function (b) {
-              totalBet += b.amount;
-              var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-              var covered = betCoveredNumbers(b.type, b.target);
-              if (covered.indexOf(val) >= 0) {
-                totalWin += b.amount * betPayoutMult(b.type);
-                posResults[posKey] = "won";
-              } else {
-                if (!posResults[posKey]) posResults[posKey] = "lost";
-              }
-            });
-            var profit = totalWin - totalBet;
-            updSess(function (s) {
-              s.bankrollCurrent = Math.round((s.bankrollCurrent + profit) * 100) / 100;
-            });
-            if (hasActiveTracks) setLastSpinDelta(function (prev) {
-              return (prev || 0) + profit;
-            });else setLastSpinDelta(profit);
-            setBetResults(posResults);
-            setLastBets(_toConsumableArray(spinBets));
-            setUndoStack([]);
-            clearTimerRef.current = setTimeout(function () {
-              setBetResults(null);
-              setManualBets([]);
-              clearTimerRef.current = null;
-            }, 3000);
-          }
-          gameRecording.record(_objectSpread(_objectSpread({
-            segment: String(val)
-          }, casinoWager), {}, {
-            watched: casinoWager.staked === 0
-          }));
-          if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(30);
-          setGameSpinning(false);
-        }
-      }, 70);
-    }
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        width: "100%"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        alignItems: "center"
-      }
-    }, function () {
-      var displayNum = gameSpinning ? animNumber : gameResult;
-      if (!displayNum) return /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 48,
-          height: 48,
-          borderRadius: "50%",
-          background: "#1e2d3d",
-          border: "3px solid #2d4057",
-          fontSize: 12,
-          fontWeight: 700,
-          color: "#64748b",
-          flexShrink: 0
-        }
-      }, "--");
-      var isZ = displayNum === "0" || displayNum === "00";
-      var r = !isZ && RED.has(+displayNum);
-      return /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 48,
-          height: 48,
-          borderRadius: "50%",
-          background: isZ ? "#166534" : r ? "#991b1b" : "#1e293b",
-          border: "3px solid " + (isZ ? "#4ade80" : r ? "#f87171" : "#64748b"),
-          fontSize: 20,
-          fontWeight: 900,
-          color: "white",
-          animation: gameSpinning ? "pulse 0.15s infinite" : "none",
-          flexShrink: 0
-        }
-      }, displayNum);
-    }(), /*#__PURE__*/React.createElement("button", {
-      onClick: doGameSpin,
-      disabled: gameSpinning || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "12px 0" : "12px 0",
-        borderRadius: 10,
-        border: "none",
-        background: gameSpinning || betResults ? "#374151" : "linear-gradient(135deg,#16a34a,#059669)",
-        color: "white",
-        fontSize: isLandscape ? 15 : 16,
-        fontWeight: 900,
-        cursor: gameSpinning || betResults ? "not-allowed" : "pointer",
-        opacity: gameSpinning ? 0.7 : 1
-      }
-    }, gameSpinning ? "Spinning..." : "🎰 SPIN"), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        flexShrink: 0,
-        minWidth: 55
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 7,
-        color: "#64748b",
-        textTransform: "uppercase"
-      }
-    }, "Last"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 14,
-        fontWeight: 900,
-        color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
-      }
-    }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), function () {
-      var stratBets = {};
-      nonClosedTracks.filter(function (t) {
-        return t.state === "active";
-      }).forEach(function (t) {
-        if (t.type === "fibonacci") {
-          var dts = t.config.dozenTargets || [],
-            cts = t.config.colTargets || [],
-            evts = t.config.evenTargets || [];
-          dts.forEach(function (d) {
-            stratBets["dozen:" + d] = t.color;
-          });
-          cts.forEach(function (c) {
-            stratBets["column:" + c] = t.color;
-          });
-          evts.forEach(function (key) {
-            stratBets[key] = t.color;
-          });
-        }
-        if (t.type === "solution") {
-          (t.config.activeBets || []).forEach(function (b) {
-            if (!stratBets["s:" + b.number]) stratBets["s:" + b.number] = t.color;
-          });
-        }
-        if (t.type === "custom") {
-          (t.config.positions || []).forEach(function (p) {
-            var pk = p.type === "straight" ? "s:" + p.target : p.type + (p.target !== undefined ? ":" + p.target : "");
-            if (!stratBets[pk]) stratBets[pk] = t.color;
-          });
-        }
-      });
-      return /*#__PURE__*/React.createElement(RouletteBoard, {
-        roulette: sess.roulette,
-        winningNumber: gameSpinning ? null : gameResult,
-        stratBets: stratBets,
-        spinning: false,
-        onBet: placeBet,
-        boardBets: boardBets,
-        chipColor: (CHIPS.find(function (c) {
-          return c.val === selectedChip;
-        }) || CHIPS[0]).color,
-        betResults: betResults,
-        stratChips: computeStratChips(),
-        landscape: isLandscape
-      });
-    }(), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: isLandscape ? 6 : 3,
-        justifyContent: "center",
-        flexWrap: "wrap"
-      }
-    }, CHIPS.map(function (c) {
-      return /*#__PURE__*/React.createElement("button", {
-        key: c.val,
-        onClick: function onClick() {
-          return setSelectedChip(c.val);
-        },
-        style: {
-          width: isLandscape ? 38 : 34,
-          height: isLandscape ? 38 : 34,
-          borderRadius: "50%",
-          border: (isLandscape ? "3" : "2") + "px solid " + (selectedChip === c.val ? "#fbbf24" : c.border),
-          background: c.color,
-          color: c.val >= 100 ? "#fff" : c.val <= 0.5 ? "#1e293b" : "#1e293b",
-          fontSize: isLandscape ? c.val < 1 ? 9 : 11 : c.val < 1 ? 7 : 8,
-          fontWeight: 900,
-          cursor: "pointer",
-          boxShadow: selectedChip === c.val ? "0 0 8px #fbbf24" : "none",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, c.label);
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: isLandscape ? 6 : 3
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: undoBet,
-      disabled: manualBets.length === 0 || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: manualBets.length > 0 && !betResults ? "#60a5fa" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "\u21A9Undo"), /*#__PURE__*/React.createElement("button", {
-      onClick: clearBets,
-      disabled: manualBets.length === 0 || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: manualBets.length > 0 && !betResults ? "#f87171" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "\u2715Clear"), /*#__PURE__*/React.createElement("button", {
-      onClick: doubleBets,
-      disabled: manualBets.length === 0 || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: manualBets.length > 0 && !betResults ? "#fbbf24" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "2\xD7"), /*#__PURE__*/React.createElement("button", {
-      onClick: repeatBets,
-      disabled: lastBets.length === 0,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: lastBets.length > 0 ? "#86efac" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "\u267BRpt")), totalBetAmt > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        fontSize: 10,
-        fontWeight: 800,
-        color: "#fbbf24"
-      }
-    }, "Bet: ", cur.symbol, formatNumber(totalBetAmt)), totalBetAmt > 0 && !betResults && /*#__PURE__*/React.createElement("button", {
-      onClick: function onClick() {
-        var posMap = {};
-        manualBets.forEach(function (b) {
-          var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-          if (!posMap[key]) posMap[key] = {
-            type: b.type,
-            target: b.target,
-            baseAmount: 0
-          };
-          posMap[key].baseAmount += b.amount;
-        });
-        var positions = Object.values(posMap);
-        var hasInside = positions.some(function (p) {
-          return isInsideBet(p.type);
-        });
-        if (!hasInside) {
-          var dts = [],
-            cts = [],
-            evts = [];
-          positions.forEach(function (p) {
-            if (p.type === "dozen") dts.push(p.target);else if (p.type === "column") cts.push(p.target);else evts.push(p.type);
-          });
-          var cfg = defaultFibCfg();
-          cfg.betMode = "flat";
-          cfg.dozenTargets = dts;
-          cfg.colTargets = cts;
-          cfg.evenTargets = evts;
-          updSess(function (s) {
-            s.tracks.push(newTrack("fibonacci", s.tracks.length, cfg, pickTrackColor("fibonacci", cfg, s.tracks)));
-          });
-        } else {
-          var cfg = {
-            type: "custom",
-            unit: 1,
-            roi: 15,
-            betMode: "flat",
-            stopLoss: 200,
-            positions: positions
-          };
-          updSess(function (s) {
-            s.tracks.push({
-              id: generateId(),
-              type: "custom",
-              color: pickTrackColor("custom", cfg, s.tracks),
-              state: "active",
-              config: cfg,
-              level: 0,
-              pnl: 0,
-              bets: [],
-              createdAtSpin: s.spins.length,
-              closedAtSpin: null,
-              wins: 0,
-              sequences: 0
-            });
-          });
-        }
-        clearBets();
-        if (settings.vibration !== false && navigator.vibrate) navigator.vibrate([20, 10, 20]);
-      },
-      style: {
-        width: "100%",
-        padding: "8px 0",
-        borderRadius: 8,
-        border: "2px dashed #7c3aed",
-        background: "#1e1040",
-        color: "#c4b5fd",
-        fontSize: 11,
-        fontWeight: 700,
-        cursor: "pointer"
-      }
-    }, "\uD83C\uDCCF Create Strategy from Bets"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        fontSize: 8,
-        color: "#374151"
-      }
-    }, "center=straight \xB7 edge=split \xB7 corner=corner"), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4,
-        overflowX: "auto",
-        paddingBottom: 2,
-        WebkitOverflowScrolling: "touch",
-        width: "100%",
-        maxWidth: "100%",
-        minWidth: 0,
-        boxSizing: "border-box"
-      }
-    }, recentSpins.map(function (val, i) {
-      var isZ = val === "0" || val === "00",
-        r = !isZ && RED.has(+val);
-      return /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          flexShrink: 0,
-          width: 28,
-          height: 28,
-          borderRadius: 6,
-          background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
-          border: "2px solid " + (i === 0 ? "#ffffff" : isZ ? "#22c55e" : r ? "#ef4444" : "#374151"),
-          color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
-          fontSize: 10,
-          fontWeight: 800,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, val);
-    })), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        width: "100%"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        background: pnlVal >= 0 ? "#0a1f0a" : "#200505",
-        borderRadius: 12,
-        padding: "14px 10px",
-        border: "2px solid " + (pnlVal >= 0 ? "#16a34a" : "#991b1b"),
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#64748b",
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 2
-      }
-    }, "Session Profit"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 28,
-        fontWeight: 900,
-        color: pnlVal >= 0 ? "#4ade80" : "#f87171"
-      }
-    }, pnlVal >= 0 ? "+" : "-", cur.symbol, formatNumber(pnlVal))), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 100,
-        background: lastSpinDelta > 0 ? "#0a1f0a" : lastSpinDelta < 0 ? "#200505" : "#0f1923",
-        borderRadius: 12,
-        padding: "14px 10px",
-        border: "2px solid " + (lastSpinDelta > 0 ? "#16a34a" : lastSpinDelta < 0 ? "#991b1b" : "#2d4057"),
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#64748b",
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 2
-      }
-    }, "Last Spin"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 900,
-        color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
-      }
-    }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "repeat(6,1fr)",
-        gap: 3
-      }
-    }, emDroughts.map(function (em) {
-      return /*#__PURE__*/React.createElement("div", {
-        key: em.key,
-        style: {
-          borderRadius: 7,
-          border: "1px solid " + (em.drought >= 8 ? "#dc2626" : em.drought >= 5 ? "#f59e0b" : "#2d4057"),
-          background: em.drought >= 8 ? "#200505" : em.drought >= 5 ? "#1c1000" : "#0f1923",
-          padding: "6px 2px",
-          textAlign: "center"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: em.color,
-          fontWeight: 700,
-          textTransform: "uppercase"
-        }
-      }, em.label), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 15,
-          fontWeight: 800,
-          color: em.drought >= 8 ? "#f87171" : em.drought >= 5 ? "#fbbf24" : "#94a3b8"
-        }
-      }, em.drought));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        borderTop: "1px solid #2d4057",
-        marginTop: 2,
-        paddingTop: 6,
-        display: "flex",
-        flexDirection: "column",
-        gap: 4
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "d" + i,
-        label: DOZEN_LABELS[i],
-        range: DOZEN_RANGES[i],
-        drought: dozD[i],
-        colorBd: DOZEN_BORDERS[i],
-        colorTx: DOZEN_TEXTS[i]
-      });
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "c" + i,
-        label: COLUMN_LABELS[i],
-        range: COLUMN_RANGES[i],
-        drought: colD[i],
-        colorBd: COLUMN_BORDERS[i],
-        colorTx: COLUMN_TEXTS[i]
-      });
-    })))), /*#__PURE__*/React.createElement(FieldLabel, null, "Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
-      }
-    }, nonClosedTracks.map(function (t) {
-      var tbl = computeTableForTrack(t);
-      var isEditing = editTrackId === t.id;
-      var dolPnl = t.pnl * (t.config.unit || 1);
-      var row = tbl[Math.min(t.level, tbl.length - 1)];
-      return /*#__PURE__*/React.createElement("div", {
-        key: t.id
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          background: "#0f1923",
-          borderRadius: 12,
-          padding: "10px 12px",
-          border: "2px solid " + (isEditing ? "#60a5fa" : t.color + "66")
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          marginBottom: 4
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          background: t.color,
-          flexShrink: 0
-        }
-      }), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11,
-          fontWeight: 700,
-          color: t.color,
-          flex: 1
-        }
-      }, TRACK_ICONS[t.type], " ", t.type === "fibonacci" ? "Progression" : t.type === "custom" ? "Custom Bet" : "The Solution"), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: t.state === "active" ? "#4ade80" : "#fbbf24",
-          fontWeight: 700
-        }
-      }, "[", t.state.toUpperCase(), "]"), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 12,
-          fontWeight: 800,
-          color: dolPnl >= 0 ? "#4ade80" : "#f87171"
-        }
-      }, dolPnl >= 0 ? "+" : "-", cur.symbol, formatNumber(dolPnl))), /*#__PURE__*/React.createElement(BetTargets, {
-        type: t.type,
-        config: t.config,
-        style: {
-          marginBottom: 6
-        }
-      }), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 8,
-          marginBottom: 6
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          color: "#94a3b8"
-        }
-      }, "Lvl ", /*#__PURE__*/React.createElement("strong", {
-        style: {
-          color: t.level >= 10 ? "#f87171" : t.level >= 6 ? "#fbbf24" : "#e2e8f0"
-        }
-      }, t.level), "/", tbl.length), row && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          color: "#60a5fa"
-        }
-      }, "Bet: ", formatChips(row.totalBet, t.config.unit, currency), "/spin"), t.type === "custom" && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: "#8b5cf6"
-        }
-      }, (t.config.betMode || "flat") === "flat" ? "Flat" : "Prog", " \xB7 ", (t.config.positions || []).length, " pos")), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 5
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: function onClick() {
-          return parkToggle(t.id);
-        },
-        style: {
-          flex: 1,
-          padding: "4px 0",
-          borderRadius: 6,
-          border: "1px solid #2d4057",
-          background: t.state === "parked" ? "#134e2a" : "#1e2d3d",
-          color: t.state === "parked" ? "#4ade80" : "#94a3b8",
-          fontSize: 9,
-          fontWeight: 700,
-          cursor: "pointer"
-        }
-      }, t.state === "parked" ? "▶ Resume" : "⏸ Park"), /*#__PURE__*/React.createElement("button", {
-        onClick: function onClick() {
-          return setEditTrackId(isEditing ? null : t.id);
-        },
-        style: {
-          padding: "4px 8px",
-          borderRadius: 6,
-          border: "1px solid " + (isEditing ? "#60a5fa" : "#1e3a5f"),
-          background: isEditing ? "#1e3a5f" : "transparent",
-          color: "#60a5fa",
-          fontSize: 9,
-          cursor: "pointer"
-        }
-      }, "\u270F\uFE0F Edit"), /*#__PURE__*/React.createElement("button", {
-        onClick: function onClick() {
-          if (window.confirm("Close track?")) closeTrack(t.id);
-        },
-        style: {
-          padding: "4px 8px",
-          borderRadius: 6,
-          border: "1px solid #7f1d1d",
-          background: "transparent",
-          color: "#f87171",
-          fontSize: 9,
-          cursor: "pointer"
-        }
-      }, "\xD7"))), isEditing && /*#__PURE__*/React.createElement(EditTrackCfg, {
-        track: t,
-        currency: currency,
-        tableMinBet: settings.tableMinBet || 1,
-        onSave: function onSave(cfg) {
-          return updateTrackConfig(t.id, cfg);
-        },
-        onCancel: function onCancel() {
-          return setEditTrackId(null);
-        }
-      }));
-    }), !addOpen && /*#__PURE__*/React.createElement("button", {
-      onClick: function onClick() {
-        return setAddOpen(true);
-      },
-      style: {
-        padding: "10px 0",
-        borderRadius: 12,
-        border: "2px dashed #2d4057",
-        background: "transparent",
-        color: "#64748b",
-        fontSize: 13,
-        cursor: "pointer"
-      }
-    }, "+ Add Strategy"), addOpen && /*#__PURE__*/React.createElement(AddTrackPanel, {
-      onAdd: addTrack,
-      onClose: function onClose() {
-        return setAddOpen(false);
-      },
-      nextColor: nextColorIdx,
-      type: pendingTrackType,
-      cfg: pendingTrackCfg,
-      onTypeChange: function onTypeChange(t) {
-        setPendingTrackType(t);
-        setPendingTrackCfg(t === "fibonacci" ? defaultFibCfg() : defaultSolCfg());
-      },
-      onCfgChange: setPendingTrackCfg,
-      closedTracks: sess.tracks.filter(function (t) {
-        return t.state === "closed";
-      }),
+    return /*#__PURE__*/React.createElement(GamePageView, {
+      addOpen: addOpen,
+      addTrack: addTrack,
+      animNumber: animNumber,
+      betResults: betResults,
+      clearTimerRef: clearTimerRef,
+      closeTrack: closeTrack,
+      colD: colD,
+      cur: cur,
       currency: currency,
-      tableMinBet: settings.tableMinBet || 1
-    })), sess.sessionStartedAt && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        marginTop: 4
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: saveSession,
-      style: {
-        flex: 1,
-        padding: 11,
-        borderRadius: 10,
-        border: "none",
-        background: "#16a34a",
-        color: "white",
-        fontSize: 13,
-        fontWeight: 700,
-        cursor: "pointer"
-      }
-    }, "Save"), /*#__PURE__*/React.createElement("button", {
-      onClick: function onClick() {
-        if (window.confirm("End session and save?")) endSession();
-      },
-      style: {
-        flex: 1,
-        padding: 11,
-        borderRadius: 10,
-        border: "1px solid #7f1d1d",
-        background: "#200505",
-        color: "#f87171",
-        fontSize: 13,
-        fontWeight: 700,
-        cursor: "pointer"
-      }
-    }, "End Session")));
+      dozD: dozD,
+      editTrackId: editTrackId,
+      emDroughts: emDroughts,
+      endSession: endSession,
+      recordGameSpin: recordGameSpin,
+      gameResult: gameResult,
+      gameSpinning: gameSpinning,
+      isLandscape: isLandscape,
+      lastBets: lastBets,
+      lastSpinDelta: lastSpinDelta,
+      manualBets: manualBets,
+      nextColorIdx: nextColorIdx,
+      nonClosedTracks: nonClosedTracks,
+      parkToggle: parkToggle,
+      pendingTrackCfg: pendingTrackCfg,
+      pendingTrackType: pendingTrackType,
+      pnlVal: pnlVal,
+      saveSession: saveSession,
+      selectedChip: selectedChip,
+      sess: sess,
+      setAddOpen: setAddOpen,
+      setAnimNumber: setAnimNumber,
+      setBetResults: setBetResults,
+      setEditTrackId: setEditTrackId,
+      setGameResult: setGameResult,
+      setGameSpinning: setGameSpinning,
+      setLastBets: setLastBets,
+      setLastSpinDelta: setLastSpinDelta,
+      setManualBets: setManualBets,
+      setPendingTrackCfg: setPendingTrackCfg,
+      setPendingTrackType: setPendingTrackType,
+      setSelectedChip: setSelectedChip,
+      setUndoStack: setUndoStack,
+      settings: settings,
+      tapNumber: tapNumber,
+      updSess: updSess,
+      updateTrackConfig: updateTrackConfig,
+      wheelNums: wheelNums
+    });
   }
 
   // -- Tracker Page --
@@ -13682,7 +14137,7 @@ function App() {
           return c.val === selectedChip;
         }) || CHIPS[0]).color,
         betResults: liveBetResults,
-        stratChips: computeStratChips(),
+        stratChips: computeStratChips(nonClosedTracks),
         landscape: isLandscape
       }), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -13785,80 +14240,11 @@ function App() {
           color: "#374151"
         }
       }, "center=straight \xB7 edge=split \xB7 corner=corner"));
-    }(), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "repeat(6,1fr)",
-        gap: 3
-      }
-    }, emDroughts.map(function (em) {
-      return /*#__PURE__*/React.createElement("div", {
-        key: em.key,
-        style: {
-          borderRadius: 7,
-          border: "1px solid " + (em.drought >= 8 ? "#dc2626" : em.drought >= 5 ? "#f59e0b" : "#2d4057"),
-          background: em.drought >= 8 ? "#200505" : em.drought >= 5 ? "#1c1000" : "#0f1923",
-          padding: "6px 2px",
-          textAlign: "center"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: em.color,
-          fontWeight: 700,
-          textTransform: "uppercase"
-        }
-      }, em.label), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 15,
-          fontWeight: 800,
-          color: em.drought >= 8 ? "#f87171" : em.drought >= 5 ? "#fbbf24" : "#94a3b8"
-        }
-      }, em.drought));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        borderTop: "1px solid #2d4057",
-        marginTop: 2,
-        paddingTop: 6,
-        display: "flex",
-        flexDirection: "column",
-        gap: 4
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "d" + i,
-        label: DOZEN_LABELS[i],
-        range: DOZEN_RANGES[i],
-        drought: dozD[i],
-        colorBd: DOZEN_BORDERS[i],
-        colorTx: DOZEN_TEXTS[i]
-      });
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "c" + i,
-        label: COLUMN_LABELS[i],
-        range: COLUMN_RANGES[i],
-        drought: colD[i],
-        colorBd: COLUMN_BORDERS[i],
-        colorTx: COLUMN_TEXTS[i]
-      });
-    })))), /*#__PURE__*/React.createElement(FieldLabel, null, "Active Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
+    }(), sess.spins.length > 0 && /*#__PURE__*/React.createElement(DroughtPanel, {
+      emDroughts: emDroughts,
+      dozD: dozD,
+      colD: colD
+    }), /*#__PURE__*/React.createElement(FieldLabel, null, "Active Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -14192,10 +14578,10 @@ function App() {
       l: "JP Profit",
       v: (outcomes.jackpot.profit * (primaryTrack.config.unit || 1) >= 0 ? "+" : "-") + cur.symbol + Math.abs(outcomes.jackpot.profit * (primaryTrack.config.unit || 1)).toFixed(cur.dec),
       c: outcomes.jackpot.profit >= 0 ? "#4ade80" : "#f87171"
-    }].map(function (_ref83) {
-      var l = _ref83.l,
-        v = _ref83.v,
-        c = _ref83.c;
+    }].map(function (_ref89) {
+      var l = _ref89.l,
+        v = _ref89.v,
+        c = _ref89.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -14277,10 +14663,10 @@ function App() {
       l: "Partial Profit",
       v: outcomes ? signChips(outcomes.partial.profit, primaryTrack.config.unit || 1, currency) : "--",
       c: outcomes && outcomes.partial.profit >= 0 ? "#4ade80" : "#f97316"
-    }].map(function (_ref84) {
-      var l = _ref84.l,
-        v = _ref84.v,
-        c = _ref84.c;
+    }].map(function (_ref90) {
+      var l = _ref90.l,
+        v = _ref90.v,
+        c = _ref90.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -14510,199 +14896,22 @@ function App() {
       }), TRACK_ICONS[t.type], " ", betTargetText(t.type, t.config, false, 2), " \xB7 Lvl ", t.level);
     }))));
   }
+  // Declared inside App for the same reason as GamePage.
   function TablePage() {
-    var selTrack = sess.tracks.find(function (t) {
-      return t.id === selectedTrackId;
-    }) || nonClosedTracks[0] || null;
-    if (!selTrack) return /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#1e2d3d",
-        borderRadius: 14,
-        padding: "30px 20px",
-        textAlign: "center",
-        border: "1px dashed #2d4057",
-        color: "#64748b",
-        fontSize: 13
-      }
-    }, "Add a track to see the progression table");
-    var tbl = computeTableForTrack(selTrack);
-    var hasMix = selTrack.type === "fibonacci" && (selTrack.config.dozenTargets || []).length > 0 && (selTrack.config.colTargets || []).length > 0;
-    var unit = selTrack.config.unit || 1;
-    var headers = hasMix ? ["#", "Bet", "Invested", "PW Ret", "PW Profit", "JP Ret", "JP Profit"] : ["#", "Bet", "Invested", "Return", "Profit", "ROI"];
-    var hColors = ["#94a3b8", "#60a5fa", "#f87171", "#a78bfa", "#4ade80", "#fbbf24", "#fbbf24"];
-    var gridCols = hasMix ? "22px 1fr 1fr 1fr 1fr 1fr 1fr" : "22px 1fr 1fr 1fr 1fr 1fr";
-    var legendRows = hasMix ? [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["PW Ret", "Return if 1 bet hits"], ["PW Profit", "Profit on partial win"], ["JP Ret", "Return if dozen AND column hit"], ["JP Profit", "Profit on jackpot"]] : [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["Return", "Gross payout if you win"], ["Profit", "Net profit after all invested"], ["ROI", "Profit divided by invested"]];
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        width: "100%"
-      }
-    }, nonClosedTracks.length > 1 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 6,
-        overflowX: "auto",
-        paddingBottom: 4
-      }
-    }, nonClosedTracks.map(function (t) {
-      return /*#__PURE__*/React.createElement("button", {
-        key: t.id,
-        onClick: function onClick() {
-          return setSelectedTrackId(t.id);
-        },
-        style: {
-          padding: "7px 12px",
-          borderRadius: 9,
-          border: "2px solid " + (selectedTrackId === t.id ? t.color : "#2d4057"),
-          background: selectedTrackId === t.id ? "#0f1923" : "transparent",
-          color: selectedTrackId === t.id ? t.color : "#64748b",
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-          flexShrink: 0
-        }
-      }, TRACK_ICONS[t.type], " ", betTargetText(t.type, t.config, false, 2));
-    })), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        marginBottom: 4
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 10,
-        height: 10,
-        borderRadius: "50%",
-        background: selTrack.color,
-        flexShrink: 0
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        fontWeight: 700,
-        color: selTrack.color
-      }
-    }, TRACK_ICONS[selTrack.type], " ", selTrack.type === "fibonacci" ? "Progression Bet" : selTrack.type === "custom" ? "Custom Bet" : "The Solution")), /*#__PURE__*/React.createElement(BetTargets, {
-      type: selTrack.type,
-      config: selTrack.config,
-      style: {
-        marginBottom: 4
-      }
-    }), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#64748b",
-        marginBottom: 8
-      }
-    }, selTrack.config.roi, "% ROI \xB7 ", tbl.length, " levels \xB7 ", cur.symbol, selTrack.config.stopLoss, " stop"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#0f1923",
-        borderRadius: 8,
-        padding: "8px 10px",
-        marginBottom: 8,
-        border: "1px solid #2d4057",
-        display: "flex",
-        flexDirection: "column",
-        gap: 3
-      }
-    }, legendRows.map(function (_ref85) {
-      var _ref86 = _slicedToArray(_ref85, 2),
-        abbr = _ref86[0],
-        desc = _ref86[1];
-      return /*#__PURE__*/React.createElement("div", {
-        key: abbr,
-        style: {
-          display: "flex",
-          gap: 6
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          fontWeight: 800,
-          color: "#86efac",
-          minWidth: 55
-        }
-      }, abbr), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: "#475569"
-        }
-      }, desc));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: gridCols,
-        gap: 2,
-        marginBottom: 4
-      }
-    }, headers.map(function (c, i) {
-      return /*#__PURE__*/React.createElement("div", {
-        key: c,
-        style: {
-          fontSize: 8,
-          color: hColors[i],
-          textTransform: "uppercase",
-          textAlign: i === 0 ? "center" : "right",
-          fontWeight: 700
-        }
-      }, c);
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 2,
-        maxHeight: "55vh",
-        overflowY: "auto"
-      }
-    }, tbl.map(function (r, i) {
-      var isA = i === selTrack.level,
-        isP = i < selTrack.level;
-      var pw = 3 * r.c - r.totalInvest,
-        jp = hasMix ? 6 * r.c - r.totalInvest : null;
-      var cols = hasMix ? [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (3 * r.c * unit).toFixed(cur.dec), (pw * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(pw * unit).toFixed(cur.dec), cur.symbol + (6 * r.c * unit).toFixed(cur.dec), jp !== null ? (jp * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(jp * unit).toFixed(cur.dec) : "--"] : [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (r.ret * unit).toFixed(cur.dec), (r.profit * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(r.profit * unit).toFixed(cur.dec), r.roi.toFixed(1) + "%"];
-      var rowColors = hasMix ? ["#60a5fa", "#f87171", "#a78bfa", pw >= 0 ? "#4ade80" : "#f97316", "#fbbf24", jp !== null && jp >= 0 ? "#fbbf24" : "#f87171"] : ["#60a5fa", "#f87171", "#a78bfa", r.profit >= 0 ? "#4ade80" : "#f97316", "#86efac"];
-      return /*#__PURE__*/React.createElement("div", {
-        key: r.level,
-        style: {
-          display: "grid",
-          gridTemplateColumns: gridCols,
-          gap: 2,
-          padding: "5px 4px",
-          borderRadius: 6,
-          background: isA ? "#134e2a" : isP ? "#0f1923" : "transparent",
-          border: "1px solid " + (isA ? "#4ade80" : isP ? "#1e2d3d" : "#2d4057"),
-          opacity: isP ? 0.4 : 1
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          textAlign: "center",
-          fontWeight: 800,
-          fontSize: 10,
-          color: isA ? "#4ade80" : r.level >= 10 ? "#f87171" : r.level >= 6 ? "#fbbf24" : "#94a3b8"
-        }
-      }, r.level), cols.map(function (v, ci) {
-        return /*#__PURE__*/React.createElement("div", {
-          key: ci,
-          style: {
-            textAlign: "right",
-            fontSize: 9,
-            color: rowColors[ci],
-            fontWeight: 600
-          }
-        }, v);
-      }));
-    }))));
+    return /*#__PURE__*/React.createElement(TablePageView, {
+      sess: sess,
+      selectedTrackId: selectedTrackId,
+      setSelectedTrackId: setSelectedTrackId,
+      nonClosedTracks: nonClosedTracks,
+      cur: cur
+    });
   }
 
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
 
   // -- Bankroll Edit --
-  function BankrollEdit(_ref87) {
-    var onClose = _ref87.onClose;
+  function BankrollEdit(_ref91) {
+    var onClose = _ref91.onClose;
     var _useState165 = (0, _react.useState)(sess.bankrollCurrent),
       _useState166 = _slicedToArray(_useState165, 2),
       val = _useState166[0],
@@ -14969,91 +15178,10 @@ function App() {
       fontWeight: 700,
       cursor: "pointer"
     }
-  }, "Dismiss")), updateAvailable && /*#__PURE__*/React.createElement("button", {
-    onClick: function onClick() {
-      saveApp(appState);
-      // Ask the worker to check for a new sw.js, then reload. Deliberately NOT
-      // a cache purge: the worker is versioned, so the new one installs under a
-      // new cache name and retires the old one only after its required shell is
-      // cached. Purging first left a client that lost connectivity mid-update
-      // with no cache at all — and the old code purged the whole ORIGIN,
-      // unregistering every other app hosted here.
-      // Reload only once the new worker is ACTIVATED. update() resolves at
-      // "installing", before the new cache is populated, so reloading on it can
-      // land a cache-busted URL on the OLD worker with nothing cached under that
-      // query. On failure we stay on this page — it still works — rather than
-      // navigating somewhere that may not resolve offline.
-      var go = function go() {
-        window.location.href = window.location.pathname + "?update=" + Date.now();
-      };
-      if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistration) {
-        navigator.serviceWorker.getRegistration().then(function (reg) {
-          if (!reg) {
-            go();
-            return;
-          }
-          return reg.update().then(function () {
-            var sw = reg.installing || reg.waiting;
-            if (!sw) {
-              go();
-              return;
-            }
-            if (sw.state === "activated") {
-              go();
-              return;
-            }
-            sw.addEventListener("statechange", function () {
-              if (sw.state === "activated") go();
-            });
-          });
-        }).catch(function () {});
-      } else {
-        go();
-      }
-    },
-    style: {
-      width: "100%",
-      padding: "12px 16px",
-      borderRadius: 12,
-      border: "2px solid #7c3aed",
-      background: "linear-gradient(135deg,#1e1040,#2d1060)",
-      color: "white",
-      fontSize: 13,
-      fontWeight: 700,
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      textAlign: "left"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 800
-    }
-  }, "\uD83C\uDF89 Update Available \u2014 v", updateAvailable.version), updateAvailable.notes && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#e9d5ff",
-      marginTop: 4,
-      lineHeight: 1.4
-    }
-  }, updateAvailable.notes), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "#c4b5fd",
-      marginTop: 3
-    }
-  }, "Tap to update. No data will be lost.")), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 22
-    }
-  }, "\u21BB")), /*#__PURE__*/React.createElement("div", {
+  }, "Dismiss")), updateAvailable && /*#__PURE__*/React.createElement(UpdateBanner, {
+    appState: appState,
+    updateAvailable: updateAvailable
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 9,
       color: "#374151",
