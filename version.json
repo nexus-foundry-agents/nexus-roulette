@@ -1,1 +1,1 @@
-{"version":"0.48.0","date":"2026-10-29","notes":"Clear the recent numbers without ending the session (with Undo); no text selection while tapping; dialogs no longer close on a stray drag."}
+{"version":"0.49.0","date":"2026-10-29","notes":"Long-press a recent number to correct it. Also in this release: clear numbers with Undo, no text selection while tapping, dialogs no longer close on a stray drag."}

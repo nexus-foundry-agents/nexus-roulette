@@ -621,7 +621,7 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;}
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.48.0";
+  var MY_V="0.49.0";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -1047,7 +1047,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.48.0";
+var APP_VERSION = "0.49.0";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -1151,6 +1151,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.49.0",
+  date: "Oct 29, 2026",
+  title: "Fix a Wrong Number",
+  changes: ["Long-press any recent number to correct it; every tracker, bet and your bankroll are recalculated as if the right number had been entered"]
+}, {
   v: "0.48.0",
   date: "Oct 29, 2026",
   title: "Faster at the Table",
