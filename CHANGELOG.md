@@ -7,6 +7,13 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Planned (not yet built)
+
+- Long-press any recent number to correct it, with the session's statistics recalculated as if the right number had been entered.
+- Read recent numbers from a photo of the table's history board, always through a review screen before anything is added.
+
+## [0.48.0] - 2026-10-29
+
 ### Added
 
 - "Clear numbers" in live mode empties the recent numbers and the tracking derived from them (droughts, bets, wins, progression levels), after an in-app confirm. The bankroll, buy-ins, cash-outs, each track's profit and the session record are kept. An inline "Numbers cleared · Undo" takes the button's place for 15 seconds, or until the next spin. Undo restores only what the clear changed, so a buy-in made in between survives. The recent-numbers strip and drought panel keep their space, so clearing moves nothing on screen.
@@ -22,11 +29,6 @@ Notable code and documentation changes are recorded here. Release versions are a
 ### Fixed
 
 - Dialogs now close only when a press both starts and ends on the dark backdrop. A drag that begins inside a dialog and ends outside it no longer dismisses it.
-
-### Planned on this branch (not yet built)
-
-- Long-press any recent number to correct it, with the session's statistics recalculated as if the right number had been entered.
-- Read recent numbers from a photo of the table's history board, always through a review screen before anything is added.
 
 ### Changed
 
