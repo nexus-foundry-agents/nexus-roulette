@@ -42,9 +42,22 @@ function BetTargets({type, config, compact, showRanges, max, style}) {
   );
 }
 
+// Dismiss on a click, never on pointerup alone. Touch browsers fire a click after pointerup at the
+// same spot; if the dialog had already unmounted on pointerup, that click would land on whatever is
+// underneath. A click fires on the nearest common ancestor of its press and release, so a press that
+// starts inside the dialog and releases on the backdrop arrives here as a backdrop click. The press
+// flag (started on the backdrop, primary button) and the release flag (ended on the backdrop) reject
+// both that case and a press that starts on the backdrop and releases inside the dialog.
 function Modal({children, onClose}) {
+  const downOnBackdrop = React.useRef(false);
+  const upOnBackdrop = React.useRef(false);
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+    <div
+      onPointerDown={e => { downOnBackdrop.current = e.target===e.currentTarget && e.button===0; upOnBackdrop.current = false; }}
+      onPointerUp={e => { upOnBackdrop.current = e.target===e.currentTarget; }}
+      onPointerCancel={() => { downOnBackdrop.current = false; upOnBackdrop.current = false; }}
+      onClick={e => { const go = downOnBackdrop.current && upOnBackdrop.current && e.target===e.currentTarget; downOnBackdrop.current = false; upOnBackdrop.current = false; if(go) onClose(); }}
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#0f1923",borderRadius:"20px 20px 0 0",padding:"20px 16px 36px",width:"100%",maxWidth:460,border:"1px solid #2d4057",borderBottom:"none",maxHeight:"90vh",overflowY:"auto"}}>
         {children}
       </div>
