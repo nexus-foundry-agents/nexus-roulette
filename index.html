@@ -1007,7 +1007,6 @@ exports.useCasinoRecording = useCasinoRecording;
 exports.writeRouletteStorage = writeRouletteStorage;
 exports.zeroCellBet = zeroCellBet;
 var _react = require("react");
-function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 function _regenerator() { /*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/babel/babel/blob/main/packages/babel-helpers/LICENSE */ var e, t, r = "function" == typeof Symbol ? Symbol : {}, n = r.iterator || "@@iterator", o = r.toStringTag || "@@toStringTag"; function i(r, n, o, i) { var c = n && n.prototype instanceof Generator ? n : Generator, u = Object.create(c.prototype); return _regeneratorDefine2(u, "_invoke", function (r, n, o) { var i, c, u, f = 0, p = o || [], y = !1, G = { p: 0, n: 0, v: e, a: d, f: d.bind(e, 4), d: function d(t, r) { return i = t, c = 0, u = e, G.n = r, a; } }; function d(r, n) { for (c = r, u = n, t = 0; !y && f && !o && t < p.length; t++) { var o, i = p[t], d = G.p, l = i[2]; r > 3 ? (o = l === n) && (u = i[(c = i[4]) ? 5 : (c = 3, 3)], i[4] = i[5] = e) : i[0] <= d && ((o = r < 2 && d < i[1]) ? (c = 0, G.v = n, G.n = i[1]) : d < l && (o = r < 3 || i[0] > n || n > l) && (i[4] = r, i[5] = n, G.n = l, c = 0)); } if (o || r > 1) return a; throw y = !0, n; } return function (o, p, l) { if (f > 1) throw TypeError("Generator is already running"); for (y && 1 === p && d(p, l), c = p, u = l; (t = c < 2 ? e : u) || !y;) { i || (c ? c < 3 ? (c > 1 && (G.n = -1), d(c, u)) : G.n = u : G.v = u); try { if (f = 2, i) { if (c || (o = "next"), t = i[o]) { if (!(t = t.call(i, u))) throw TypeError("iterator result is not an object"); if (!t.done) return t; u = t.value, c < 2 && (c = 0); } else 1 === c && (t = i.return) && t.call(i), c < 2 && (u = TypeError("The iterator does not provide a '" + o + "' method"), c = 1); i = e; } else if ((t = (y = G.n < 0) ? u : r.call(n, G)) !== a) break; } catch (t) { i = e, c = 1, u = t; } finally { f = 1; } } return { value: t, done: y }; }; }(r, o, i), !0), u; } var a = {}; function Generator() {} function GeneratorFunction() {} function GeneratorFunctionPrototype() {} t = Object.getPrototypeOf; var c = [][n] ? t(t([][n]())) : (_regeneratorDefine2(t = {}, n, function () { return this; }), t), u = GeneratorFunctionPrototype.prototype = Generator.prototype = Object.create(c); function f(e) { return Object.setPrototypeOf ? Object.setPrototypeOf(e, GeneratorFunctionPrototype) : (e.__proto__ = GeneratorFunctionPrototype, _regeneratorDefine2(e, o, "GeneratorFunction")), e.prototype = Object.create(u), e; } return GeneratorFunction.prototype = GeneratorFunctionPrototype, _regeneratorDefine2(u, "constructor", GeneratorFunctionPrototype), _regeneratorDefine2(GeneratorFunctionPrototype, "constructor", GeneratorFunction), GeneratorFunction.displayName = "GeneratorFunction", _regeneratorDefine2(GeneratorFunctionPrototype, o, "GeneratorFunction"), _regeneratorDefine2(u), _regeneratorDefine2(u, o, "Generator"), _regeneratorDefine2(u, n, function () { return this; }), _regeneratorDefine2(u, "toString", function () { return "[object Generator]"; }), (_regenerator = function _regenerator() { return { w: i, m: f }; })(); }
 function _regeneratorDefine2(e, r, n, t) { var i = Object.defineProperty; try { i({}, "", {}); } catch (e) { i = 0; } _regeneratorDefine2 = function _regeneratorDefine(e, r, n, t) { function o(r, n) { _regeneratorDefine2(e, r, function (e) { return this._invoke(r, n, e); }); } r ? i ? i(e, r, { value: n, enumerable: !t, configurable: !t, writable: !t }) : e[r] = n : (o("next", 0), o("throw", 1), o("return", 2)); }, _regeneratorDefine2(e, r, n, t); }
 function asyncGeneratorStep(n, t, e, r, o, a, c) { try { var i = n[a](c), u = i.value; } catch (n) { return void e(n); } i.done ? t(u) : Promise.resolve(u).then(r, o); }
@@ -1022,6 +1021,7 @@ function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) 
 function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
 function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
 function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 function ownKeys(e, r) { var t = Object.keys(e); if (Object.getOwnPropertySymbols) { var o = Object.getOwnPropertySymbols(e); r && (o = o.filter(function (r) { return Object.getOwnPropertyDescriptor(e, r).enumerable; })), t.push.apply(t, o); } return t; }
 function _objectSpread(e) { for (var r = 1; r < arguments.length; r++) { var t = null != arguments[r] ? arguments[r] : {}; r % 2 ? ownKeys(Object(t), !0).forEach(function (r) { _defineProperty(e, r, t[r]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function (r) { Object.defineProperty(e, r, Object.getOwnPropertyDescriptor(t, r)); }); } return e; }
 function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
@@ -2382,6 +2382,559 @@ function computeMetrics(session) {
     bankrollCurrent: session.bankrollCurrent,
     totalBuyIn: session.totalBuyIn || 0,
     perTrack: perTrack
+  };
+}
+
+// ===== spin-apply.js =====
+// -- Spin application: the one implementation shared by a live tap, a ghost spin, and the replay that corrects a spin --
+// Nothing in this file touches React, storage, the clock or the DOM. Every function returns a new session object and
+// leaves its input unchanged. The caller decides what to do with the result (App.jsx writes it back into app state).
+//
+// What a replay can and cannot reproduce is the contract of replaySession and spinCorrectionBlock below. In short:
+//   - Replayed: spins, droughts, each track's bets/wins/sequences/level/pnl and its closure by a losing spin,
+//     the solution bet list (except its order after a correction that un-hits a bet), and bankrollCurrent from
+//     bankroll plus the recorded buy-ins and cash-outs plus each tracked spin's pnl.
+//   - Kept exactly as recorded: tracks that were parked or manually closed or reactivated (their history is not in
+//     the record), and any money the record cannot place by spin index.
+//   - Refused: a session whose recorded tracks do not reproduce when its own spins are replayed (for example a
+//     spin logged without settling a track, which the record does not mark).
+
+// A spin index is a whole number from 0 up to, but not including, the count (or up to and including it when
+// the count is the number of spins after the last one).
+function isSpinIndex(i, count) {
+  return Number.isInteger(i) && i >= 0 && i < count;
+}
+
+// Settles one spin. fromTracker false logs the spin for droughts only (a ghost spin, or a live spin with no
+// active track). Returns the next session, the total bankroll change, and the per-track lines the flash shows.
+function applySpin(sess, val, fromTracker) {
+  var s = JSON.parse(JSON.stringify(sess));
+  var trackResults = [];
+  var totalDelta = 0;
+  s.spins.push(val);
+  var nd = _objectSpread({}, s.droughts);
+  Object.keys(nd).forEach(function (k) {
+    return nd[k]++;
+  });
+  nd[val] = 0;
+  s.droughts = nd;
+  if (!fromTracker) return {
+    sess: s,
+    totalDelta: totalDelta,
+    trackResults: trackResults
+  };
+  s.tracks.forEach(function (t) {
+    if (t.state !== "active") return;
+    var tbl = computeTableForTrack(t);
+    if (t.type === "fibonacci") {
+      var dts = t.config.dozenTargets || [],
+        cts = t.config.colTargets || [],
+        evts = t.config.evenTargets || [];
+      var _betMode2 = t.config.betMode || "progression";
+      // Auto-martingale when even money targets selected
+      var effectiveBetMode = _betMode2 === "flat" ? "flat" : evts.length > 0 ? "martingale" : "progression";
+      var row = tbl[Math.min(t.level, tbl.length - 1)];
+      var isZ = val === "0" || val === "00";
+
+      // Determine hit
+      var hitCount = 0;
+      if (!isZ) {
+        if (evts.length > 0) {
+          evts.forEach(function (key) {
+            var em = EVEN_MONEY.find(function (e) {
+              return e.key === key;
+            });
+            if (em && em.pred(+val)) hitCount++;
+          });
+        } else {
+          if (dts.includes(dozenOf(val))) hitCount++;
+          if (cts.includes(columnOf(val))) hitCount++;
+        }
+      }
+      var isHit = hitCount > 0;
+      var payMult = evts.length > 0 ? 2 : 3;
+      var numTargets = evts.length > 0 ? evts.length : dts.length + cts.length || 1;
+      // Name every flash line by the bet it placed, not just the track type.
+      var flashName = TRACK_ICONS[t.type] + " " + betTargetText(t.type, t.config) + " (" + (effectiveBetMode === "martingale" ? "Martingale" : effectiveBetMode === "flat" ? "Flat" : "Prog") + ")";
+      if (effectiveBetMode === "flat") {
+        // No progression -- level stays 0
+        if (isHit) {
+          var profit = hitCount * payMult - numTargets;
+          t.pnl += profit;
+          t.wins++;
+          t.bets.push({
+            spinIdx: s.spins.length - 1,
+            level: 0,
+            outcome: "win",
+            profit: profit,
+            cat: "win"
+          });
+          totalDelta += profit * (t.config.unit || 1);
+          trackResults.push({
+            name: flashName,
+            color: t.color,
+            profit: profit,
+            unit: t.config.unit || 1,
+            outcome: "Win",
+            cat: "win"
+          });
+        } else {
+          t.pnl -= numTargets;
+          t.bets.push({
+            spinIdx: s.spins.length - 1,
+            level: 0,
+            outcome: "loss",
+            profit: -numTargets,
+            cat: "loss"
+          });
+          totalDelta -= numTargets * (t.config.unit || 1);
+          trackResults.push({
+            name: flashName,
+            color: t.color,
+            profit: -numTargets,
+            unit: t.config.unit || 1,
+            outcome: "Miss",
+            cat: "loss"
+          });
+        }
+      } else {
+        // Progression or Martingale
+        var cat = isZ ? "loss" : getCategory(val, dts, cts, row, evts);
+        if (cat !== "loss") {
+          var _profit = hitCount * payMult * (row ? row.c : 1) - (row ? row.totalInvest : 0);
+          var _spinDelta = hitCount * payMult * (row ? row.c : 1) - (row ? row.c : 1) * numTargets;
+          t.pnl += _spinDelta;
+          t.wins++;
+          t.sequences++;
+          t.level = 0;
+          t.bets.push({
+            spinIdx: s.spins.length - 1,
+            level: t.level,
+            outcome: "win",
+            profit: _profit,
+            cat: cat
+          });
+          totalDelta += _spinDelta * (t.config.unit || 1);
+          trackResults.push({
+            name: flashName,
+            color: t.color,
+            profit: _profit,
+            unit: t.config.unit || 1,
+            outcome: cat === "jackpot" ? "Jackpot!" : "Win",
+            cat: cat
+          });
+        } else {
+          var betChips = (row ? row.c : 1) * numTargets;
+          t.pnl -= betChips;
+          t.bets.push({
+            spinIdx: s.spins.length - 1,
+            level: t.level,
+            outcome: "loss",
+            profit: -betChips,
+            cat: "loss"
+          });
+          var bc = betChips * (t.config.unit || 1);
+          totalDelta -= bc;
+          if (t.level < tbl.length - 1) t.level++;else {
+            t.state = "closed";
+            t.closedAtSpin = s.spins.length - 1;
+          }
+          trackResults.push({
+            name: flashName,
+            color: t.color,
+            profit: -(row ? row.c : 1),
+            unit: t.config.unit || 1,
+            outcome: "Miss",
+            cat: "loss"
+          });
+        }
+      }
+    }
+    if (t.type === "solution") {
+      var bets = t.config.activeBets || [];
+      var resolved = [];
+      bets.forEach(function (b) {
+        if (b.number === val) {
+          var _row = tbl[Math.min(b.level, tbl.length - 1)];
+          var winDelta = _row ? _row.ret - _row.c : 0;
+          var _profit2 = _row ? _row.profit : 0;
+          t.pnl += winDelta;
+          t.wins++;
+          t.sequences++;
+          resolved.push(b.number);
+          totalDelta += winDelta * (t.config.unit || 1);
+          t.bets.push({
+            spinIdx: s.spins.length - 1,
+            level: b.level,
+            outcome: "win",
+            profit: _profit2,
+            cat: "win"
+          });
+          trackResults.push({
+            name: TRACK_ICONS[t.type] + " #" + b.number,
+            color: t.color,
+            profit: _profit2,
+            unit: t.config.unit || 1,
+            outcome: "Win",
+            cat: "win"
+          });
+        } else {
+          var _lossCost = tbl[Math.min(b.level, tbl.length - 1)] ? tbl[Math.min(b.level, tbl.length - 1)].c : 1;
+          t.pnl -= _lossCost;
+          b.level = Math.min(b.level + 1, tbl.length - 1);
+          trackResults.push({
+            name: TRACK_ICONS[t.type] + " #" + b.number,
+            color: t.color,
+            profit: -_lossCost,
+            unit: t.config.unit || 1,
+            outcome: "Miss",
+            cat: "loss"
+          });
+          totalDelta -= _lossCost * (t.config.unit || 1);
+        }
+      });
+      t.config.activeBets = bets.filter(function (b) {
+        return !resolved.includes(b.number);
+      });
+    }
+    if (t.type === "custom") {
+      var positions = t.config.positions || [];
+      var _row2 = tbl[Math.min(t.level, tbl.length - 1)];
+      var mult = _row2 ? _row2.c : 1;
+      var baseTotalBet = positions.reduce(function (sum, p) {
+        return sum + p.baseAmount;
+      }, 0);
+      var payout = 0;
+      positions.forEach(function (p) {
+        var covered = betCoveredNumbers(p.type, p.target);
+        if (covered.indexOf(val) >= 0) payout += p.baseAmount * betPayoutMult(p.type);
+      });
+      var totalReturn = payout * mult;
+      var betMode = t.config.betMode || "flat";
+      var customName = "🃏 " + betTargetText(t.type, t.config, false, 3);
+      if (payout > 0) {
+        var spinDelta = totalReturn - baseTotalBet * mult;
+        if (betMode === "flat") {
+          t.pnl += spinDelta;
+          t.wins++;
+          t.bets.push({
+            spinIdx: s.spins.length - 1,
+            level: 0,
+            outcome: "win",
+            profit: spinDelta,
+            cat: "win"
+          });
+          totalDelta += spinDelta * (t.config.unit || 1);
+          trackResults.push({
+            name: customName + " (Flat)",
+            color: t.color,
+            profit: spinDelta,
+            unit: t.config.unit || 1,
+            outcome: "Win",
+            cat: "win"
+          });
+        } else {
+          var seqProfit = totalReturn - (_row2 ? _row2.totalInvest : baseTotalBet);
+          t.pnl += spinDelta;
+          t.wins++;
+          t.sequences++;
+          t.level = 0;
+          t.bets.push({
+            spinIdx: s.spins.length - 1,
+            level: t.level,
+            outcome: "win",
+            profit: seqProfit,
+            cat: "win"
+          });
+          totalDelta += spinDelta * (t.config.unit || 1);
+          trackResults.push({
+            name: customName + " (Prog)",
+            color: t.color,
+            profit: seqProfit,
+            unit: t.config.unit || 1,
+            outcome: "Win",
+            cat: "win"
+          });
+        }
+      } else {
+        var lossCost = baseTotalBet * mult;
+        t.pnl -= lossCost;
+        t.bets.push({
+          spinIdx: s.spins.length - 1,
+          level: t.level,
+          outcome: "loss",
+          profit: -lossCost,
+          cat: "loss"
+        });
+        totalDelta -= lossCost * (t.config.unit || 1);
+        if (betMode !== "flat") {
+          if (t.level < tbl.length - 1) t.level++;else {
+            t.state = "closed";
+            t.closedAtSpin = s.spins.length - 1;
+          }
+        }
+        trackResults.push({
+          name: customName + (betMode !== "flat" ? " (Prog)" : " (Flat)"),
+          color: t.color,
+          profit: -lossCost,
+          unit: t.config.unit || 1,
+          outcome: "Miss",
+          cat: "loss"
+        });
+      }
+    }
+  });
+  s.bankrollCurrent = Math.round((s.bankrollCurrent + totalDelta) * 100) / 100;
+  return {
+    sess: s,
+    totalDelta: totalDelta,
+    trackResults: trackResults
+  };
+}
+
+// A buy-in or cash-out, recorded with the number of spins that stood before it. Same bankroll rounding as the live path.
+function applyBuyIn(sess, amount, at) {
+  var s = JSON.parse(JSON.stringify(sess));
+  s.bankrollCurrent = Math.round((s.bankrollCurrent + amount) * 100) / 100;
+  s.totalBuyIn = (s.totalBuyIn || 0) + amount;
+  if (!s.buyIns) s.buyIns = [];
+  s.buyIns.push({
+    amount: amount,
+    at: at,
+    spin: s.spins.length
+  });
+  return s;
+}
+function applyCashOut(sess, amount, at) {
+  var s = JSON.parse(JSON.stringify(sess));
+  s.bankrollCurrent = Math.round((s.bankrollCurrent - amount) * 100) / 100;
+  s.totalCashOut = (s.totalCashOut || 0) + amount;
+  if (!s.cashOuts) s.cashOuts = [];
+  s.cashOuts.push({
+    amount: amount,
+    at: at,
+    spin: s.spins.length
+  });
+  return s;
+}
+
+// A track's history can be replayed when every bet carries a spin index (a manual entry such as an abandon does not)
+// and its state is one a settlement can explain:
+//   active, never closed or reactivated (closedAtSpin is null); or
+//   closed by a losing spin, where the last bet is that loss and closedAtSpin is its spin.
+// Parked tracks, manually closed tracks, and reactivated tracks are not replayable: the record does not say when they
+// changed state, so they are kept exactly as recorded.
+function trackReplayable(t, spinCount) {
+  var bets = t.bets || [];
+  if (!bets.every(function (b) {
+    return isSpinIndex(b.spinIdx, spinCount);
+  })) return false;
+  var closedAt = t.closedAtSpin == null ? null : t.closedAtSpin;
+  if (t.state === "active") return closedAt === null;
+  if (t.state === "closed") {
+    var last = bets[bets.length - 1];
+    return closedAt !== null && !!last && last.outcome === "loss" && last.spinIdx === closedAt;
+  }
+  return false;
+}
+
+// The starting bet list of a solution track: the bets it holds now, plus the number each recorded win removed.
+// A hit removes its bet from the list, so the removed numbers are read back from the spins the wins point at.
+// Every starting bet has level 0, as addSolBet and the candidate flow create them. The order of removed bets is not
+// recorded, so a removed bet is placed last; after a replay that keeps the bet removed, the order is the same as live.
+function startingSolutionBets(track, spins) {
+  var bets = (track.config.activeBets || []).map(function (b) {
+    return _objectSpread(_objectSpread({}, b), {}, {
+      level: 0
+    });
+  });
+  var held = new Set(bets.map(function (b) {
+    return b.number;
+  }));
+  (track.bets || []).forEach(function (b) {
+    if (b.outcome !== "win" || !isSpinIndex(b.spinIdx, spins.length)) return;
+    var n = spins[b.spinIdx];
+    if (held.has(n)) return;
+    held.add(n);
+    bets.push({
+      number: n,
+      level: 0,
+      invest: 0
+    });
+  });
+  return bets;
+}
+
+// Replays spins over the starting state of sess. sess is the recorded session: its tracks, money and bankroll are
+// the starting point and its recorded spins are read where a starting bet list needs them. spins is what to replay.
+// The result is a new object; sess is not changed.
+function replaySession(sess, spins) {
+  var recordedCount = sess.spins.length;
+  var frozen = {};
+  var recorded = JSON.parse(JSON.stringify(sess));
+  var work = JSON.parse(JSON.stringify(sess));
+  work.spins = [];
+  work.droughts = initDroughts(work.roulette);
+  work.bankrollCurrent = work.bankroll;
+  // Money is rebuilt from the placeable records below; the recorded lists and totals are restored afterwards.
+  work.buyIns = [];
+  work.totalBuyIn = 0;
+  work.cashOuts = [];
+  work.totalCashOut = 0;
+  work.tracks = sess.tracks.map(function (t) {
+    var copy = JSON.parse(JSON.stringify(t));
+    if (!trackReplayable(t, recordedCount)) {
+      frozen[t.id] = copy;
+      return _objectSpread(_objectSpread({}, copy), {}, {
+        state: "frozen"
+      });
+    }
+    var config = _objectSpread({}, t.config || {});
+    if (t.type === "solution") config.activeBets = startingSolutionBets(t, sess.spins);
+    var startsLater = (t.createdAtSpin || 0) > 0;
+    return _objectSpread(_objectSpread({}, copy), {}, {
+      config: config,
+      state: startsLater ? "pending" : "active",
+      pnl: 0,
+      level: 0,
+      wins: 0,
+      sequences: 0,
+      bets: [],
+      closedAtSpin: null,
+      createdAtSpin: t.createdAtSpin || 0
+    });
+  });
+  // A replayable track starts settling at its creation spin. Tracks created after the last spin start there.
+  var activate = function activate(index) {
+    work.tracks = work.tracks.map(function (t) {
+      return t.state === "pending" && (t.createdAtSpin || 0) <= index ? _objectSpread(_objectSpread({}, t), {}, {
+        state: "active"
+      }) : t;
+    });
+  };
+  var money = [];
+  (sess.buyIns || []).forEach(function (b) {
+    return money.push({
+      kind: "buy",
+      amount: b.amount,
+      at: b.at,
+      spin: b.spin
+    });
+  });
+  (sess.cashOuts || []).forEach(function (c) {
+    return money.push({
+      kind: "cash",
+      amount: c.amount,
+      at: c.at,
+      spin: c.spin
+    });
+  });
+  var placed = money.filter(function (m) {
+    return isSpinIndex(m.spin, spins.length + 1);
+  }).sort(function (a, b) {
+    return a.spin - b.spin || (a.at || 0) - (b.at || 0);
+  });
+  var m = 0;
+  for (var i = 0; i <= spins.length; i++) {
+    activate(i);
+    while (m < placed.length && placed[m].spin === i) {
+      var ev = placed[m];
+      var next = ev.kind === "buy" ? applyBuyIn(work, ev.amount, ev.at) : applyCashOut(work, ev.amount, ev.at);
+      Object.assign(work, next);
+      m++;
+    }
+    if (i < spins.length) Object.assign(work, applySpin(work, spins[i], true).sess);
+  }
+  activate(Infinity);
+  work.tracks = work.tracks.map(function (t) {
+    return frozen[t.id] || t;
+  });
+  work.buyIns = recorded.buyIns || [];
+  work.totalBuyIn = recorded.totalBuyIn || 0;
+  work.cashOuts = recorded.cashOuts || [];
+  work.totalCashOut = recorded.totalCashOut || 0;
+  return work;
+}
+
+// Deep equality that ignores key order. The app stores plain JSON, so this is enough for the comparisons below.
+function sameValue(a, b) {
+  if (a === b) return true;
+  if (_typeof(a) !== 'object' || _typeof(b) !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  var ka = Object.keys(a),
+    kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every(function (k) {
+    return Object.prototype.hasOwnProperty.call(b, k) && sameValue(a[k], b[k]);
+  });
+}
+
+// Solution bet order is not semantic and is not always recoverable, so comparisons sort it by number.
+function canonicalTracks(tracks) {
+  return tracks.map(function (t) {
+    if (!t.config || !Array.isArray(t.config.activeBets)) return t;
+    var bets = t.config.activeBets.slice().sort(function (a, b) {
+      return a.number < b.number ? -1 : a.number > b.number ? 1 : 0;
+    });
+    return _objectSpread(_objectSpread({}, t), {}, {
+      config: _objectSpread(_objectSpread({}, t.config), {}, {
+        activeBets: bets
+      })
+    });
+  });
+}
+
+// Compares a replay of the recorded spins with the record. Returns the parts that differ (empty when it reproduces).
+function replayMismatches(sess, replayed) {
+  var problems = [];
+  if (!sameValue(replayed.droughts, sess.droughts)) problems.push("droughts");
+  if (!sameValue(canonicalTracks(replayed.tracks), canonicalTracks(sess.tracks))) problems.push("tracks");
+  return problems;
+}
+
+// Why a correction cannot be applied to this session, or null when it can. The record must reproduce from its own
+// spins; otherwise a correction would be a guess about which tracks acted on which spins.
+function spinCorrectionBlock(sess, replayed) {
+  var problems = replayMismatches(sess, replayed || replaySession(sess, sess.spins));
+  if (problems.length === 0) return null;
+  return "This session can't be corrected. Replaying its recorded spins does not reproduce its track history. " + "This happens when a ghost spin was logged while a track was active. Nothing has been changed.";
+}
+
+// Replaces the spin at index with value and replays the session. Refuses (ok false) when the index or number is not
+// valid for the wheel, or when the record cannot be replayed. Bankroll that the record cannot explain (a bankroll
+// edit, a live manual-bet settlement, a currency change) is kept as a fixed amount on top of the replay.
+// Returns {ok, changed, session}; session is a new object, and the input is not changed.
+function correctSpin(sess, index, value, now) {
+  var v = String(value);
+  if (!isSpinIndex(index, sess.spins.length)) return {
+    ok: false,
+    reason: "That spin is not in this session."
+  };
+  if (!getWheelNumbers(sess.roulette).includes(v)) return {
+    ok: false,
+    reason: "That number is not on this wheel."
+  };
+  var recorded = replaySession(sess, sess.spins);
+  var block = spinCorrectionBlock(sess, recorded);
+  if (block) return {
+    ok: false,
+    reason: block
+  };
+  if (sess.spins[index] === v) return {
+    ok: true,
+    changed: false,
+    session: JSON.parse(JSON.stringify(sess))
+  };
+  var spins = sess.spins.slice();
+  spins[index] = v;
+  var offset = Math.round((sess.bankrollCurrent - recorded.bankrollCurrent) * 100) / 100;
+  var next = replaySession(sess, spins);
+  next.bankrollCurrent = Math.round((next.bankrollCurrent + offset) * 100) / 100;
+  next.modified = now;
+  return {
+    ok: true,
+    changed: true,
+    session: next
   };
 }
 
@@ -6615,7 +7168,8 @@ function HardResetModal(_ref34) {
 // -- Live-mode spin tools: the Clear numbers row with its inline Undo, and the recent-numbers strip --
 // Every slot here holds its height whether or not it has anything in it, so clearing the numbers changes
 // what is shown inside a slot and moves nothing below it (shared rule 82). App.jsx owns the state (confirm
-// open, undo offered, the snapshot) and passes it in.
+// open, undo offered, the snapshot) and passes it in. A long-press on a recent number asks App to open the
+// number picker for that spin (SpinCorrectionContext); App owns the correction and the picker's state.
 
 // Reserved heights, in px. Each is the populated height of its control, measured in headless Chrome at a
 // 420 px viewport: the strip is 30 with five numbers (28 px chips and 2 px bottom padding) and 40 with thirty,
@@ -6625,6 +7179,13 @@ var SPIN_TOOLS_ROW_HEIGHT = 30;
 var RECENT_STRIP_MIN_HEIGHT = 40;
 var DROUGHT_PANEL_HEIGHT = 251;
 var RECENT_STRIP_LIMIT = 30;
+
+// A press on a recent number opens the picker after this long, unless the pointer moves more than the slop first.
+var LONG_PRESS_MS = 500;
+var LONG_PRESS_SLOP_PX = 8;
+
+// App provides the function that opens the picker for a spin index. Outside App it is null and a press does nothing.
+var SpinCorrectionContext = React.createContext(null);
 function SpinTools(_ref35) {
   var spinCount = _ref35.spinCount,
     confirmOpen = _ref35.confirmOpen,
@@ -6750,11 +7311,72 @@ function SpinTools(_ref35) {
   }, "Clear numbers"))));
 }
 
+// Long-press detection for one strip. Pure: the timers are injected and nothing here knows about spins or the
+// session. A press fires onLongPress(spinIndex) once, after delayMs, if the pointer stays within slopPx of where it
+// went down. A move past the slop, a release, or a cancel (the browser takes over for a scroll or swipe) ends the
+// press without firing. Releasing after the press fired does nothing more, so a long-press never also taps.
+// The timer functions are looked up when a press starts, not when the strip renders, so rendering never needs them.
+function createLongPress(_ref36) {
+  var onLongPress = _ref36.onLongPress,
+    _ref36$delayMs = _ref36.delayMs,
+    delayMs = _ref36$delayMs === void 0 ? LONG_PRESS_MS : _ref36$delayMs,
+    _ref36$slopPx = _ref36.slopPx,
+    slopPx = _ref36$slopPx === void 0 ? LONG_PRESS_SLOP_PX : _ref36$slopPx,
+    setTimer = _ref36.setTimer,
+    clearTimer = _ref36.clearTimer;
+  var timer = null,
+    origin = null;
+  function cancel() {
+    if (timer !== null) {
+      (clearTimer || clearTimeout)(timer);
+      timer = null;
+    }
+    origin = null;
+  }
+  return {
+    down: function down(spinIndex, x, y) {
+      cancel();
+      origin = {
+        x: x,
+        y: y
+      };
+      timer = (setTimer || setTimeout)(function () {
+        timer = null;
+        origin = null;
+        onLongPress(spinIndex);
+      }, delayMs);
+    },
+    move: function move(x, y) {
+      if (origin && Math.hypot(x - origin.x, y - origin.y) > slopPx) cancel();
+    },
+    up: function up() {
+      cancel();
+    },
+    cancel: cancel
+  };
+}
+
 // Recent numbers, newest first, up to RECENT_STRIP_LIMIT. The container is always rendered at its reserved
 // height: with no numbers it is an empty slot, so the first spin and a clear both leave the layout where it is.
-function RecentNumbersStrip(_ref36) {
-  var spins = _ref36.spins,
-    trackOverlays = _ref36.trackOverlays;
+// Chip i is the spin at index spins.length - 1 - i. Pressing and holding one asks App for the picker; nothing else.
+function RecentNumbersStrip(_ref37) {
+  var spins = _ref37.spins,
+    trackOverlays = _ref37.trackOverlays;
+  var openCorrection = React.useContext(SpinCorrectionContext);
+  var latestOpen = React.useRef(openCorrection);
+  latestOpen.current = openCorrection;
+  var press = React.useMemo(function () {
+    return createLongPress({
+      onLongPress: function onLongPress(spinIndex) {
+        if (latestOpen.current) latestOpen.current(spinIndex);
+      }
+    });
+  }, []);
+  React.useEffect(function () {
+    return function () {
+      return press.cancel();
+    };
+  }, [press]);
   var recent = _toConsumableArray(spins).reverse().slice(0, RECENT_STRIP_LIMIT);
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6767,6 +7389,7 @@ function RecentNumbersStrip(_ref36) {
       boxSizing: "border-box"
     }
   }, recent.map(function (val, i) {
+    var spinIndex = spins.length - 1 - i;
     var isZ = val === "0" || val === "00",
       r = !isZ && RED.has(+val);
     var hitTracks = (trackOverlays || []).filter(function (o) {
@@ -6780,6 +7403,24 @@ function RecentNumbersStrip(_ref36) {
     var borderColor = i === 0 ? "#ffffff" : hitTracks.length > 0 ? hitTracks[0].color : isZ ? "#22c55e" : r ? "#ef4444" : "#374151";
     return /*#__PURE__*/React.createElement("div", {
       key: i,
+      onPointerDown: function onPointerDown(e) {
+        if (e.button === 0) press.down(spinIndex, e.clientX, e.clientY);
+      },
+      onPointerMove: function onPointerMove(e) {
+        return press.move(e.clientX, e.clientY);
+      },
+      onPointerUp: function onPointerUp() {
+        return press.up();
+      },
+      onPointerCancel: function onPointerCancel() {
+        return press.up();
+      },
+      onPointerLeave: function onPointerLeave() {
+        return press.up();
+      },
+      onContextMenu: function onContextMenu(e) {
+        return e.preventDefault();
+      },
       style: {
         flexShrink: 0,
         width: 28,
@@ -6796,6 +7437,87 @@ function RecentNumbersStrip(_ref36) {
       }
     }, val);
   }));
+}
+
+// The number picker for one recent spin. Choosing a number corrects that spin at once: a single selection acts on
+// selection, with no confirm step. The numbers are the wheel's own (0, 00 on an American wheel, then 1-36). When
+// blockedReason is set the session cannot be corrected, so every number is disabled and the reason is shown.
+// The shared Modal draws it over the page and dismisses it, so opening it moves nothing.
+function SpinNumberPicker(_ref38) {
+  var spinIndex = _ref38.spinIndex,
+    spinCount = _ref38.spinCount,
+    currentValue = _ref38.currentValue,
+    roulette = _ref38.roulette,
+    blockedReason = _ref38.blockedReason,
+    onChoose = _ref38.onChoose,
+    onClose = _ref38.onClose;
+  var spinNo = spinIndex + 1;
+  var numbers = getWheelNumbers(roulette);
+  return /*#__PURE__*/React.createElement(Modal, {
+    onClose: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 17,
+      fontWeight: 800,
+      color: "#e2e8f0",
+      marginBottom: 6
+    }
+  }, "Correct spin ", spinNo, " of ", spinCount), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: blockedReason ? "#fbbf24" : "#94a3b8",
+      lineHeight: 1.5,
+      marginBottom: 12
+    }
+  }, blockedReason || "This spin is recorded as ".concat(currentValue, ". Choosing a number replaces it and recalculates the session from the corrected spins.")), /*#__PURE__*/React.createElement("div", {
+    role: "group",
+    "aria-label": "Wheel numbers",
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill,minmax(42px,1fr))",
+      gap: 6,
+      marginBottom: 14
+    }
+  }, numbers.map(function (n) {
+    var isCurrent = n === currentValue;
+    var isZ = n === "0" || n === "00";
+    var isRed = !isZ && RED.has(+n);
+    return /*#__PURE__*/React.createElement("button", {
+      key: n,
+      type: "button",
+      disabled: !!blockedReason,
+      "aria-pressed": isCurrent,
+      "aria-label": "Set spin ".concat(spinNo, " to ").concat(n),
+      onClick: function onClick() {
+        return onChoose(n);
+      },
+      style: {
+        height: 42,
+        borderRadius: 8,
+        border: isCurrent ? "2px solid #fbbf24" : "1px solid #2d4057",
+        background: isZ ? "#166534" : isRed ? "#7f1d1d" : "#0d1117",
+        color: isZ ? "#bbf7d0" : isRed ? "#fecaca" : "#f1f5f9",
+        fontSize: 14,
+        fontWeight: 800,
+        cursor: blockedReason ? "not-allowed" : "pointer",
+        opacity: blockedReason ? 0.4 : 1
+      }
+    }, n);
+  })), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: onClose,
+    style: {
+      width: "100%",
+      padding: "14px 0",
+      borderRadius: 12,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: "#94a3b8",
+      fontSize: 15,
+      fontWeight: 800,
+      cursor: "pointer"
+    }
+  }, "Cancel"));
 }
 
 // ===== components/SimModePage.jsx =====
@@ -6894,12 +7616,12 @@ function NotificationEnablePage() {
     }
   }, "Return to Roulette")));
 }
-function StatContextBar(_ref37) {
-  var simResults = _ref37.simResults,
-    simCfg = _ref37.simCfg,
-    sess = _ref37.sess,
-    cur = _ref37.cur,
-    pnlVal = _ref37.pnlVal;
+function StatContextBar(_ref39) {
+  var simResults = _ref39.simResults,
+    simCfg = _ref39.simCfg,
+    sess = _ref39.sess,
+    cur = _ref39.cur,
+    pnlVal = _ref39.pnlVal;
   // Match live tracks to sim strategies by type+roi+stopLoss
   var liveTracks = sess.tracks.filter(function (t) {
     return t.state !== "closed";
@@ -6970,14 +7692,14 @@ function StatContextBar(_ref37) {
       letterSpacing: 1,
       marginBottom: 2
     }
-  }, "vs Simulation Benchmark"), bars.map(function (_ref38, i) {
-    var t = _ref38.t,
-      status = _ref38.status,
-      statusColor = _ref38.statusColor,
-      statusIcon = _ref38.statusIcon,
-      pctRank = _ref38.pctRank,
-      stats = _ref38.stats,
-      livePnl = _ref38.livePnl;
+  }, "vs Simulation Benchmark"), bars.map(function (_ref40, i) {
+    var t = _ref40.t,
+      status = _ref40.status,
+      statusColor = _ref40.statusColor,
+      statusIcon = _ref40.statusIcon,
+      pctRank = _ref40.pctRank,
+      stats = _ref40.stats,
+      livePnl = _ref40.livePnl;
     return /*#__PURE__*/React.createElement("div", {
       key: t.id,
       style: {
@@ -7028,11 +7750,11 @@ function StatContextBar(_ref37) {
 // -- Experiment Comparison Panel (Results view, Repeat Experiment) --
 // One row per experiment (identical parameters), with aggregate stats across all
 // of them: overall P&L per experiment, or sessions survived in bankroll mode.
-function ExperimentPanel(_ref39) {
-  var experiments = _ref39.experiments,
-    bankrollMode = _ref39.bankrollMode,
-    sessionsPerExperiment = _ref39.sessionsPerExperiment,
-    cur = _ref39.cur;
+function ExperimentPanel(_ref41) {
+  var experiments = _ref41.experiments,
+    bankrollMode = _ref41.bankrollMode,
+    sessionsPerExperiment = _ref41.sessionsPerExperiment,
+    cur = _ref41.cur;
   if (!experiments || experiments.length < 2) return null;
   var pnls = experiments.map(function (e) {
     return e.pnl;
@@ -7089,11 +7811,11 @@ function ExperimentPanel(_ref39) {
       gap: 6,
       marginBottom: 8
     }
-  }, tiles.map(function (_ref40) {
-    var _ref41 = _slicedToArray(_ref40, 3),
-      l = _ref41[0],
-      v = _ref41[1],
-      c = _ref41[2];
+  }, tiles.map(function (_ref42) {
+    var _ref43 = _slicedToArray(_ref42, 3),
+      l = _ref43[0],
+      v = _ref43[1],
+      c = _ref43[2];
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -7184,9 +7906,9 @@ function ExperimentPanel(_ref39) {
 
 // -- Per-Session Explorer (Results view) --
 // Filterable, sortable drill-down into every simulated session.
-function SessionExplorer(_ref42) {
-  var sessions = _ref42.sessions,
-    cur = _ref42.cur;
+function SessionExplorer(_ref44) {
+  var sessions = _ref44.sessions,
+    cur = _ref44.cur;
   var _useState35 = (0, _react.useState)("all"),
     _useState36 = _slicedToArray(_useState35, 2),
     filter = _useState36[0],
@@ -7258,10 +7980,10 @@ function SessionExplorer(_ref42) {
       gap: 4,
       marginBottom: 4
     }
-  }, filterChips.map(function (_ref43) {
-    var _ref44 = _slicedToArray(_ref43, 2),
-      key = _ref44[0],
-      label = _ref44[1];
+  }, filterChips.map(function (_ref45) {
+    var _ref46 = _slicedToArray(_ref45, 2),
+      key = _ref46[0],
+      label = _ref46[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -7276,10 +7998,10 @@ function SessionExplorer(_ref42) {
       gap: 4,
       marginBottom: 6
     }
-  }, sortChips.map(function (_ref45) {
-    var _ref46 = _slicedToArray(_ref45, 2),
-      key = _ref46[0],
-      label = _ref46[1];
+  }, sortChips.map(function (_ref47) {
+    var _ref48 = _slicedToArray(_ref47, 2),
+      key = _ref48[0],
+      label = _ref48[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -7378,20 +8100,20 @@ function SessionExplorer(_ref42) {
 }
 
 // -- Simulation Mode Page --
-function SimModePage(_ref47) {
-  var simCfg = _ref47.simCfg,
-    setSimCfg = _ref47.setSimCfg,
-    simRunning = _ref47.simRunning,
-    setSimRunning = _ref47.setSimRunning,
-    simProgress = _ref47.simProgress,
-    setSimProgress = _ref47.setSimProgress,
-    simResults = _ref47.simResults,
-    setSimResults = _ref47.setSimResults,
-    simDone = _ref47.simDone,
-    setSimDone = _ref47.setSimDone,
-    simStopRef = _ref47.simStopRef,
-    currency = _ref47.currency,
-    cur = _ref47.cur;
+function SimModePage(_ref49) {
+  var simCfg = _ref49.simCfg,
+    setSimCfg = _ref49.setSimCfg,
+    simRunning = _ref49.simRunning,
+    setSimRunning = _ref49.setSimRunning,
+    simProgress = _ref49.simProgress,
+    setSimProgress = _ref49.setSimProgress,
+    simResults = _ref49.simResults,
+    setSimResults = _ref49.setSimResults,
+    simDone = _ref49.simDone,
+    setSimDone = _ref49.setSimDone,
+    simStopRef = _ref49.simStopRef,
+    currency = _ref49.currency,
+    cur = _ref49.cur;
   var _useState41 = (0, _react.useState)("setup"),
     _useState42 = _slicedToArray(_useState41, 2),
     view = _useState42[0],
@@ -7642,10 +8364,10 @@ function SimModePage(_ref47) {
       display: "flex",
       gap: 8
     }
-  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref48) {
-    var _ref49 = _slicedToArray(_ref48, 2),
-      v = _ref49[0],
-      l = _ref49[1];
+  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref50) {
+    var _ref51 = _slicedToArray(_ref50, 2),
+      v = _ref51[0],
+      l = _ref51[1];
     var sel = simCfg.roulette === v;
     return /*#__PURE__*/React.createElement("button", {
       key: v,
@@ -8447,11 +9169,11 @@ function SimModePage(_ref47) {
         gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
         gap: 4
       }
-    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref50) {
-      var _ref51 = _slicedToArray(_ref50, 3),
-        l = _ref51[0],
-        v = _ref51[1],
-        c = _ref51[2];
+    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref52) {
+      var _ref53 = _slicedToArray(_ref52, 3),
+        l = _ref53[0],
+        v = _ref53[1],
+        c = _ref53[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8496,11 +9218,11 @@ function SimModePage(_ref47) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref52) {
-      var _ref53 = _slicedToArray(_ref52, 3),
-        l = _ref53[0],
-        v = _ref53[1],
-        c = _ref53[2];
+    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref54) {
+      var _ref55 = _slicedToArray(_ref54, 3),
+        l = _ref55[0],
+        v = _ref55[1],
+        c = _ref55[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8603,11 +9325,11 @@ function SimModePage(_ref47) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref54) {
-      var _ref55 = _slicedToArray(_ref54, 3),
-        l = _ref55[0],
-        v = _ref55[1],
-        c = _ref55[2];
+    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref56) {
+      var _ref57 = _slicedToArray(_ref56, 3),
+        l = _ref57[0],
+        v = _ref57[1],
+        c = _ref57[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8647,9 +9369,9 @@ function SimModePage(_ref47) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.winStreakDist.slice(0, 10).map(function (_ref56) {
-      var len = _ref56.len,
-        p = _ref56.pct;
+    }, stats.winStreakDist.slice(0, 10).map(function (_ref58) {
+      var len = _ref58.len,
+        p = _ref58.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -8701,9 +9423,9 @@ function SimModePage(_ref47) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.lossStreakDist.slice(0, 10).map(function (_ref57) {
-      var len = _ref57.len,
-        p = _ref57.pct;
+    }, stats.lossStreakDist.slice(0, 10).map(function (_ref59) {
+      var len = _ref59.len,
+        p = _ref59.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -8750,13 +9472,13 @@ function SimModePage(_ref47) {
 }
 
 // -- Sim Strategy Editor --
-function SimStratEditor(_ref58) {
-  var strat = _ref58.strat,
-    idx = _ref58.idx,
-    simCfg = _ref58.simCfg,
-    setSimCfg = _ref58.setSimCfg,
-    cur = _ref58.cur,
-    onClose = _ref58.onClose;
+function SimStratEditor(_ref60) {
+  var strat = _ref60.strat,
+    idx = _ref60.idx,
+    simCfg = _ref60.simCfg,
+    setSimCfg = _ref60.setSimCfg,
+    cur = _ref60.cur,
+    onClose = _ref60.onClose;
   var _useState47 = (0, _react.useState)(_objectSpread({}, strat.config)),
     _useState48 = _slicedToArray(_useState47, 2),
     cfg = _useState48[0],
@@ -8875,10 +9597,10 @@ function SimStratEditor(_ref58) {
       display: "flex",
       gap: 5
     }
-  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref59) {
-    var _ref60 = _slicedToArray(_ref59, 2),
-      m = _ref60[0],
-      l = _ref60[1];
+  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref61) {
+    var _ref62 = _slicedToArray(_ref61, 2),
+      m = _ref62[0],
+      l = _ref62[1];
     var sel = (cfg.betMode || "progression") === m;
     return /*#__PURE__*/React.createElement("button", {
       key: m,
@@ -9101,11 +9823,11 @@ function SimStratEditor(_ref58) {
       flexDirection: "column",
       gap: 6
     }
-  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref61) {
-    var _ref62 = _slicedToArray(_ref61, 3),
-      key = _ref62[0],
-      label = _ref62[1],
-      desc = _ref62[2];
+  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref63) {
+    var _ref64 = _slicedToArray(_ref63, 3),
+      key = _ref64[0],
+      label = _ref64[1],
+      desc = _ref64[2];
     return /*#__PURE__*/React.createElement("div", {
       key: key,
       style: {
@@ -9280,10 +10002,10 @@ function SimStratEditor(_ref58) {
 
 // ===== components/SecondaryPages.jsx =====
 // -- Spin Log Page --
-function SpinPage(_ref63) {
-  var sess = _ref63.sess,
-    updSess = _ref63.updSess,
-    trackOverlays = _ref63.trackOverlays;
+function SpinPage(_ref65) {
+  var sess = _ref65.sess,
+    updSess = _ref65.updSess,
+    trackOverlays = _ref65.trackOverlays;
   var _useState51 = (0, _react.useState)(false),
     _useState52 = _slicedToArray(_useState51, 2),
     showAll = _useState52[0],
@@ -9390,20 +10112,20 @@ function SpinPage(_ref63) {
   }, showAll ? "Show less" : "Show all " + sess.spins.length + " spins"))));
 }
 // -- Session Stats Page --
-function StatsPage(_ref64) {
-  var sess = _ref64.sess,
-    livePauseOffset = _ref64.livePauseOffset,
-    pnlVal = _ref64.pnlVal,
-    cur = _ref64.cur,
-    currency = _ref64.currency,
-    pnlColor = _ref64.pnlColor,
-    saveSession = _ref64.saveSession,
-    newEmptySession = _ref64.newEmptySession,
-    tearSession = _ref64.tearSession,
-    reactivateTrack = _ref64.reactivateTrack,
-    saved = _ref64.saved,
-    loadSession = _ref64.loadSession,
-    exportJSON = _ref64.exportJSON;
+function StatsPage(_ref66) {
+  var sess = _ref66.sess,
+    livePauseOffset = _ref66.livePauseOffset,
+    pnlVal = _ref66.pnlVal,
+    cur = _ref66.cur,
+    currency = _ref66.currency,
+    pnlColor = _ref66.pnlColor,
+    saveSession = _ref66.saveSession,
+    newEmptySession = _ref66.newEmptySession,
+    tearSession = _ref66.tearSession,
+    reactivateTrack = _ref66.reactivateTrack,
+    saved = _ref66.saved,
+    loadSession = _ref66.loadSession,
+    exportJSON = _ref66.exportJSON;
   // Group tracks by type + roi + stopLoss for consolidated view
   var trackGroups = (0, _react.useMemo)(function () {
     var groups = {};
@@ -9536,10 +10258,10 @@ function StatsPage(_ref64) {
     l: "Net P&L",
     v: (pnlVal >= 0 ? "+" : "-") + cur.symbol + formatNumber(pnlVal),
     c: pnlColor
-  }].map(function (_ref65) {
-    var l = _ref65.l,
-      v = _ref65.v,
-      c = _ref65.c;
+  }].map(function (_ref67) {
+    var l = _ref67.l,
+      v = _ref67.v,
+      c = _ref67.c;
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -9686,11 +10408,11 @@ function StatsPage(_ref64) {
         gap: 6,
         marginBottom: 8
       }
-    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref66) {
-      var _ref67 = _slicedToArray(_ref66, 3),
-        l = _ref67[0],
-        v = _ref67[1],
-        c = _ref67[2];
+    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref68) {
+      var _ref69 = _slicedToArray(_ref68, 3),
+        l = _ref69[0],
+        v = _ref69[1],
+        c = _ref69[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -9833,18 +10555,18 @@ function StatsPage(_ref64) {
 }
 
 // -- Settings Page --
-function SettingsPage(_ref68) {
-  var settings = _ref68.settings,
-    updSettings = _ref68.updSettings,
-    setCurrencyOpen = _ref68.setCurrencyOpen,
-    currency = _ref68.currency,
-    cur = _ref68.cur,
-    updSess = _ref68.updSess,
-    sess = _ref68.sess,
-    setChangelogOpen = _ref68.setChangelogOpen,
-    updApp = _ref68.updApp,
-    importJSON = _ref68.importJSON,
-    setHardResetOpen = _ref68.setHardResetOpen;
+function SettingsPage(_ref70) {
+  var settings = _ref70.settings,
+    updSettings = _ref70.updSettings,
+    setCurrencyOpen = _ref70.setCurrencyOpen,
+    currency = _ref70.currency,
+    cur = _ref70.cur,
+    updSess = _ref70.updSess,
+    sess = _ref70.sess,
+    setChangelogOpen = _ref70.setChangelogOpen,
+    updApp = _ref70.updApp,
+    importJSON = _ref70.importJSON,
+    setHardResetOpen = _ref70.setHardResetOpen;
   var _useState53 = (0, _react.useState)(settings.defaultBuyIn || 100),
     _useState54 = _slicedToArray(_useState53, 2),
     localBuyIn = _useState54[0],
@@ -9924,10 +10646,10 @@ function SettingsPage(_ref68) {
       display: "flex",
       gap: 8
     }
-  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref69) {
-    var _ref70 = _slicedToArray(_ref69, 2),
-      v = _ref70[0],
-      label = _ref70[1];
+  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref71) {
+    var _ref72 = _slicedToArray(_ref71, 2),
+      v = _ref72[0],
+      label = _ref72[1];
     return /*#__PURE__*/React.createElement("button", {
       key: v,
       onClick: function onClick() {
@@ -10017,10 +10739,10 @@ function SettingsPage(_ref68) {
     label: "Max Total (per spin)",
     key: "tableMaxTotal",
     color: "#f87171"
-  }].map(function (_ref71) {
-    var label = _ref71.label,
-      key = _ref71.key,
-      color = _ref71.color;
+  }].map(function (_ref73) {
+    var label = _ref73.label,
+      key = _ref73.key,
+      color = _ref73.color;
     var val = settings[key] || 1;
     function dec() {
       if (key === "tableMinBet") {
@@ -11009,8 +11731,8 @@ function summarizeTrackWagers(tracks, outcome, deps) {
         addWager(summary, 'track:' + track.id + ':number:' + bet.number, stake, bet.number === outcome ? (row ? row.ret : 36) * unit : 0);
       });
     } else if (track.type === 'custom') {
-      var _row = table[Math.min(track.level, table.length - 1)];
-      var multiple = _row ? _row.c : 1;
+      var _row3 = table[Math.min(track.level, table.length - 1)];
+      var multiple = _row3 ? _row3.c : 1;
       (track.config.positions || []).forEach(function (position) {
         var stake = position.baseAmount * multiple * unit;
         var win = covered(position.type, position.target).indexOf(outcome) >= 0;
@@ -11041,9 +11763,9 @@ function casinoDuration(ms) {
     };
   return hours ? hours + ':' + pad(minutes) + ':' + pad(seconds) : minutes + ':' + pad(seconds);
 }
-function CasinoRecordingBar(_ref79) {
-  var recording = _ref79.recording,
-    label = _ref79.label;
+function CasinoRecordingBar(_ref81) {
+  var recording = _ref81.recording,
+    label = _ref81.label;
   var text = '';
   if (recording.availability === 'unknown') text = 'Checking Nexus Casino recording before the first spin…';else if (recording.availability === 'unavailable') text = 'Not connected to Nexus Casino — nothing is being recorded.';else if (recording.availability === 'off') text = 'Casino recording is off for Roulette.';else if (!recording.session) text = 'Casino recording is on. This session starts on the first spin.';else text = (recording.session.status === 'running' ? 'Recording' : recording.session.status === 'paused' ? 'Paused' : 'Stopped') + ' · ' + casinoDuration(recording.elapsedMs) + ' · ' + recording.session.spins + ' spins';
   var controls = [];
@@ -11298,7 +12020,7 @@ function useCasinoAccountSync(appState, setAppState) {
     };
   }, []);
   var push = React.useCallback(/*#__PURE__*/function () {
-    var _ref80 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
+    var _ref82 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
       var next, attempt, result, stored, _current, current;
       return _regenerator().w(function (_context9) {
         while (1) switch (_context9.n) {
@@ -11376,7 +12098,7 @@ function useCasinoAccountSync(appState, setAppState) {
       }, _callee9);
     }));
     return function (_x2, _x3) {
-      return _ref80.apply(this, arguments);
+      return _ref82.apply(this, arguments);
     };
   }(), [applySnapshot]);
   var queuePush = React.useCallback(function (candidate) {
@@ -11545,8 +12267,8 @@ function useCasinoAccountSync(appState, setAppState) {
 function markRouletteAccountReset() {
   writeSyncMeta(nextResetSyncMeta(readSyncMeta(loadApp()), Date.now()));
 }
-function CasinoSyncBar(_ref83) {
-  var sync = _ref83.sync;
+function CasinoSyncBar(_ref85) {
+  var sync = _ref85.sync;
   var text = sync.status === 'local' ? sync.deviceSaved ? 'Saved on this device · export and import through Casino to add it to an account' : 'Not saved · browser storage unavailable' : sync.status === 'checking' ? 'Checking account sync…' : sync.status === 'syncing' ? 'Syncing with your Casino account…' : sync.status === 'synced' ? 'Synced with your Casino account' : sync.deviceSaved ? 'Saved for this account on this device · cloud sync unavailable' : 'Not saved · Casino account storage unavailable';
   return React.createElement('section', {
     'aria-label': 'Roulette account sync',
@@ -11760,14 +12482,14 @@ function pickSessionsFile(updApp, setTab) {
 
 // ===== components/onboarding-apply.jsx =====
 // Applies the first-run setup choices to app state. Moved from App.jsx; the only change is that updApp is a parameter.
-function completeOnboarding(updApp, _ref84) {
-  var roulette = _ref84.roulette,
-    bankroll = _ref84.bankroll,
-    defaultBuyIn = _ref84.defaultBuyIn,
-    curr = _ref84.currency,
-    tableMinBet = _ref84.tableMinBet,
-    tableMaxBet = _ref84.tableMaxBet,
-    tableMaxTotal = _ref84.tableMaxTotal;
+function completeOnboarding(updApp, _ref86) {
+  var roulette = _ref86.roulette,
+    bankroll = _ref86.bankroll,
+    defaultBuyIn = _ref86.defaultBuyIn,
+    curr = _ref86.currency,
+    tableMinBet = _ref86.tableMinBet,
+    tableMaxBet = _ref86.tableMaxBet,
+    tableMaxTotal = _ref86.tableMaxTotal;
   updApp(function (s) {
     var prevBankroll = s.settings._restartBankroll;
     s.settings.onboarded = true;
@@ -11816,9 +12538,9 @@ function completeOnboarding(updApp, _ref84) {
 
 // ===== components/UpdateBanner.jsx =====
 // App update prompt. Moved from App.jsx; the only change is that appState and updateAvailable are props.
-function UpdateBanner(_ref85) {
-  var appState = _ref85.appState,
-    updateAvailable = _ref85.updateAvailable;
+function UpdateBanner(_ref87) {
+  var appState = _ref87.appState,
+    updateAvailable = _ref87.updateAvailable;
   return /*#__PURE__*/React.createElement("button", {
     onClick: function onClick() {
       saveApp(appState);
@@ -11908,10 +12630,10 @@ function UpdateBanner(_ref85) {
 
 // ===== components/DroughtPanel.jsx =====
 // Even-money, dozen and column drought counts. Both play pages render it; moved from App.jsx unchanged.
-function DroughtPanel(_ref86) {
-  var emDroughts = _ref86.emDroughts,
-    dozD = _ref86.dozD,
-    colD = _ref86.colD;
+function DroughtPanel(_ref88) {
+  var emDroughts = _ref88.emDroughts,
+    dozD = _ref88.dozD,
+    colD = _ref88.colD;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -11993,54 +12715,54 @@ function DroughtPanel(_ref86) {
 // Moved from App.jsx. App renders it through a wrapper that passes every App value the page reads.
 // Body unchanged except two marked edits: the drought grid is now DroughtPanel, and the strategy chips
 // take the tracks as an argument.
-function GamePageView(_ref87) {
-  var addOpen = _ref87.addOpen,
-    addTrack = _ref87.addTrack,
-    animNumber = _ref87.animNumber,
-    betResults = _ref87.betResults,
-    clearTimerRef = _ref87.clearTimerRef,
-    closeTrack = _ref87.closeTrack,
-    colD = _ref87.colD,
-    cur = _ref87.cur,
-    currency = _ref87.currency,
-    dozD = _ref87.dozD,
-    editTrackId = _ref87.editTrackId,
-    emDroughts = _ref87.emDroughts,
-    endSession = _ref87.endSession,
-    recordGameSpin = _ref87.recordGameSpin,
-    gameResult = _ref87.gameResult,
-    gameSpinning = _ref87.gameSpinning,
-    isLandscape = _ref87.isLandscape,
-    lastBets = _ref87.lastBets,
-    lastSpinDelta = _ref87.lastSpinDelta,
-    manualBets = _ref87.manualBets,
-    nextColorIdx = _ref87.nextColorIdx,
-    nonClosedTracks = _ref87.nonClosedTracks,
-    parkToggle = _ref87.parkToggle,
-    pendingTrackCfg = _ref87.pendingTrackCfg,
-    pendingTrackType = _ref87.pendingTrackType,
-    pnlVal = _ref87.pnlVal,
-    saveSession = _ref87.saveSession,
-    selectedChip = _ref87.selectedChip,
-    sess = _ref87.sess,
-    setAddOpen = _ref87.setAddOpen,
-    setAnimNumber = _ref87.setAnimNumber,
-    setBetResults = _ref87.setBetResults,
-    setEditTrackId = _ref87.setEditTrackId,
-    setGameResult = _ref87.setGameResult,
-    setGameSpinning = _ref87.setGameSpinning,
-    setLastBets = _ref87.setLastBets,
-    setLastSpinDelta = _ref87.setLastSpinDelta,
-    setManualBets = _ref87.setManualBets,
-    setPendingTrackCfg = _ref87.setPendingTrackCfg,
-    setPendingTrackType = _ref87.setPendingTrackType,
-    setSelectedChip = _ref87.setSelectedChip,
-    setUndoStack = _ref87.setUndoStack,
-    settings = _ref87.settings,
-    tapNumber = _ref87.tapNumber,
-    updSess = _ref87.updSess,
-    updateTrackConfig = _ref87.updateTrackConfig,
-    wheelNums = _ref87.wheelNums;
+function GamePageView(_ref89) {
+  var addOpen = _ref89.addOpen,
+    addTrack = _ref89.addTrack,
+    animNumber = _ref89.animNumber,
+    betResults = _ref89.betResults,
+    clearTimerRef = _ref89.clearTimerRef,
+    closeTrack = _ref89.closeTrack,
+    colD = _ref89.colD,
+    cur = _ref89.cur,
+    currency = _ref89.currency,
+    dozD = _ref89.dozD,
+    editTrackId = _ref89.editTrackId,
+    emDroughts = _ref89.emDroughts,
+    endSession = _ref89.endSession,
+    recordGameSpin = _ref89.recordGameSpin,
+    gameResult = _ref89.gameResult,
+    gameSpinning = _ref89.gameSpinning,
+    isLandscape = _ref89.isLandscape,
+    lastBets = _ref89.lastBets,
+    lastSpinDelta = _ref89.lastSpinDelta,
+    manualBets = _ref89.manualBets,
+    nextColorIdx = _ref89.nextColorIdx,
+    nonClosedTracks = _ref89.nonClosedTracks,
+    parkToggle = _ref89.parkToggle,
+    pendingTrackCfg = _ref89.pendingTrackCfg,
+    pendingTrackType = _ref89.pendingTrackType,
+    pnlVal = _ref89.pnlVal,
+    saveSession = _ref89.saveSession,
+    selectedChip = _ref89.selectedChip,
+    sess = _ref89.sess,
+    setAddOpen = _ref89.setAddOpen,
+    setAnimNumber = _ref89.setAnimNumber,
+    setBetResults = _ref89.setBetResults,
+    setEditTrackId = _ref89.setEditTrackId,
+    setGameResult = _ref89.setGameResult,
+    setGameSpinning = _ref89.setGameSpinning,
+    setLastBets = _ref89.setLastBets,
+    setLastSpinDelta = _ref89.setLastSpinDelta,
+    setManualBets = _ref89.setManualBets,
+    setPendingTrackCfg = _ref89.setPendingTrackCfg,
+    setPendingTrackType = _ref89.setPendingTrackType,
+    setSelectedChip = _ref89.setSelectedChip,
+    setUndoStack = _ref89.setUndoStack,
+    settings = _ref89.settings,
+    tapNumber = _ref89.tapNumber,
+    updSess = _ref89.updSess,
+    updateTrackConfig = _ref89.updateTrackConfig,
+    wheelNums = _ref89.wheelNums;
   var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
   var hasActiveTracks = nonClosedTracks.some(function (t) {
     return t.state === "active";
@@ -12816,12 +13538,12 @@ function GamePageView(_ref87) {
 // ===== components/TablePage.jsx =====
 // -- Full table page --
 // Moved from App.jsx unchanged. App renders it through a wrapper that passes the App values it reads.
-function TablePageView(_ref88) {
-  var sess = _ref88.sess,
-    selectedTrackId = _ref88.selectedTrackId,
-    setSelectedTrackId = _ref88.setSelectedTrackId,
-    nonClosedTracks = _ref88.nonClosedTracks,
-    cur = _ref88.cur;
+function TablePageView(_ref90) {
+  var sess = _ref90.sess,
+    selectedTrackId = _ref90.selectedTrackId,
+    setSelectedTrackId = _ref90.setSelectedTrackId,
+    nonClosedTracks = _ref90.nonClosedTracks,
+    cur = _ref90.cur;
   var selTrack = sess.tracks.find(function (t) {
     return t.id === selectedTrackId;
   }) || nonClosedTracks[0] || null;
@@ -12920,10 +13642,10 @@ function TablePageView(_ref88) {
       flexDirection: "column",
       gap: 3
     }
-  }, legendRows.map(function (_ref89) {
-    var _ref90 = _slicedToArray(_ref89, 2),
-      abbr = _ref90[0],
-      desc = _ref90[1];
+  }, legendRows.map(function (_ref91) {
+    var _ref92 = _slicedToArray(_ref91, 2),
+      abbr = _ref92[0],
+      desc = _ref92[1];
     return /*#__PURE__*/React.createElement("div", {
       key: abbr,
       style: {
@@ -13200,6 +13922,10 @@ function App() {
     _useState140 = _slicedToArray(_useState139, 2),
     clearUndo = _useState140[0],
     setClearUndo = _useState140[1]; // {sessionId, snapshot} while Undo for Clear numbers is offered
+  var _useState141 = (0, _react.useState)(null),
+    _useState142 = _slicedToArray(_useState141, 2),
+    spinCorrection = _useState142[0],
+    setSpinCorrection = _useState142[1]; // {index} while the number picker for a recent spin is open
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(function () {
@@ -13238,19 +13964,19 @@ function App() {
       return window.removeEventListener('nexus-account-scope-ready', loadScopedUi);
     };
   }, []);
-  var _useState141 = (0, _react.useState)(null),
-    _useState142 = _slicedToArray(_useState141, 2),
-    liveBetResults = _useState142[0],
-    setLiveBetResults = _useState142[1];
-  var _useState143 = (0, _react.useState)([]),
+  var _useState143 = (0, _react.useState)(null),
     _useState144 = _slicedToArray(_useState143, 2),
-    liveUndoStack = _useState144[0],
-    setLiveUndoStack = _useState144[1];
-  var liveClearTimerRef = React.useRef(null);
-  var _useState145 = (0, _react.useState)(null),
+    liveBetResults = _useState144[0],
+    setLiveBetResults = _useState144[1];
+  var _useState145 = (0, _react.useState)([]),
     _useState146 = _slicedToArray(_useState145, 2),
-    updateAvailable = _useState146[0],
-    setUpdateAvailable = _useState146[1]; // {version, notes}
+    liveUndoStack = _useState146[0],
+    setLiveUndoStack = _useState146[1];
+  var liveClearTimerRef = React.useRef(null);
+  var _useState147 = (0, _react.useState)(null),
+    _useState148 = _slicedToArray(_useState147, 2),
+    updateAvailable = _useState148[0],
+    setUpdateAvailable = _useState148[1]; // {version, notes}
 
   // Check for app updates
   (0, _react.useEffect)(function () {
@@ -13270,46 +13996,46 @@ function App() {
       return clearInterval(iv);
     };
   }, []);
-  var _useState147 = (0, _react.useState)(false),
-    _useState148 = _slicedToArray(_useState147, 2),
-    buyInOpen = _useState148[0],
-    setBuyInOpen = _useState148[1];
   var _useState149 = (0, _react.useState)(false),
     _useState150 = _slicedToArray(_useState149, 2),
-    currencyOpen = _useState150[0],
-    setCurrencyOpen = _useState150[1];
+    buyInOpen = _useState150[0],
+    setBuyInOpen = _useState150[1];
   var _useState151 = (0, _react.useState)(false),
     _useState152 = _slicedToArray(_useState151, 2),
-    changelogOpen = _useState152[0],
-    setChangelogOpen = _useState152[1];
+    currencyOpen = _useState152[0],
+    setCurrencyOpen = _useState152[1];
   var _useState153 = (0, _react.useState)(false),
     _useState154 = _slicedToArray(_useState153, 2),
-    editBankroll = _useState154[0],
-    setEditBankroll = _useState154[1];
+    changelogOpen = _useState154[0],
+    setChangelogOpen = _useState154[1];
   var _useState155 = (0, _react.useState)(false),
     _useState156 = _slicedToArray(_useState155, 2),
-    cashOutOpen = _useState156[0],
-    setCashOutOpen = _useState156[1];
+    editBankroll = _useState156[0],
+    setEditBankroll = _useState156[1];
   var _useState157 = (0, _react.useState)(false),
     _useState158 = _slicedToArray(_useState157, 2),
-    hardResetOpen = _useState158[0],
-    setHardResetOpen = _useState158[1];
+    cashOutOpen = _useState158[0],
+    setCashOutOpen = _useState158[1];
   var _useState159 = (0, _react.useState)(false),
     _useState160 = _slicedToArray(_useState159, 2),
-    feedbackOpen = _useState160[0],
-    setFeedbackOpen = _useState160[1];
-  var _useState161 = (0, _react.useState)(""),
+    hardResetOpen = _useState160[0],
+    setHardResetOpen = _useState160[1];
+  var _useState161 = (0, _react.useState)(false),
     _useState162 = _slicedToArray(_useState161, 2),
-    feedbackText = _useState162[0],
-    setFeedbackText = _useState162[1];
-  var _useState163 = (0, _react.useState)("fibonacci"),
+    feedbackOpen = _useState162[0],
+    setFeedbackOpen = _useState162[1];
+  var _useState163 = (0, _react.useState)(""),
     _useState164 = _slicedToArray(_useState163, 2),
-    pendingTrackType = _useState164[0],
-    setPendingTrackType = _useState164[1];
-  var _useState165 = (0, _react.useState)(defaultFibCfg()),
+    feedbackText = _useState164[0],
+    setFeedbackText = _useState164[1];
+  var _useState165 = (0, _react.useState)("fibonacci"),
     _useState166 = _slicedToArray(_useState165, 2),
-    pendingTrackCfg = _useState166[0],
-    setPendingTrackCfg = _useState166[1];
+    pendingTrackType = _useState166[0],
+    setPendingTrackType = _useState166[1];
+  var _useState167 = (0, _react.useState)(defaultFibCfg()),
+    _useState168 = _slicedToArray(_useState167, 2),
+    pendingTrackCfg = _useState168[0],
+    setPendingTrackCfg = _useState168[1];
   var sessKey = appMode === "game" ? "gameSession" : "currentSession";
   var sess = appState[sessKey] || appState.currentSession;
   var livePauseOffset = livePausedTotal + (livePausedAt ? Date.now() - livePausedAt : 0);
@@ -13322,10 +14048,10 @@ function App() {
   }, [appState]);
 
   // Storage failures surface as a banner, never a blocking browser dialog
-  var _useState167 = (0, _react.useState)(null),
-    _useState168 = _slicedToArray(_useState167, 2),
-    saveError = _useState168[0],
-    setSaveError = _useState168[1];
+  var _useState169 = (0, _react.useState)(null),
+    _useState170 = _slicedToArray(_useState169, 2),
+    saveError = _useState170[0],
+    setSaveError = _useState170[1];
   (0, _react.useEffect)(function () {
     function onSaveError(e) {
       setSaveError(e && e.detail || "Unknown storage error");
@@ -13498,280 +14224,17 @@ function App() {
         });
       }
     }
-    var trackResults = [];
-    var totalDelta = 0;
+    var spinOutcome = {
+      totalDelta: 0,
+      trackResults: []
+    };
     updSess(function (s) {
-      s.spins.push(val);
-      var nd = _objectSpread({}, s.droughts);
-      Object.keys(nd).forEach(function (k) {
-        return nd[k]++;
-      });
-      nd[val] = 0;
-      s.droughts = nd;
-      if (!fromTracker) return;
-      s.tracks.forEach(function (t) {
-        if (t.state !== "active") return;
-        var tbl = computeTableForTrack(t);
-        if (t.type === "fibonacci") {
-          var dts = t.config.dozenTargets || [],
-            cts = t.config.colTargets || [],
-            evts = t.config.evenTargets || [];
-          var _betMode2 = t.config.betMode || "progression";
-          // Auto-martingale when even money targets selected
-          var effectiveBetMode = _betMode2 === "flat" ? "flat" : evts.length > 0 ? "martingale" : "progression";
-          var row = tbl[Math.min(t.level, tbl.length - 1)];
-          var isZ = val === "0" || val === "00";
-
-          // Determine hit
-          var hitCount = 0;
-          if (!isZ) {
-            if (evts.length > 0) {
-              evts.forEach(function (key) {
-                var em = EVEN_MONEY.find(function (e) {
-                  return e.key === key;
-                });
-                if (em && em.pred(+val)) hitCount++;
-              });
-            } else {
-              if (dts.includes(dozenOf(val))) hitCount++;
-              if (cts.includes(columnOf(val))) hitCount++;
-            }
-          }
-          var isHit = hitCount > 0;
-          var payMult = evts.length > 0 ? 2 : 3;
-          var numTargets = evts.length > 0 ? evts.length : dts.length + cts.length || 1;
-          // Name every flash line by the bet it placed, not just the track type.
-          var flashName = TRACK_ICONS[t.type] + " " + betTargetText(t.type, t.config) + " (" + (effectiveBetMode === "martingale" ? "Martingale" : effectiveBetMode === "flat" ? "Flat" : "Prog") + ")";
-          if (effectiveBetMode === "flat") {
-            // No progression -- level stays 0
-            if (isHit) {
-              var profit = hitCount * payMult - numTargets;
-              t.pnl += profit;
-              t.wins++;
-              t.bets.push({
-                spinIdx: s.spins.length - 1,
-                level: 0,
-                outcome: "win",
-                profit: profit,
-                cat: "win"
-              });
-              totalDelta += profit * (t.config.unit || 1);
-              trackResults.push({
-                name: flashName,
-                color: t.color,
-                profit: profit,
-                unit: t.config.unit || 1,
-                outcome: "Win",
-                cat: "win"
-              });
-            } else {
-              t.pnl -= numTargets;
-              t.bets.push({
-                spinIdx: s.spins.length - 1,
-                level: 0,
-                outcome: "loss",
-                profit: -numTargets,
-                cat: "loss"
-              });
-              totalDelta -= numTargets * (t.config.unit || 1);
-              trackResults.push({
-                name: flashName,
-                color: t.color,
-                profit: -numTargets,
-                unit: t.config.unit || 1,
-                outcome: "Miss",
-                cat: "loss"
-              });
-            }
-          } else {
-            // Progression or Martingale
-            var cat = isZ ? "loss" : getCategory(val, dts, cts, row, evts);
-            if (cat !== "loss") {
-              var _profit = hitCount * payMult * (row ? row.c : 1) - (row ? row.totalInvest : 0);
-              var _spinDelta = hitCount * payMult * (row ? row.c : 1) - (row ? row.c : 1) * numTargets;
-              t.pnl += _spinDelta;
-              t.wins++;
-              t.sequences++;
-              t.level = 0;
-              t.bets.push({
-                spinIdx: s.spins.length - 1,
-                level: t.level,
-                outcome: "win",
-                profit: _profit,
-                cat: cat
-              });
-              totalDelta += _spinDelta * (t.config.unit || 1);
-              trackResults.push({
-                name: flashName,
-                color: t.color,
-                profit: _profit,
-                unit: t.config.unit || 1,
-                outcome: cat === "jackpot" ? "Jackpot!" : "Win",
-                cat: cat
-              });
-            } else {
-              var betChips = (row ? row.c : 1) * numTargets;
-              t.pnl -= betChips;
-              t.bets.push({
-                spinIdx: s.spins.length - 1,
-                level: t.level,
-                outcome: "loss",
-                profit: -betChips,
-                cat: "loss"
-              });
-              var bc = betChips * (t.config.unit || 1);
-              totalDelta -= bc;
-              if (t.level < tbl.length - 1) t.level++;else {
-                t.state = "closed";
-                t.closedAtSpin = s.spins.length - 1;
-              }
-              trackResults.push({
-                name: flashName,
-                color: t.color,
-                profit: -(row ? row.c : 1),
-                unit: t.config.unit || 1,
-                outcome: "Miss",
-                cat: "loss"
-              });
-            }
-          }
-        }
-        if (t.type === "solution") {
-          var bets = t.config.activeBets || [];
-          var resolved = [];
-          bets.forEach(function (b) {
-            if (b.number === val) {
-              var _row2 = tbl[Math.min(b.level, tbl.length - 1)];
-              var winDelta = _row2 ? _row2.ret - _row2.c : 0;
-              var _profit2 = _row2 ? _row2.profit : 0;
-              t.pnl += winDelta;
-              t.wins++;
-              t.sequences++;
-              resolved.push(b.number);
-              totalDelta += winDelta * (t.config.unit || 1);
-              t.bets.push({
-                spinIdx: s.spins.length - 1,
-                level: b.level,
-                outcome: "win",
-                profit: _profit2,
-                cat: "win"
-              });
-              trackResults.push({
-                name: TRACK_ICONS[t.type] + " #" + b.number,
-                color: t.color,
-                profit: _profit2,
-                unit: t.config.unit || 1,
-                outcome: "Win",
-                cat: "win"
-              });
-            } else {
-              var _lossCost = tbl[Math.min(b.level, tbl.length - 1)] ? tbl[Math.min(b.level, tbl.length - 1)].c : 1;
-              t.pnl -= _lossCost;
-              b.level = Math.min(b.level + 1, tbl.length - 1);
-              trackResults.push({
-                name: TRACK_ICONS[t.type] + " #" + b.number,
-                color: t.color,
-                profit: -_lossCost,
-                unit: t.config.unit || 1,
-                outcome: "Miss",
-                cat: "loss"
-              });
-              totalDelta -= _lossCost * (t.config.unit || 1);
-            }
-          });
-          t.config.activeBets = bets.filter(function (b) {
-            return !resolved.includes(b.number);
-          });
-        }
-        if (t.type === "custom") {
-          var positions = t.config.positions || [];
-          var _row3 = tbl[Math.min(t.level, tbl.length - 1)];
-          var mult = _row3 ? _row3.c : 1;
-          var baseTotalBet = positions.reduce(function (s, p) {
-            return s + p.baseAmount;
-          }, 0);
-          var payout = 0;
-          positions.forEach(function (p) {
-            var covered = betCoveredNumbers(p.type, p.target);
-            if (covered.indexOf(val) >= 0) payout += p.baseAmount * betPayoutMult(p.type);
-          });
-          var totalReturn = payout * mult;
-          var betMode = t.config.betMode || "flat";
-          var customName = "🃏 " + betTargetText(t.type, t.config, false, 3);
-          if (payout > 0) {
-            var spinDelta = totalReturn - baseTotalBet * mult;
-            if (betMode === "flat") {
-              t.pnl += spinDelta;
-              t.wins++;
-              t.bets.push({
-                spinIdx: s.spins.length - 1,
-                level: 0,
-                outcome: "win",
-                profit: spinDelta,
-                cat: "win"
-              });
-              totalDelta += spinDelta * (t.config.unit || 1);
-              trackResults.push({
-                name: customName + " (Flat)",
-                color: t.color,
-                profit: spinDelta,
-                unit: t.config.unit || 1,
-                outcome: "Win",
-                cat: "win"
-              });
-            } else {
-              var seqProfit = totalReturn - (_row3 ? _row3.totalInvest : baseTotalBet);
-              t.pnl += spinDelta;
-              t.wins++;
-              t.sequences++;
-              t.level = 0;
-              t.bets.push({
-                spinIdx: s.spins.length - 1,
-                level: t.level,
-                outcome: "win",
-                profit: seqProfit,
-                cat: "win"
-              });
-              totalDelta += spinDelta * (t.config.unit || 1);
-              trackResults.push({
-                name: customName + " (Prog)",
-                color: t.color,
-                profit: seqProfit,
-                unit: t.config.unit || 1,
-                outcome: "Win",
-                cat: "win"
-              });
-            }
-          } else {
-            var lossCost = baseTotalBet * mult;
-            t.pnl -= lossCost;
-            t.bets.push({
-              spinIdx: s.spins.length - 1,
-              level: t.level,
-              outcome: "loss",
-              profit: -lossCost,
-              cat: "loss"
-            });
-            totalDelta -= lossCost * (t.config.unit || 1);
-            if (betMode !== "flat") {
-              if (t.level < tbl.length - 1) t.level++;else {
-                t.state = "closed";
-                t.closedAtSpin = s.spins.length - 1;
-              }
-            }
-            trackResults.push({
-              name: customName + (betMode !== "flat" ? " (Prog)" : " (Flat)"),
-              color: t.color,
-              profit: -lossCost,
-              unit: t.config.unit || 1,
-              outcome: "Miss",
-              cat: "loss"
-            });
-          }
-        }
-      });
-      s.bankrollCurrent = Math.round((s.bankrollCurrent + totalDelta) * 100) / 100;
+      spinOutcome = applySpin(s, val, fromTracker);
+      Object.assign(s, spinOutcome.sess);
     });
+    var _spinOutcome = spinOutcome,
+      trackResults = _spinOutcome.trackResults,
+      totalDelta = _spinOutcome.totalDelta;
     if (trackResults.length > 0) {
       setResult({
         val: val,
@@ -13801,26 +14264,12 @@ function App() {
   }
   function doBuyIn(amount) {
     updSess(function (s) {
-      s.bankrollCurrent = Math.round((s.bankrollCurrent + amount) * 100) / 100;
-      s.totalBuyIn = (s.totalBuyIn || 0) + amount;
-      if (!s.buyIns) s.buyIns = [];
-      s.buyIns.push({
-        amount: amount,
-        at: Date.now(),
-        spin: s.spins.length
-      });
+      Object.assign(s, applyBuyIn(s, amount, Date.now()));
     });
   }
   function doCashOut(amount) {
     updSess(function (s) {
-      s.bankrollCurrent = Math.round((s.bankrollCurrent - amount) * 100) / 100;
-      s.totalCashOut = (s.totalCashOut || 0) + amount;
-      if (!s.cashOuts) s.cashOuts = [];
-      s.cashOuts.push({
-        amount: amount,
-        at: Date.now(),
-        spin: s.spins.length
-      });
+      Object.assign(s, applyCashOut(s, amount, Date.now()));
     });
   }
   function changeCurrency(newCode, mode) {
@@ -13843,7 +14292,9 @@ function App() {
   }
   function addTrack(type, config) {
     updSess(function (s) {
-      s.tracks.push(newTrack(type, nextColorIdx, config, pickTrackColor(type, config, s.tracks)));
+      var t = newTrack(type, nextColorIdx, config, pickTrackColor(type, config, s.tracks));
+      t.createdAtSpin = s.spins.length;
+      s.tracks.push(t);
     });
     setAddOpen(false);
     setPendingTrackType("fibonacci");
@@ -13895,6 +14346,25 @@ function App() {
     setLastSpinDelta(snapshot.lastSpinDelta);
     setClearUndo(null);
   }
+  // Long-press a recent number to correct it. spin-apply.js replays the session with the corrected spin; a session
+  // whose record cannot be replayed is refused and nothing changes. The picker reads the same refusal to show it.
+  function openSpinCorrection(index) {
+    setSpinCorrection({
+      index: index
+    });
+  }
+  function applySpinCorrection(index, value) {
+    var result = correctSpin(appState.currentSession, index, value, Date.now());
+    if (!result.ok) return result;
+    if (result.changed) {
+      updApp(function (s) {
+        s.currentSession = result.session;
+      });
+      setPrevSessState(null); // Undo last spin would restore a session from before this correction
+    }
+    setSpinCorrection(null);
+    return result;
+  }
   function reactivateTrack(id) {
     updSess(function (s) {
       var t = s.tracks.find(function (x) {
@@ -13945,6 +14415,7 @@ function App() {
       var colorIdx = s.tracks.length % TRACK_COLORS.length;
       var nt = newTrack(t.type, colorIdx, mergedCfg, pickTrackColor(t.type, mergedCfg, s.tracks));
       nt.state = "active";
+      nt.createdAtSpin = s.spins.length;
       s.tracks.push(nt);
     });
     setEditTrackId(null);
@@ -14027,13 +14498,7 @@ function App() {
   function ghostSpin(val) {
     // Logs spin for drought tracking only -- no progression, no bankroll effect
     updSess(function (s) {
-      s.spins.push(val);
-      var nd = _objectSpread({}, s.droughts);
-      Object.keys(nd).forEach(function (k) {
-        return nd[k]++;
-      });
-      nd[val] = 0;
-      s.droughts = nd;
+      Object.assign(s, applySpin(s, val, false).sess);
     });
     var recording = recordingForMode(appMode, gameRecording, liveRecording);
     recording.record(_objectSpread(_objectSpread({
@@ -14280,9 +14745,23 @@ function App() {
       },
       onConfirm: clearNumbers,
       onUndo: undoClearNumbers
-    }), /*#__PURE__*/React.createElement(RecentNumbersStrip, {
+    }), /*#__PURE__*/React.createElement(SpinCorrectionContext.Provider, {
+      value: openSpinCorrection
+    }, /*#__PURE__*/React.createElement(RecentNumbersStrip, {
       spins: sess.spins,
       trackOverlays: trackOverlays
+    })), spinCorrection && spinCorrection.index < sess.spins.length && /*#__PURE__*/React.createElement(SpinNumberPicker, {
+      spinIndex: spinCorrection.index,
+      spinCount: sess.spins.length,
+      currentValue: sess.spins[spinCorrection.index],
+      roulette: sess.roulette,
+      blockedReason: spinCorrectionBlock(sess),
+      onChoose: function onChoose(v) {
+        return applySpinCorrection(spinCorrection.index, v);
+      },
+      onClose: function onClose() {
+        return setSpinCorrection(null);
+      }
     }), function () {
       var tMin = settings.tableMinBet || 1;
       var CHIPS = CHIP_DENOMS.filter(function (c) {
@@ -14914,10 +15393,10 @@ function App() {
       l: "JP Profit",
       v: (outcomes.jackpot.profit * (primaryTrack.config.unit || 1) >= 0 ? "+" : "-") + cur.symbol + Math.abs(outcomes.jackpot.profit * (primaryTrack.config.unit || 1)).toFixed(cur.dec),
       c: outcomes.jackpot.profit >= 0 ? "#4ade80" : "#f87171"
-    }].map(function (_ref91) {
-      var l = _ref91.l,
-        v = _ref91.v,
-        c = _ref91.c;
+    }].map(function (_ref93) {
+      var l = _ref93.l,
+        v = _ref93.v,
+        c = _ref93.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -14999,10 +15478,10 @@ function App() {
       l: "Partial Profit",
       v: outcomes ? signChips(outcomes.partial.profit, primaryTrack.config.unit || 1, currency) : "--",
       c: outcomes && outcomes.partial.profit >= 0 ? "#4ade80" : "#f97316"
-    }].map(function (_ref92) {
-      var l = _ref92.l,
-        v = _ref92.v,
-        c = _ref92.c;
+    }].map(function (_ref94) {
+      var l = _ref94.l,
+        v = _ref94.v,
+        c = _ref94.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -15246,12 +15725,12 @@ function App() {
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
 
   // -- Bankroll Edit --
-  function BankrollEdit(_ref93) {
-    var onClose = _ref93.onClose;
-    var _useState169 = (0, _react.useState)(sess.bankrollCurrent),
-      _useState170 = _slicedToArray(_useState169, 2),
-      val = _useState170[0],
-      setVal = _useState170[1];
+  function BankrollEdit(_ref95) {
+    var onClose = _ref95.onClose;
+    var _useState171 = (0, _react.useState)(sess.bankrollCurrent),
+      _useState172 = _slicedToArray(_useState171, 2),
+      val = _useState172[0],
+      setVal = _useState172[1];
     function save() {
       updSess(function (s) {
         s.bankrollCurrent = val;
