@@ -1,6 +1,6 @@
 # Nexus Roulette — agent guide
 
-Single-page React roulette tracker. No bundler, no `package.json`, no CI: `nexus-src/build.js`
+Single-page React roulette tracker. No bundler: `nexus-src/build.js`
 concatenates `nexus-src/src/*` and inlines React 18 UMD into one self-contained `index.html` at
 the repo root, which is what ships.
 
@@ -37,16 +37,15 @@ Deployed artifact set, exactly these and nothing else:
 ## Building
 
 ```sh
-npm install --no-save --prefix . react@18 react-dom@18 @babel/core @babel/preset-react @babel/preset-env
-node nexus-src/build.js
+npm install            # from package.json (includes the vendored nf-ui package)
+npm run build          # node nexus-src/build.js
+npm test               # node --test test/*.test.mjs
 ```
 
-There is deliberately no `package.json`, which has two consequences that bite silently:
-
-- Pass `--prefix .` or npm walks up and installs into a parent directory; the build then fails on
-  a missing `node_modules/react/umd/react.production.min.js`.
-- List every package in **one** `--no-save` command. A second `--no-save` install prunes the
-  packages from the first (no manifest to remember them) and quietly breaks the next build.
+`package.json` declares every build and test dependency, including `@nexus-foundry/nf-ui` from
+`vendor/`. New source files must also be added to the `FILES` list in `nexus-src/build.js`, in
+dependency order, or they are silently left out of the bundle. `.github/workflows/verify.yml`
+exists, but GitHub Actions are switched off by standing direction, so run the checks locally.
 
 Never commit `index.html` without rebuilding it — `deploy.sh` blocks on a bundle that does not
 reproduce from source, and that block is the last line of defence against shipping stale code.
