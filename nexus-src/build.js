@@ -128,6 +128,8 @@ ${nfUi}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{background:#0f1923;min-height:100%;}
 button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-family:inherit;cursor:pointer;}
+*,*::before,*::after{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}
+input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;}
 #root{min-height:100vh;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
 </style>

@@ -1,11 +1,25 @@
 # Changelog
 
-Last Updated: 2026-09-26
+Last Updated: 2026-10-29
 
 Notable code and documentation changes are recorded here. Release versions are assigned only when
 `develop` is promoted to `main`; feature-branch work remains under Unreleased.
 
 ## [Unreleased]
+
+### Changed
+
+- Tapping and long-pressing anywhere in the app no longer selects or highlights text or opens the copy menu, so fast number taps at the table are not interrupted. Text fields still allow selection.
+
+### Fixed
+
+- Dialogs now close only when a press both starts and ends on the dark backdrop. A drag that begins inside a dialog and ends outside it no longer dismisses it.
+
+### Planned on this branch (not yet built)
+
+- "Clear all" for the recent numbers, keeping the session, bankroll, buy-ins, cash-outs and history.
+- Long-press any recent number to correct it, with the session's statistics recalculated as if the right number had been entered.
+- Read recent numbers from a photo of the table's history board, always through a review screen before anything is added.
 
 ### Changed
 
