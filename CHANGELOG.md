@@ -9,6 +9,10 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ### Added
 
+- Long-press any number in the live recent-numbers strip (half a second, ignored while scrolling) to correct it. A number picker (0, 00 on American wheels, 1-36) replaces that spin and replays the session from its spins, so every tracker, bet, win, progression level, drought, profit and the bankroll come out exactly as if the right number had been entered. Sessions whose history cannot be replayed exactly (for example older sessions with tracks added mid-way) are refused with a reason rather than guessed. A correction does not re-send the spin to Casino recording.
+
+### Added
+
 - "Clear numbers" in live mode empties the recent numbers and the tracking derived from them (droughts, bets, wins, progression levels), after an in-app confirm. The bankroll, buy-ins, cash-outs, each track's profit and the session record are kept. An inline "Numbers cleared · Undo" takes the button's place for 15 seconds, or until the next spin. Undo restores only what the clear changed, so a buy-in made in between survives. The recent-numbers strip and drought panel keep their space, so clearing moves nothing on screen.
 
 ### Changed
@@ -25,7 +29,6 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ### Planned on this branch (not yet built)
 
-- Long-press any recent number to correct it, with the session's statistics recalculated as if the right number had been entered.
 - Read recent numbers from a photo of the table's history board, always through a review screen before anything is added.
 
 ### Changed

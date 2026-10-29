@@ -61,6 +61,7 @@ export default function App() {
   const [liveLastBets, setLiveLastBets] = useState(()=>initialUiState.liveLastBets||[]);
   const [clearOpen, setClearOpen] = useState(false);
   const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
+  const [spinCorrection, setSpinCorrection] = useState(null); // {index} while the number picker for a recent spin is open
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
@@ -224,136 +225,9 @@ export default function App() {
         updSess(s=>{ s.sessionStartedAt=Date.now(); });
       }
     }
-    const trackResults=[]; let totalDelta=0;
-    updSess(s => {
-      s.spins.push(val);
-      const nd={...s.droughts}; Object.keys(nd).forEach(k=>nd[k]++); nd[val]=0; s.droughts=nd;
-      if(!fromTracker) return;
-      s.tracks.forEach(t => {
-        if(t.state!=="active") return;
-        const tbl=computeTableForTrack(t);
-        if(t.type==="fibonacci") {
-          const dts=t.config.dozenTargets||[], cts=t.config.colTargets||[], evts=t.config.evenTargets||[];
-          const betMode=t.config.betMode||"progression";
-          // Auto-martingale when even money targets selected
-          const effectiveBetMode = betMode==="flat" ? "flat" : (evts.length>0 ? "martingale" : "progression");
-          const row=tbl[Math.min(t.level,tbl.length-1)];
-          const isZ=val==="0"||val==="00";
-
-          // Determine hit
-          let hitCount=0;
-          if(!isZ) {
-            if(evts.length>0) {
-              evts.forEach(key=>{const em=EVEN_MONEY.find(e=>e.key===key);if(em&&em.pred(+val))hitCount++;});
-            } else {
-              if(dts.includes(dozenOf(val)))hitCount++;
-              if(cts.includes(columnOf(val)))hitCount++;
-            }
-          }
-          const isHit=hitCount>0;
-          const payMult=evts.length>0?2:3;
-          const numTargets=evts.length>0?evts.length:(dts.length+cts.length)||1;
-          // Name every flash line by the bet it placed, not just the track type.
-          const flashName=TRACK_ICONS[t.type]+" "+betTargetText(t.type,t.config)
-            +" ("+(effectiveBetMode==="martingale"?"Martingale":effectiveBetMode==="flat"?"Flat":"Prog")+")";
-
-          if(effectiveBetMode==="flat") {
-            // No progression -- level stays 0
-            if(isHit) {
-              const profit=hitCount*payMult-numTargets;
-              t.pnl+=profit; t.wins++;
-              t.bets.push({spinIdx:s.spins.length-1,level:0,outcome:"win",profit,cat:"win"});
-              totalDelta+=profit*(t.config.unit||1);
-              trackResults.push({name:flashName,color:t.color,profit,unit:t.config.unit||1,outcome:"Win",cat:"win"});
-            } else {
-              t.pnl-=numTargets;
-              t.bets.push({spinIdx:s.spins.length-1,level:0,outcome:"loss",profit:-numTargets,cat:"loss"});
-              totalDelta-=numTargets*(t.config.unit||1);
-              trackResults.push({name:flashName,color:t.color,profit:-numTargets,unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
-            }
-          } else {
-            // Progression or Martingale
-            const cat=isZ?"loss":getCategory(val,dts,cts,row,evts);
-            if(cat!=="loss") {
-              const profit=hitCount*payMult*(row?row.c:1)-(row?row.totalInvest:0);
-              const spinDelta=hitCount*payMult*(row?row.c:1)-(row?row.c:1)*numTargets;
-              t.pnl+=spinDelta; t.wins++; t.sequences++; t.level=0;
-              t.bets.push({spinIdx:s.spins.length-1,level:t.level,outcome:"win",profit,cat});
-              totalDelta+=spinDelta*(t.config.unit||1);
-              trackResults.push({name:flashName,color:t.color,profit,unit:t.config.unit||1,outcome:cat==="jackpot"?"Jackpot!":"Win",cat});
-            } else {
-              const betChips=(row?row.c:1)*numTargets;
-              t.pnl-=betChips;
-              t.bets.push({spinIdx:s.spins.length-1,level:t.level,outcome:"loss",profit:-betChips,cat:"loss"});
-              const bc=betChips*(t.config.unit||1);
-              totalDelta-=bc;
-              if(t.level<tbl.length-1) t.level++; else{ t.state="closed"; t.closedAtSpin=s.spins.length-1; }
-              trackResults.push({name:flashName,color:t.color,profit:-(row?row.c:1),unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
-            }
-          }
-        }
-        if(t.type==="solution") {
-          const bets=t.config.activeBets||[]; const resolved=[];
-          bets.forEach(b => {
-            if(b.number===val) {
-              const row=tbl[Math.min(b.level,tbl.length-1)];
-              const winDelta=row?(row.ret-row.c):0;
-              const profit=row?row.profit:0;
-              t.pnl+=winDelta; t.wins++; t.sequences++; resolved.push(b.number);
-              totalDelta+=winDelta*(t.config.unit||1);
-              t.bets.push({spinIdx:s.spins.length-1,level:b.level,outcome:"win",profit,cat:"win"});
-              trackResults.push({name:TRACK_ICONS[t.type]+" #"+b.number,color:t.color,profit,unit:t.config.unit||1,outcome:"Win",cat:"win"});
-            } else {
-              const lossCost=(tbl[Math.min(b.level,tbl.length-1)]?tbl[Math.min(b.level,tbl.length-1)].c:1);
-              t.pnl-=lossCost;
-              b.level=Math.min(b.level+1,tbl.length-1);
-              trackResults.push({name:TRACK_ICONS[t.type]+" #"+b.number,color:t.color,profit:-lossCost,unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
-              totalDelta-=lossCost*(t.config.unit||1);
-            }
-          });
-          t.config.activeBets=bets.filter(b=>!resolved.includes(b.number));
-        }
-        if(t.type==="custom") {
-          const positions=t.config.positions||[];
-          const row=tbl[Math.min(t.level,tbl.length-1)];
-          const mult=row?row.c:1;
-          const baseTotalBet=positions.reduce(function(s,p){return s+p.baseAmount;},0);
-          var payout=0;
-          positions.forEach(function(p){
-            var covered=betCoveredNumbers(p.type,p.target);
-            if(covered.indexOf(val)>=0) payout+=p.baseAmount*betPayoutMult(p.type);
-          });
-          var totalReturn=payout*mult;
-          var betMode=t.config.betMode||"flat";
-          var customName="🃏 "+betTargetText(t.type,t.config,false,3);
-          if(payout>0) {
-            var spinDelta=totalReturn-baseTotalBet*mult;
-            if(betMode==="flat") {
-              t.pnl+=spinDelta; t.wins++;
-              t.bets.push({spinIdx:s.spins.length-1,level:0,outcome:"win",profit:spinDelta,cat:"win"});
-              totalDelta+=spinDelta*(t.config.unit||1);
-              trackResults.push({name:customName+" (Flat)",color:t.color,profit:spinDelta,unit:t.config.unit||1,outcome:"Win",cat:"win"});
-            } else {
-              var seqProfit=totalReturn-(row?row.totalInvest:baseTotalBet);
-              t.pnl+=spinDelta; t.wins++; t.sequences++; t.level=0;
-              t.bets.push({spinIdx:s.spins.length-1,level:t.level,outcome:"win",profit:seqProfit,cat:"win"});
-              totalDelta+=spinDelta*(t.config.unit||1);
-              trackResults.push({name:customName+" (Prog)",color:t.color,profit:seqProfit,unit:t.config.unit||1,outcome:"Win",cat:"win"});
-            }
-          } else {
-            var lossCost=baseTotalBet*mult;
-            t.pnl-=lossCost;
-            t.bets.push({spinIdx:s.spins.length-1,level:t.level,outcome:"loss",profit:-lossCost,cat:"loss"});
-            totalDelta-=lossCost*(t.config.unit||1);
-            if(betMode!=="flat") {
-              if(t.level<tbl.length-1) t.level++; else{ t.state="closed"; t.closedAtSpin=s.spins.length-1; }
-            }
-            trackResults.push({name:customName+(betMode!=="flat"?" (Prog)":" (Flat)"),color:t.color,profit:-lossCost,unit:t.config.unit||1,outcome:"Miss",cat:"loss"});
-          }
-        }
-      });
-      s.bankrollCurrent = Math.round((s.bankrollCurrent + totalDelta)*100)/100;
-    });
+    let spinOutcome={totalDelta:0,trackResults:[]};
+    updSess(s => { spinOutcome=applySpin(s,val,fromTracker); Object.assign(s,spinOutcome.sess); });
+    const {trackResults,totalDelta}=spinOutcome;
     if(trackResults.length>0) { setResult({val,trackResults,totalDelta}); setLastSpinDelta(totalDelta); }
     if(!deferCasinoRecord&&(appMode==="live"||appMode==="game")) {
       const wager=fromTracker?summarizeTrackWagers(sess.tracks,val):mergeWagerSummaries();
@@ -370,21 +244,11 @@ export default function App() {
   }
 
   function doBuyIn(amount) {
-    updSess(s => {
-      s.bankrollCurrent=Math.round((s.bankrollCurrent+amount)*100)/100;
-      s.totalBuyIn=(s.totalBuyIn||0)+amount;
-      if(!s.buyIns) s.buyIns=[];
-      s.buyIns.push({amount,at:Date.now(),spin:s.spins.length});
-    });
+    updSess(s => { Object.assign(s, applyBuyIn(s, amount, Date.now())); });
   }
 
   function doCashOut(amount) {
-    updSess(s => {
-      s.bankrollCurrent=Math.round((s.bankrollCurrent-amount)*100)/100;
-      s.totalCashOut=(s.totalCashOut||0)+amount;
-      if(!s.cashOuts) s.cashOuts=[];
-      s.cashOuts.push({amount,at:Date.now(),spin:s.spins.length});
-    });
+    updSess(s => { Object.assign(s, applyCashOut(s, amount, Date.now())); });
   }
 
   function changeCurrency(newCode, mode) {
@@ -406,7 +270,7 @@ export default function App() {
     });
   }
 
-  function addTrack(type, config) { updSess(s=>{s.tracks.push(newTrack(type,nextColorIdx,config,pickTrackColor(type,config,s.tracks)));}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
+  function addTrack(type, config) { updSess(s=>{const t=newTrack(type,nextColorIdx,config,pickTrackColor(type,config,s.tracks)); t.createdAtSpin=s.spins.length; s.tracks.push(t);}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
   function undoLastSpin() {
     if(!prevSessState) return;
     if(!window.confirm("Undo last tracked spin? This reverses the bankroll and progression but session time continues.")) return;
@@ -443,6 +307,19 @@ export default function App() {
     setLastSpinDelta(snapshot.lastSpinDelta);
     setClearUndo(null);
   }
+  // Long-press a recent number to correct it. spin-apply.js replays the session with the corrected spin; a session
+  // whose record cannot be replayed is refused and nothing changes. The picker reads the same refusal to show it.
+  function openSpinCorrection(index) { setSpinCorrection({index}); }
+  function applySpinCorrection(index, value) {
+    const result = correctSpin(appState.currentSession, index, value, Date.now());
+    if(!result.ok) return result;
+    if(result.changed) {
+      updApp(s => { s.currentSession = result.session; });
+      setPrevSessState(null); // Undo last spin would restore a session from before this correction
+    }
+    setSpinCorrection(null);
+    return result;
+  }
   function reactivateTrack(id) {
     updSess(s=>{
       const t=s.tracks.find(x=>x.id===id);
@@ -472,6 +349,7 @@ export default function App() {
       const colorIdx = s.tracks.length % TRACK_COLORS.length;
       const nt = newTrack(t.type, colorIdx, mergedCfg, pickTrackColor(t.type, mergedCfg, s.tracks));
       nt.state = "active";
+      nt.createdAtSpin = s.spins.length;
       s.tracks.push(nt);
     });
     setEditTrackId(null);
@@ -523,13 +401,7 @@ export default function App() {
 
   function ghostSpin(val) {
     // Logs spin for drought tracking only -- no progression, no bankroll effect
-    updSess(s => {
-      s.spins.push(val);
-      const nd={...s.droughts};
-      Object.keys(nd).forEach(k=>nd[k]++);
-      nd[val]=0;
-      s.droughts=nd;
-    });
+    updSess(s => { Object.assign(s, applySpin(s, val, false).sess); });
     const recording=recordingForMode(appMode,gameRecording,liveRecording);
     recording.record({segment:String(val),...mergeWagerSummaries(),watched:true});
     setFlashNum(val);
@@ -631,7 +503,12 @@ export default function App() {
           )}
         </div>
         <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers}/>
-        <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
+        <SpinCorrectionContext.Provider value={openSpinCorrection}>
+          <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
+        </SpinCorrectionContext.Provider>
+        {spinCorrection && spinCorrection.index<sess.spins.length && (
+          <SpinNumberPicker spinIndex={spinCorrection.index} spinCount={sess.spins.length} currentValue={sess.spins[spinCorrection.index]} roulette={sess.roulette} blockedReason={spinCorrectionBlock(sess)} onChoose={v=>applySpinCorrection(spinCorrection.index,v)} onClose={()=>setSpinCorrection(null)}/>
+        )}
 
         {/* Roulette Table for Live Mode */}
         {(()=>{
