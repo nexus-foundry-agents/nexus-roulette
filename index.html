@@ -621,7 +621,7 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;}
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.47.0";
+  var MY_V="0.48.0";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -1047,7 +1047,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.47.0";
+var APP_VERSION = "0.48.0";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -1151,6 +1151,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.48.0",
+  date: "Oct 29, 2026",
+  title: "Faster at the Table",
+  changes: ["Clear numbers: empty the recent numbers and their tracking without ending the session; your bankroll, buy-ins and history stay, and Undo is right there for 15 seconds", "Taps and long-presses no longer select text or pop up the copy menu while you enter numbers", "Dialogs close only on a tap that starts and ends outside them, never on a stray drag"]
+}, {
   v: "0.47.0",
   date: "Sep 9, 2026",
   title: "Nexus Casino Integration",
