@@ -12,7 +12,7 @@ const BOARD_HASH_PREFIX = "#readboard=";
 const BOARD_MAX_NUMBERS = 40;
 const BOARD_STATUS_HEIGHT = 16; // the status slot's reserved height (shared rule 82)
 
-// One short plain line per status. "cancelled" is a legal return that shows nothing.
+// One short plain line per status. "canceled" is a legal return that shows nothing.
 const BOARD_STATUS_LINES = {
   offline: "PC offline, photo reading unavailable",
   busy: "Photo reading busy, try again",
@@ -24,7 +24,7 @@ const BOARD_STATUS_LINES = {
   toolarge: "Photo is too large, try a smaller one",
   refused: "That photo was refused, try another",
 };
-const BOARD_STATUS_KEYS = Object.keys(BOARD_STATUS_LINES).concat(["cancelled"]);
+const BOARD_STATUS_KEYS = Object.keys(BOARD_STATUS_LINES).concat(["canceled"]);
 
 // The page the button opens for a session's wheel. The American wheel only when the session says so (as getWheelNumbers).
 function boardPhotoUrl(wheel) {
@@ -63,14 +63,14 @@ function parseBoardReturn(hash, wheel) {
 
 // Reads the return once and removes it from the URL at once, so a reload has nothing to read again. Only loc.hash is
 // read. The URL is rewritten for every #readboard= return, understood or not. Returns the result to show, or null when
-// there is nothing to show (no return, an unknown status, or cancelled). If the URL cannot be rewritten the return still
+// there is nothing to show (no return, an unknown status, or canceled). If the URL cannot be rewritten the return still
 // shows once; nothing is added without Add, so a reload could only show the review again.
 function takeBoardReturn(loc, hist, wheel) {
   const hash = loc.hash;
   if (!isBoardReturn(hash)) return null;
   try { hist.replaceState(hist.state, "", loc.pathname + loc.search); } catch (e) { /* see the note above */ }
   const result = parseBoardReturn(hash, wheel);
-  if (!result || (result.kind === "status" && result.status === "cancelled")) return null;
+  if (!result || (result.kind === "status" && result.status === "canceled")) return null;
   return result;
 }
 

@@ -142,7 +142,7 @@ test('an unknown status is ignored; a known status is read as its status', async
   assert.equal(await parse('#readboard=okay:16', 'american'), null);
   assert.equal(await parse('#readboard=busy:now', 'american'), null, 'a status takes no suffix');
   assert.deepEqual(await parse('#readboard=busy', 'american'), { kind: 'status', status: 'busy' });
-  assert.deepEqual(await parse('#readboard=cancelled', 'american'), { kind: 'status', status: 'cancelled' });
+  assert.deepEqual(await parse('#readboard=canceled', 'american'), { kind: 'status', status: 'canceled' });
 });
 
 test('an injection-looking value is rejected whole', async () => {
@@ -187,13 +187,13 @@ test('the search string is not read as a return, and a page with none is not rew
   assert.equal(hist.calls.length, 0);
 });
 
-test('an unknown return is still cleared from the URL and shows nothing; cancelled shows nothing', async () => {
+test('an unknown return is still cleared from the URL and shows nothing; canceled shows nothing', async () => {
   const { ctx } = await load();
   const hist = fakeHistory();
   const loc = { hash: '#readboard=wat', pathname: '/roulette/', search: '' };
   assert.equal(ctx.takeBoardReturn(loc, hist, 'american'), null);
   assert.deepEqual(hist.calls, ['/roulette/']);
-  loc.hash = '#readboard=cancelled';
+  loc.hash = '#readboard=canceled';
   assert.equal(ctx.takeBoardReturn(loc, hist, 'american'), null);
   assert.deepEqual(hist.calls, ['/roulette/', '/roulette/']);
 });
@@ -242,11 +242,11 @@ test('the status slot is reserved whether or not it has a line, and each line is
   const { ctx } = await load();
   const status = (result) => ReactDOMServer.renderToStaticMarkup(React.createElement(ctx.BoardPhotoStatus, { result }));
   const slotTag = (html) => html.slice(0, html.indexOf('>') + 1);
-  const tags = [null, { kind: 'status', status: 'offline' }, { kind: 'status', status: 'cancelled' }].map((r) => slotTag(status(r)));
+  const tags = [null, { kind: 'status', status: 'offline' }, { kind: 'status', status: 'canceled' }].map((r) => slotTag(status(r)));
   assert.match(tags[0], /min-height:16px/);
   assert.ok(tags.every((t) => t === tags[0]), 'the same reserved slot with a line and without');
   assert.equal(textOf(status(null)), '');
-  assert.equal(textOf(status({ kind: 'status', status: 'cancelled' })), '', 'cancelled shows nothing');
+  assert.equal(textOf(status({ kind: 'status', status: 'canceled' })), '', 'canceled shows nothing');
   assert.equal(textOf(status({ kind: 'numbers', numbers: ['5'] })), '', 'a numbers return is not a status line');
   assert.equal(textOf(status({ kind: 'status', status: 'offline' })), 'PC offline, photo reading unavailable');
   for (const s of ['offline', 'busy', 'timeout', 'unreadable', 'unavailable', 'limit', 'exif', 'toolarge', 'refused']) {
