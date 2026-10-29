@@ -1,1 +1,1 @@
-{"version":"0.47.0","date":"2026-09-09","notes":"Adds the complete Nexus Casino module, per-account cross-device synchronization, and central Live/Game recording. Google Drive backup is retired; JSON export and import remain."}
+{"version":"0.48.0","date":"2026-10-29","notes":"Clear the recent numbers without ending the session (with Undo); no text selection while tapping; dialogs no longer close on a stray drag."}

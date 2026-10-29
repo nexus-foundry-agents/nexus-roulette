@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.47.0";
+const APP_VERSION = "0.48.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,11 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.48.0", date:"Oct 29, 2026", title:"Faster at the Table", changes:[
+    "Clear numbers: empty the recent numbers and their tracking without ending the session; your bankroll, buy-ins and history stay, and Undo is right there for 15 seconds",
+    "Taps and long-presses no longer select text or pop up the copy menu while you enter numbers",
+    "Dialogs close only on a tap that starts and ends outside them, never on a stray drag",
+  ]},
   { v:"0.47.0", date:"Sep 9, 2026", title:"Nexus Casino Integration", changes:[
     "Roulette now launches as a complete module inside Nexus Casino while the standalone application remains available",
     "Signed-in Casino accounts synchronize Roulette sessions and preferences across devices, with conflict-safe local-first storage",

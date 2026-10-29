@@ -35,6 +35,8 @@ const FILES = [
   'components/TrackPanel.jsx',
   // Modals — depends on ui
   'components/modals.jsx',
+  // Live-mode spin tools (clear numbers with inline undo) and the recent-numbers strip — depends on ui (Modal) and constants
+  'components/SpinTools.jsx',
   // Sim UI — depends on simulation + ui + engine
   'components/SimModePage.jsx',
   // Secondary pages split from App.jsx before the Casino bridge was added.
@@ -43,9 +45,15 @@ const FILES = [
   'casino-recording.mjs',
   // Local-first, revision-aware account synchronization through the pinned shell bridge.
   'casino-sync.mjs',
-  // Page components — inner functions, depend on everything above
-  // These are defined as inner functions of App, included via App.jsx
-  // App — depends on everything
+  // Helpers and page views split out of App.jsx. Each depends only on files listed above it.
+  'components/strat-chips.jsx',
+  'components/session-files.jsx',
+  'components/onboarding-apply.jsx',
+  'components/UpdateBanner.jsx',
+  'components/DroughtPanel.jsx',
+  'components/GamePage.jsx',
+  'components/TablePage.jsx',
+  // App — depends on everything. Keeps the coordinator, the hooks and the live Tracker page.
   'App.jsx',
 ];
 
@@ -128,6 +136,8 @@ ${nfUi}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{background:#0f1923;min-height:100%;}
 button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-family:inherit;cursor:pointer;}
+*,*::before,*::after{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}
+input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;}
 #root{min-height:100vh;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
 </style>

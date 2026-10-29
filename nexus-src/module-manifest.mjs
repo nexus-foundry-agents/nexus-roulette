@@ -99,7 +99,7 @@ export function buildModuleManifest() {
       id: 'roulette',
       name: 'Roulette',
       description: 'American and European roulette tracking, play and simulation.',
-      icon: { kind: 'glyph', glyph: '◉' },
+      icon: { kind: 'image', src: 'https://roulette.nexus-foundry.ai/icon.svg' },
     },
     outcomeSpace: {
       weightBasis: {

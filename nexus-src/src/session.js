@@ -20,6 +20,66 @@ function newTrack(type, colorIdx, config, color) {
   };
 }
 
+// Clears the spin history and everything derived from it. Money and the session record are kept:
+// bankroll, buy-ins, cash-outs, timing, and each track's pnl, state and config. loadApp recomputes
+// bankrollCurrent from track pnl, so pnl has to survive for that recompute to land on the same value.
+// The session is stamped modified = now: clearing the numbers is a change to the session.
+// Returns a new object; the input is never mutated.
+function clearSpins(sess, now) {
+  const next = JSON.parse(JSON.stringify(sess));
+  next.spins = [];
+  next.droughts = initDroughts(next.roulette);
+  next.tracks = (next.tracks||[]).map(t => {
+    const config = {...(t.config||{})};
+    // A solution bet carries its own progression level; restart it the way addSolBet creates a bet.
+    if(Array.isArray(config.activeBets)) config.activeBets = config.activeBets.map(b => ({...b, level:0, invest:0}));
+    return {...t, config, bets:[], wins:0, sequences:0, level:0, createdAtSpin:0, closedAtSpin:null};
+  });
+  next.modified = now;
+  return next;
+}
+
+// What clearSpins changes, copied before it runs, so Undo can put exactly that back. Anything outside
+// this snapshot (money, the session record, a buy-in or a track added after the clear) is not part of it.
+function snapshotSpinState(sess) {
+  return JSON.parse(JSON.stringify({
+    spins: sess.spins,
+    droughts: sess.droughts,
+    tracks: (sess.tracks||[]).map(t => ({
+      id: t.id, bets: t.bets, wins: t.wins, sequences: t.sequences, level: t.level,
+      createdAtSpin: t.createdAtSpin, closedAtSpin: t.closedAtSpin,
+      betProgress: Array.isArray(t.config && t.config.activeBets)
+        ? t.config.activeBets.map(b => ({number: b.number, level: b.level, invest: b.invest})) : null,
+    })),
+  }));
+}
+
+// Puts back what snapshotSpinState recorded and stamps the session modified = now. Money is not in the
+// snapshot, so a buy-in, cash-out or bankroll edit made after the clear survives. A track that did not
+// exist at the snapshot is left as it is. A solution number added after the clear keeps its own progress.
+function restoreSpinState(sess, snap, now) {
+  const next = JSON.parse(JSON.stringify(sess));
+  next.spins = JSON.parse(JSON.stringify(snap.spins));
+  next.droughts = JSON.parse(JSON.stringify(snap.droughts));
+  const saved = {};
+  snap.tracks.forEach(s => { saved[s.id] = s; });
+  next.tracks = (next.tracks||[]).map(t => {
+    const s = saved[t.id];
+    if(!s) return t;
+    const config = {...(t.config||{})};
+    if(s.betProgress && Array.isArray(config.activeBets)) {
+      const byNumber = {};
+      s.betProgress.forEach(b => { byNumber[b.number] = b; });
+      config.activeBets = config.activeBets.map(b => byNumber[b.number]
+        ? {...b, level: byNumber[b.number].level, invest: byNumber[b.number].invest} : b);
+    }
+    return {...t, config, bets: s.bets, wins: s.wins, sequences: s.sequences, level: s.level,
+      createdAtSpin: s.createdAtSpin, closedAtSpin: s.closedAtSpin};
+  });
+  next.modified = now;
+  return next;
+}
+
 function defaultParkRules() {
   return {
     droughtThreshold: null,    // park if no target has drought >= N (null = disabled)

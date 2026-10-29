@@ -613,13 +613,15 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{background:#0f1923;min-height:100%;}
 button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-family:inherit;cursor:pointer;}
+*,*::before,*::after{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}
+input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;}
 #root{min-height:100vh;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
 </style>
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.47.0";
+  var MY_V="0.48.0";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -1045,7 +1047,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.47.0";
+var APP_VERSION = "0.48.0";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -1149,6 +1151,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.48.0",
+  date: "Oct 29, 2026",
+  title: "Faster at the Table",
+  changes: ["Clear numbers: empty the recent numbers and their tracking without ending the session; your bankroll, buy-ins and history stay, and Undo is right there for 15 seconds", "Taps and long-presses no longer select text or pop up the copy menu while you enter numbers", "Dialogs close only on a tap that starts and ends outside them, never on a stray drag"]
+}, {
   v: "0.47.0",
   date: "Sep 9, 2026",
   title: "Nexus Casino Integration",
@@ -2051,6 +2058,106 @@ function newTrack(type, colorIdx, config, color) {
     wins: 0,
     sequences: 0
   };
+}
+
+// Clears the spin history and everything derived from it. Money and the session record are kept:
+// bankroll, buy-ins, cash-outs, timing, and each track's pnl, state and config. loadApp recomputes
+// bankrollCurrent from track pnl, so pnl has to survive for that recompute to land on the same value.
+// The session is stamped modified = now: clearing the numbers is a change to the session.
+// Returns a new object; the input is never mutated.
+function clearSpins(sess, now) {
+  var next = JSON.parse(JSON.stringify(sess));
+  next.spins = [];
+  next.droughts = initDroughts(next.roulette);
+  next.tracks = (next.tracks || []).map(function (t) {
+    var config = _objectSpread({}, t.config || {});
+    // A solution bet carries its own progression level; restart it the way addSolBet creates a bet.
+    if (Array.isArray(config.activeBets)) config.activeBets = config.activeBets.map(function (b) {
+      return _objectSpread(_objectSpread({}, b), {}, {
+        level: 0,
+        invest: 0
+      });
+    });
+    return _objectSpread(_objectSpread({}, t), {}, {
+      config: config,
+      bets: [],
+      wins: 0,
+      sequences: 0,
+      level: 0,
+      createdAtSpin: 0,
+      closedAtSpin: null
+    });
+  });
+  next.modified = now;
+  return next;
+}
+
+// What clearSpins changes, copied before it runs, so Undo can put exactly that back. Anything outside
+// this snapshot (money, the session record, a buy-in or a track added after the clear) is not part of it.
+function snapshotSpinState(sess) {
+  return JSON.parse(JSON.stringify({
+    spins: sess.spins,
+    droughts: sess.droughts,
+    tracks: (sess.tracks || []).map(function (t) {
+      return {
+        id: t.id,
+        bets: t.bets,
+        wins: t.wins,
+        sequences: t.sequences,
+        level: t.level,
+        createdAtSpin: t.createdAtSpin,
+        closedAtSpin: t.closedAtSpin,
+        betProgress: Array.isArray(t.config && t.config.activeBets) ? t.config.activeBets.map(function (b) {
+          return {
+            number: b.number,
+            level: b.level,
+            invest: b.invest
+          };
+        }) : null
+      };
+    })
+  }));
+}
+
+// Puts back what snapshotSpinState recorded and stamps the session modified = now. Money is not in the
+// snapshot, so a buy-in, cash-out or bankroll edit made after the clear survives. A track that did not
+// exist at the snapshot is left as it is. A solution number added after the clear keeps its own progress.
+function restoreSpinState(sess, snap, now) {
+  var next = JSON.parse(JSON.stringify(sess));
+  next.spins = JSON.parse(JSON.stringify(snap.spins));
+  next.droughts = JSON.parse(JSON.stringify(snap.droughts));
+  var saved = {};
+  snap.tracks.forEach(function (s) {
+    saved[s.id] = s;
+  });
+  next.tracks = (next.tracks || []).map(function (t) {
+    var s = saved[t.id];
+    if (!s) return t;
+    var config = _objectSpread({}, t.config || {});
+    if (s.betProgress && Array.isArray(config.activeBets)) {
+      var byNumber = {};
+      s.betProgress.forEach(function (b) {
+        byNumber[b.number] = b;
+      });
+      config.activeBets = config.activeBets.map(function (b) {
+        return byNumber[b.number] ? _objectSpread(_objectSpread({}, b), {}, {
+          level: byNumber[b.number].level,
+          invest: byNumber[b.number].invest
+        }) : b;
+      });
+    }
+    return _objectSpread(_objectSpread({}, t), {}, {
+      config: config,
+      bets: s.bets,
+      wins: s.wins,
+      sequences: s.sequences,
+      level: s.level,
+      createdAtSpin: s.createdAtSpin,
+      closedAtSpin: s.closedAtSpin
+    });
+  });
+  next.modified = now;
+  return next;
 }
 function defaultParkRules() {
   return {
@@ -2973,11 +3080,36 @@ function BetTargets(_ref3) {
     }
   }, "+", hidden, " more"));
 }
+
+// Dismiss on a click, never on pointerup alone. Touch browsers fire a click after pointerup at the
+// same spot; if the dialog had already unmounted on pointerup, that click would land on whatever is
+// underneath. A click fires on the nearest common ancestor of its press and release, so a press that
+// starts inside the dialog and releases on the backdrop arrives here as a backdrop click. The press
+// flag (started on the backdrop, primary button) and the release flag (ended on the backdrop) reject
+// both that case and a press that starts on the backdrop and releases inside the dialog.
 function Modal(_ref4) {
   var children = _ref4.children,
     onClose = _ref4.onClose;
+  var downOnBackdrop = React.useRef(false);
+  var upOnBackdrop = React.useRef(false);
   return /*#__PURE__*/React.createElement("div", {
-    onClick: onClose,
+    onPointerDown: function onPointerDown(e) {
+      downOnBackdrop.current = e.target === e.currentTarget && e.button === 0;
+      upOnBackdrop.current = false;
+    },
+    onPointerUp: function onPointerUp(e) {
+      upOnBackdrop.current = e.target === e.currentTarget;
+    },
+    onPointerCancel: function onPointerCancel() {
+      downOnBackdrop.current = false;
+      upOnBackdrop.current = false;
+    },
+    onClick: function onClick(e) {
+      var go = downOnBackdrop.current && upOnBackdrop.current && e.target === e.currentTarget;
+      downOnBackdrop.current = false;
+      upOnBackdrop.current = false;
+      if (go) onClose();
+    },
     style: {
       position: "fixed",
       inset: 0,
@@ -6479,6 +6611,193 @@ function HardResetModal(_ref34) {
   }, "Cancel")));
 }
 
+// ===== components/SpinTools.jsx =====
+// -- Live-mode spin tools: the Clear numbers row with its inline Undo, and the recent-numbers strip --
+// Every slot here holds its height whether or not it has anything in it, so clearing the numbers changes
+// what is shown inside a slot and moves nothing below it (shared rule 82). App.jsx owns the state (confirm
+// open, undo offered, the snapshot) and passes it in.
+
+// Reserved heights, in px. Each is the populated height of its control, measured in headless Chrome at a
+// 420 px viewport: the strip is 30 with five numbers (28 px chips and 2 px bottom padding) and 40 with thirty,
+// where the horizontal scrollbar takes 10 px. A platform with a thicker scrollbar would grow the strip past
+// this reservation when it first overflows. The drought panel is 251 px with five spins and with thirty.
+var SPIN_TOOLS_ROW_HEIGHT = 30;
+var RECENT_STRIP_MIN_HEIGHT = 40;
+var DROUGHT_PANEL_HEIGHT = 251;
+var RECENT_STRIP_LIMIT = 30;
+function SpinTools(_ref35) {
+  var spinCount = _ref35.spinCount,
+    confirmOpen = _ref35.confirmOpen,
+    undoVisible = _ref35.undoVisible,
+    onAsk = _ref35.onAsk,
+    onCancel = _ref35.onCancel,
+    onConfirm = _ref35.onConfirm,
+    onUndo = _ref35.onUndo;
+  var hasSpins = spinCount > 0;
+  var noun = spinCount === 1 ? "spin" : "spins";
+  var confirmBody = "Removes the ".concat(spinCount, " ").concat(noun, " from this session. Each track's bets and progression level restart at zero. Bankroll, buy-ins, cash-outs and track profit and loss are not changed. Undo stays available until the next spin, or for 15 seconds.");
+  // Clear numbers and the undo notice share one grid cell, so the cell is as large as the larger of the two.
+  // Only the one that applies is visible; the other keeps its place.
+  var cell = function cell(shown) {
+    return {
+      gridRow: 1,
+      gridColumn: 1,
+      justifySelf: "end",
+      alignSelf: "center",
+      visibility: shown ? "visible" : "hidden"
+    };
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      alignItems: "center",
+      justifyItems: "end",
+      minHeight: SPIN_TOOLS_ROW_HEIGHT,
+      width: "100%",
+      boxSizing: "border-box"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    disabled: !hasSpins,
+    "aria-hidden": undoVisible,
+    onClick: onAsk,
+    style: _objectSpread(_objectSpread({}, cell(!undoVisible)), {}, {
+      padding: "4px 10px",
+      borderRadius: 8,
+      border: "1px solid #2d4057",
+      background: "transparent",
+      color: hasSpins ? "#94a3b8" : "#374151",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: hasSpins ? "pointer" : "not-allowed"
+    })
+  }, "Clear numbers"), /*#__PURE__*/React.createElement("div", {
+    role: "status",
+    "aria-hidden": !undoVisible,
+    style: _objectSpread(_objectSpread({}, cell(undoVisible)), {}, {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      color: "#fbbf24",
+      fontSize: 11,
+      fontWeight: 700,
+      whiteSpace: "nowrap"
+    })
+  }, /*#__PURE__*/React.createElement("span", null, "Numbers cleared"), /*#__PURE__*/React.createElement("span", {
+    "aria-hidden": "true"
+  }, "\xB7"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: onUndo,
+    style: {
+      padding: "4px 10px",
+      borderRadius: 8,
+      border: "1px solid #f59e0b",
+      background: "transparent",
+      color: "#fbbf24",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "Undo"))), confirmOpen && /*#__PURE__*/React.createElement(Modal, {
+    onClose: onCancel
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 17,
+      fontWeight: 800,
+      color: "#e2e8f0",
+      marginBottom: 10
+    }
+  }, "Clear numbers?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#94a3b8",
+      lineHeight: 1.5,
+      marginBottom: 16
+    }
+  }, confirmBody), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: onCancel,
+    style: {
+      flex: 1,
+      padding: "14px 0",
+      borderRadius: 12,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: "#94a3b8",
+      fontSize: 15,
+      fontWeight: 800,
+      cursor: "pointer"
+    }
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: onConfirm,
+    style: {
+      flex: 1,
+      padding: "14px 0",
+      borderRadius: 12,
+      border: "none",
+      background: "#b91c1c",
+      color: "white",
+      fontSize: 15,
+      fontWeight: 800,
+      cursor: "pointer"
+    }
+  }, "Clear numbers"))));
+}
+
+// Recent numbers, newest first, up to RECENT_STRIP_LIMIT. The container is always rendered at its reserved
+// height: with no numbers it is an empty slot, so the first spin and a clear both leave the layout where it is.
+function RecentNumbersStrip(_ref36) {
+  var spins = _ref36.spins,
+    trackOverlays = _ref36.trackOverlays;
+  var recent = _toConsumableArray(spins).reverse().slice(0, RECENT_STRIP_LIMIT);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4,
+      overflowX: "auto",
+      paddingBottom: 2,
+      WebkitOverflowScrolling: "touch",
+      minHeight: RECENT_STRIP_MIN_HEIGHT,
+      boxSizing: "border-box"
+    }
+  }, recent.map(function (val, i) {
+    var isZ = val === "0" || val === "00",
+      r = !isZ && RED.has(+val);
+    var hitTracks = (trackOverlays || []).filter(function (o) {
+      if (isZ) return false;
+      if (o.type === "fibonacci") return (o.dozenTargets || []).includes(dozenOf(val)) || (o.colTargets || []).includes(columnOf(val));
+      if (o.type === "solution") return (o.activeBets || []).some(function (b) {
+        return b.number === val;
+      });
+      return false;
+    });
+    var borderColor = i === 0 ? "#ffffff" : hitTracks.length > 0 ? hitTracks[0].color : isZ ? "#22c55e" : r ? "#ef4444" : "#374151";
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        flexShrink: 0,
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
+        border: "2px solid " + borderColor,
+        color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
+        fontSize: 10,
+        fontWeight: 800,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, val);
+  }));
+}
+
 // ===== components/SimModePage.jsx =====
 // -- Simulation Mode UI --
 function NotificationEnablePage() {
@@ -6575,12 +6894,12 @@ function NotificationEnablePage() {
     }
   }, "Return to Roulette")));
 }
-function StatContextBar(_ref35) {
-  var simResults = _ref35.simResults,
-    simCfg = _ref35.simCfg,
-    sess = _ref35.sess,
-    cur = _ref35.cur,
-    pnlVal = _ref35.pnlVal;
+function StatContextBar(_ref37) {
+  var simResults = _ref37.simResults,
+    simCfg = _ref37.simCfg,
+    sess = _ref37.sess,
+    cur = _ref37.cur,
+    pnlVal = _ref37.pnlVal;
   // Match live tracks to sim strategies by type+roi+stopLoss
   var liveTracks = sess.tracks.filter(function (t) {
     return t.state !== "closed";
@@ -6651,14 +6970,14 @@ function StatContextBar(_ref35) {
       letterSpacing: 1,
       marginBottom: 2
     }
-  }, "vs Simulation Benchmark"), bars.map(function (_ref36, i) {
-    var t = _ref36.t,
-      status = _ref36.status,
-      statusColor = _ref36.statusColor,
-      statusIcon = _ref36.statusIcon,
-      pctRank = _ref36.pctRank,
-      stats = _ref36.stats,
-      livePnl = _ref36.livePnl;
+  }, "vs Simulation Benchmark"), bars.map(function (_ref38, i) {
+    var t = _ref38.t,
+      status = _ref38.status,
+      statusColor = _ref38.statusColor,
+      statusIcon = _ref38.statusIcon,
+      pctRank = _ref38.pctRank,
+      stats = _ref38.stats,
+      livePnl = _ref38.livePnl;
     return /*#__PURE__*/React.createElement("div", {
       key: t.id,
       style: {
@@ -6709,11 +7028,11 @@ function StatContextBar(_ref35) {
 // -- Experiment Comparison Panel (Results view, Repeat Experiment) --
 // One row per experiment (identical parameters), with aggregate stats across all
 // of them: overall P&L per experiment, or sessions survived in bankroll mode.
-function ExperimentPanel(_ref37) {
-  var experiments = _ref37.experiments,
-    bankrollMode = _ref37.bankrollMode,
-    sessionsPerExperiment = _ref37.sessionsPerExperiment,
-    cur = _ref37.cur;
+function ExperimentPanel(_ref39) {
+  var experiments = _ref39.experiments,
+    bankrollMode = _ref39.bankrollMode,
+    sessionsPerExperiment = _ref39.sessionsPerExperiment,
+    cur = _ref39.cur;
   if (!experiments || experiments.length < 2) return null;
   var pnls = experiments.map(function (e) {
     return e.pnl;
@@ -6770,11 +7089,11 @@ function ExperimentPanel(_ref37) {
       gap: 6,
       marginBottom: 8
     }
-  }, tiles.map(function (_ref38) {
-    var _ref39 = _slicedToArray(_ref38, 3),
-      l = _ref39[0],
-      v = _ref39[1],
-      c = _ref39[2];
+  }, tiles.map(function (_ref40) {
+    var _ref41 = _slicedToArray(_ref40, 3),
+      l = _ref41[0],
+      v = _ref41[1],
+      c = _ref41[2];
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -6865,9 +7184,9 @@ function ExperimentPanel(_ref37) {
 
 // -- Per-Session Explorer (Results view) --
 // Filterable, sortable drill-down into every simulated session.
-function SessionExplorer(_ref40) {
-  var sessions = _ref40.sessions,
-    cur = _ref40.cur;
+function SessionExplorer(_ref42) {
+  var sessions = _ref42.sessions,
+    cur = _ref42.cur;
   var _useState35 = (0, _react.useState)("all"),
     _useState36 = _slicedToArray(_useState35, 2),
     filter = _useState36[0],
@@ -6939,10 +7258,10 @@ function SessionExplorer(_ref40) {
       gap: 4,
       marginBottom: 4
     }
-  }, filterChips.map(function (_ref41) {
-    var _ref42 = _slicedToArray(_ref41, 2),
-      key = _ref42[0],
-      label = _ref42[1];
+  }, filterChips.map(function (_ref43) {
+    var _ref44 = _slicedToArray(_ref43, 2),
+      key = _ref44[0],
+      label = _ref44[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -6957,10 +7276,10 @@ function SessionExplorer(_ref40) {
       gap: 4,
       marginBottom: 6
     }
-  }, sortChips.map(function (_ref43) {
-    var _ref44 = _slicedToArray(_ref43, 2),
-      key = _ref44[0],
-      label = _ref44[1];
+  }, sortChips.map(function (_ref45) {
+    var _ref46 = _slicedToArray(_ref45, 2),
+      key = _ref46[0],
+      label = _ref46[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -7059,20 +7378,20 @@ function SessionExplorer(_ref40) {
 }
 
 // -- Simulation Mode Page --
-function SimModePage(_ref45) {
-  var simCfg = _ref45.simCfg,
-    setSimCfg = _ref45.setSimCfg,
-    simRunning = _ref45.simRunning,
-    setSimRunning = _ref45.setSimRunning,
-    simProgress = _ref45.simProgress,
-    setSimProgress = _ref45.setSimProgress,
-    simResults = _ref45.simResults,
-    setSimResults = _ref45.setSimResults,
-    simDone = _ref45.simDone,
-    setSimDone = _ref45.setSimDone,
-    simStopRef = _ref45.simStopRef,
-    currency = _ref45.currency,
-    cur = _ref45.cur;
+function SimModePage(_ref47) {
+  var simCfg = _ref47.simCfg,
+    setSimCfg = _ref47.setSimCfg,
+    simRunning = _ref47.simRunning,
+    setSimRunning = _ref47.setSimRunning,
+    simProgress = _ref47.simProgress,
+    setSimProgress = _ref47.setSimProgress,
+    simResults = _ref47.simResults,
+    setSimResults = _ref47.setSimResults,
+    simDone = _ref47.simDone,
+    setSimDone = _ref47.setSimDone,
+    simStopRef = _ref47.simStopRef,
+    currency = _ref47.currency,
+    cur = _ref47.cur;
   var _useState41 = (0, _react.useState)("setup"),
     _useState42 = _slicedToArray(_useState41, 2),
     view = _useState42[0],
@@ -7323,10 +7642,10 @@ function SimModePage(_ref45) {
       display: "flex",
       gap: 8
     }
-  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref46) {
-    var _ref47 = _slicedToArray(_ref46, 2),
-      v = _ref47[0],
-      l = _ref47[1];
+  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref48) {
+    var _ref49 = _slicedToArray(_ref48, 2),
+      v = _ref49[0],
+      l = _ref49[1];
     var sel = simCfg.roulette === v;
     return /*#__PURE__*/React.createElement("button", {
       key: v,
@@ -8128,11 +8447,11 @@ function SimModePage(_ref45) {
         gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
         gap: 4
       }
-    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref48) {
-      var _ref49 = _slicedToArray(_ref48, 3),
-        l = _ref49[0],
-        v = _ref49[1],
-        c = _ref49[2];
+    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref50) {
+      var _ref51 = _slicedToArray(_ref50, 3),
+        l = _ref51[0],
+        v = _ref51[1],
+        c = _ref51[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8177,11 +8496,11 @@ function SimModePage(_ref45) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref50) {
-      var _ref51 = _slicedToArray(_ref50, 3),
-        l = _ref51[0],
-        v = _ref51[1],
-        c = _ref51[2];
+    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref52) {
+      var _ref53 = _slicedToArray(_ref52, 3),
+        l = _ref53[0],
+        v = _ref53[1],
+        c = _ref53[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8284,11 +8603,11 @@ function SimModePage(_ref45) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref52) {
-      var _ref53 = _slicedToArray(_ref52, 3),
-        l = _ref53[0],
-        v = _ref53[1],
-        c = _ref53[2];
+    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref54) {
+      var _ref55 = _slicedToArray(_ref54, 3),
+        l = _ref55[0],
+        v = _ref55[1],
+        c = _ref55[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8328,9 +8647,9 @@ function SimModePage(_ref45) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.winStreakDist.slice(0, 10).map(function (_ref54) {
-      var len = _ref54.len,
-        p = _ref54.pct;
+    }, stats.winStreakDist.slice(0, 10).map(function (_ref56) {
+      var len = _ref56.len,
+        p = _ref56.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -8382,9 +8701,9 @@ function SimModePage(_ref45) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.lossStreakDist.slice(0, 10).map(function (_ref55) {
-      var len = _ref55.len,
-        p = _ref55.pct;
+    }, stats.lossStreakDist.slice(0, 10).map(function (_ref57) {
+      var len = _ref57.len,
+        p = _ref57.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -8431,13 +8750,13 @@ function SimModePage(_ref45) {
 }
 
 // -- Sim Strategy Editor --
-function SimStratEditor(_ref56) {
-  var strat = _ref56.strat,
-    idx = _ref56.idx,
-    simCfg = _ref56.simCfg,
-    setSimCfg = _ref56.setSimCfg,
-    cur = _ref56.cur,
-    onClose = _ref56.onClose;
+function SimStratEditor(_ref58) {
+  var strat = _ref58.strat,
+    idx = _ref58.idx,
+    simCfg = _ref58.simCfg,
+    setSimCfg = _ref58.setSimCfg,
+    cur = _ref58.cur,
+    onClose = _ref58.onClose;
   var _useState47 = (0, _react.useState)(_objectSpread({}, strat.config)),
     _useState48 = _slicedToArray(_useState47, 2),
     cfg = _useState48[0],
@@ -8556,10 +8875,10 @@ function SimStratEditor(_ref56) {
       display: "flex",
       gap: 5
     }
-  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref57) {
-    var _ref58 = _slicedToArray(_ref57, 2),
-      m = _ref58[0],
-      l = _ref58[1];
+  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref59) {
+    var _ref60 = _slicedToArray(_ref59, 2),
+      m = _ref60[0],
+      l = _ref60[1];
     var sel = (cfg.betMode || "progression") === m;
     return /*#__PURE__*/React.createElement("button", {
       key: m,
@@ -8782,11 +9101,11 @@ function SimStratEditor(_ref56) {
       flexDirection: "column",
       gap: 6
     }
-  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref59) {
-    var _ref60 = _slicedToArray(_ref59, 3),
-      key = _ref60[0],
-      label = _ref60[1],
-      desc = _ref60[2];
+  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref61) {
+    var _ref62 = _slicedToArray(_ref61, 3),
+      key = _ref62[0],
+      label = _ref62[1],
+      desc = _ref62[2];
     return /*#__PURE__*/React.createElement("div", {
       key: key,
       style: {
@@ -8961,10 +9280,10 @@ function SimStratEditor(_ref56) {
 
 // ===== components/SecondaryPages.jsx =====
 // -- Spin Log Page --
-function SpinPage(_ref61) {
-  var sess = _ref61.sess,
-    updSess = _ref61.updSess,
-    trackOverlays = _ref61.trackOverlays;
+function SpinPage(_ref63) {
+  var sess = _ref63.sess,
+    updSess = _ref63.updSess,
+    trackOverlays = _ref63.trackOverlays;
   var _useState51 = (0, _react.useState)(false),
     _useState52 = _slicedToArray(_useState51, 2),
     showAll = _useState52[0],
@@ -9071,20 +9390,20 @@ function SpinPage(_ref61) {
   }, showAll ? "Show less" : "Show all " + sess.spins.length + " spins"))));
 }
 // -- Session Stats Page --
-function StatsPage(_ref62) {
-  var sess = _ref62.sess,
-    livePauseOffset = _ref62.livePauseOffset,
-    pnlVal = _ref62.pnlVal,
-    cur = _ref62.cur,
-    currency = _ref62.currency,
-    pnlColor = _ref62.pnlColor,
-    saveSession = _ref62.saveSession,
-    newEmptySession = _ref62.newEmptySession,
-    tearSession = _ref62.tearSession,
-    reactivateTrack = _ref62.reactivateTrack,
-    saved = _ref62.saved,
-    loadSession = _ref62.loadSession,
-    exportJSON = _ref62.exportJSON;
+function StatsPage(_ref64) {
+  var sess = _ref64.sess,
+    livePauseOffset = _ref64.livePauseOffset,
+    pnlVal = _ref64.pnlVal,
+    cur = _ref64.cur,
+    currency = _ref64.currency,
+    pnlColor = _ref64.pnlColor,
+    saveSession = _ref64.saveSession,
+    newEmptySession = _ref64.newEmptySession,
+    tearSession = _ref64.tearSession,
+    reactivateTrack = _ref64.reactivateTrack,
+    saved = _ref64.saved,
+    loadSession = _ref64.loadSession,
+    exportJSON = _ref64.exportJSON;
   // Group tracks by type + roi + stopLoss for consolidated view
   var trackGroups = (0, _react.useMemo)(function () {
     var groups = {};
@@ -9217,10 +9536,10 @@ function StatsPage(_ref62) {
     l: "Net P&L",
     v: (pnlVal >= 0 ? "+" : "-") + cur.symbol + formatNumber(pnlVal),
     c: pnlColor
-  }].map(function (_ref63) {
-    var l = _ref63.l,
-      v = _ref63.v,
-      c = _ref63.c;
+  }].map(function (_ref65) {
+    var l = _ref65.l,
+      v = _ref65.v,
+      c = _ref65.c;
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -9367,11 +9686,11 @@ function StatsPage(_ref62) {
         gap: 6,
         marginBottom: 8
       }
-    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref64) {
-      var _ref65 = _slicedToArray(_ref64, 3),
-        l = _ref65[0],
-        v = _ref65[1],
-        c = _ref65[2];
+    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref66) {
+      var _ref67 = _slicedToArray(_ref66, 3),
+        l = _ref67[0],
+        v = _ref67[1],
+        c = _ref67[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -9514,18 +9833,18 @@ function StatsPage(_ref62) {
 }
 
 // -- Settings Page --
-function SettingsPage(_ref66) {
-  var settings = _ref66.settings,
-    updSettings = _ref66.updSettings,
-    setCurrencyOpen = _ref66.setCurrencyOpen,
-    currency = _ref66.currency,
-    cur = _ref66.cur,
-    updSess = _ref66.updSess,
-    sess = _ref66.sess,
-    setChangelogOpen = _ref66.setChangelogOpen,
-    updApp = _ref66.updApp,
-    importJSON = _ref66.importJSON,
-    setHardResetOpen = _ref66.setHardResetOpen;
+function SettingsPage(_ref68) {
+  var settings = _ref68.settings,
+    updSettings = _ref68.updSettings,
+    setCurrencyOpen = _ref68.setCurrencyOpen,
+    currency = _ref68.currency,
+    cur = _ref68.cur,
+    updSess = _ref68.updSess,
+    sess = _ref68.sess,
+    setChangelogOpen = _ref68.setChangelogOpen,
+    updApp = _ref68.updApp,
+    importJSON = _ref68.importJSON,
+    setHardResetOpen = _ref68.setHardResetOpen;
   var _useState53 = (0, _react.useState)(settings.defaultBuyIn || 100),
     _useState54 = _slicedToArray(_useState53, 2),
     localBuyIn = _useState54[0],
@@ -9605,10 +9924,10 @@ function SettingsPage(_ref66) {
       display: "flex",
       gap: 8
     }
-  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref67) {
-    var _ref68 = _slicedToArray(_ref67, 2),
-      v = _ref68[0],
-      label = _ref68[1];
+  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref69) {
+    var _ref70 = _slicedToArray(_ref69, 2),
+      v = _ref70[0],
+      label = _ref70[1];
     return /*#__PURE__*/React.createElement("button", {
       key: v,
       onClick: function onClick() {
@@ -9698,10 +10017,10 @@ function SettingsPage(_ref66) {
     label: "Max Total (per spin)",
     key: "tableMaxTotal",
     color: "#f87171"
-  }].map(function (_ref69) {
-    var label = _ref69.label,
-      key = _ref69.key,
-      color = _ref69.color;
+  }].map(function (_ref71) {
+    var label = _ref71.label,
+      key = _ref71.key,
+      color = _ref71.color;
     var val = settings[key] || 1;
     function dec() {
       if (key === "tableMinBet") {
@@ -10722,9 +11041,9 @@ function casinoDuration(ms) {
     };
   return hours ? hours + ':' + pad(minutes) + ':' + pad(seconds) : minutes + ':' + pad(seconds);
 }
-function CasinoRecordingBar(_ref77) {
-  var recording = _ref77.recording,
-    label = _ref77.label;
+function CasinoRecordingBar(_ref79) {
+  var recording = _ref79.recording,
+    label = _ref79.label;
   var text = '';
   if (recording.availability === 'unknown') text = 'Checking Nexus Casino recording before the first spin…';else if (recording.availability === 'unavailable') text = 'Not connected to Nexus Casino — nothing is being recorded.';else if (recording.availability === 'off') text = 'Casino recording is off for Roulette.';else if (!recording.session) text = 'Casino recording is on. This session starts on the first spin.';else text = (recording.session.status === 'running' ? 'Recording' : recording.session.status === 'paused' ? 'Paused' : 'Stopped') + ' · ' + casinoDuration(recording.elapsedMs) + ' · ' + recording.session.spins + ' spins';
   var controls = [];
@@ -10979,7 +11298,7 @@ function useCasinoAccountSync(appState, setAppState) {
     };
   }, []);
   var push = React.useCallback(/*#__PURE__*/function () {
-    var _ref78 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
+    var _ref80 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
       var next, attempt, result, stored, _current, current;
       return _regenerator().w(function (_context9) {
         while (1) switch (_context9.n) {
@@ -11057,7 +11376,7 @@ function useCasinoAccountSync(appState, setAppState) {
       }, _callee9);
     }));
     return function (_x2, _x3) {
-      return _ref78.apply(this, arguments);
+      return _ref80.apply(this, arguments);
     };
   }(), [applySnapshot]);
   var queuePush = React.useCallback(function (candidate) {
@@ -11226,8 +11545,8 @@ function useCasinoAccountSync(appState, setAppState) {
 function markRouletteAccountReset() {
   writeSyncMeta(nextResetSyncMeta(readSyncMeta(loadApp()), Date.now()));
 }
-function CasinoSyncBar(_ref81) {
-  var sync = _ref81.sync;
+function CasinoSyncBar(_ref83) {
+  var sync = _ref83.sync;
   var text = sync.status === 'local' ? sync.deviceSaved ? 'Saved on this device · export and import through Casino to add it to an account' : 'Not saved · browser storage unavailable' : sync.status === 'checking' ? 'Checking account sync…' : sync.status === 'syncing' ? 'Syncing with your Casino account…' : sync.status === 'synced' ? 'Synced with your Casino account' : sync.deviceSaved ? 'Saved for this account on this device · cloud sync unavailable' : 'Not saved · Casino account storage unavailable';
   return React.createElement('section', {
     'aria-label': 'Roulette account sync',
@@ -11250,6 +11569,1444 @@ function CasinoSyncBar(_ref81) {
       color: '#fbbf24'
     }
   }, sync.problem) : null);
+}
+
+// ===== components/strat-chips.jsx =====
+// Strategy bet chips shown on the roulette board. Moved from App.jsx; the only change is that the tracks
+// are a parameter instead of an App closure.
+function computeStratChips(nonClosedTracks) {
+  var chips = {};
+  function addChip(posKey, amount, color) {
+    if (!chips[posKey]) chips[posKey] = [];
+    // Merge with existing chip of same color
+    var existing = chips[posKey].find(function (c) {
+      return c.color === color;
+    });
+    if (existing) existing.amount += amount;else chips[posKey].push({
+      amount: amount,
+      color: color
+    });
+  }
+  nonClosedTracks.filter(function (t) {
+    return t.state === "active";
+  }).forEach(function (t) {
+    var tbl = computeTableForTrack(t);
+    var row = tbl[Math.min(t.level, tbl.length - 1)];
+    if (!row) return;
+    var betAmt = row.c * (t.config.unit || 1);
+    if (t.type === "fibonacci") {
+      var dts = t.config.dozenTargets || [],
+        cts = t.config.colTargets || [],
+        evts = t.config.evenTargets || [];
+      dts.forEach(function (d) {
+        addChip("dozen:" + d, betAmt, t.color);
+      });
+      cts.forEach(function (c) {
+        addChip("column:" + c, betAmt, t.color);
+      });
+      evts.forEach(function (key) {
+        addChip(key, betAmt, t.color);
+      });
+    }
+    if (t.type === "solution") {
+      (t.config.activeBets || []).forEach(function (b) {
+        var bRow = tbl[Math.min(b.level, tbl.length - 1)];
+        if (bRow) addChip("s:" + b.number, bRow.c * (t.config.unit || 1), t.color);
+      });
+    }
+    if (t.type === "custom") {
+      (t.config.positions || []).forEach(function (p) {
+        var chipAmt = p.baseAmount * row.c * (t.config.unit || 1);
+        if (isInsideBet(p.type)) {
+          // For inside bets, place chip on first number of the group
+          var nums = betCoveredNumbers(p.type, p.target);
+          if (nums.length > 0) addChip("s:" + nums[0], chipAmt, t.color);
+        } else {
+          var posKey = p.type + (p.target !== undefined ? ":" + p.target : "");
+          addChip(posKey, chipAmt, t.color);
+        }
+      });
+    }
+  });
+  return chips;
+}
+
+// ===== components/session-files.jsx =====
+// Session backup, export and import helpers. Moved from App.jsx; the only changes are parameters.
+
+function autoExport(allSessions) {
+  // Keep the automatic backup on the user's filesystem. Cancelling the download never changes
+  // the saved session itself.
+  try {
+    var data = {
+      exportedAt: new Date().toISOString(),
+      autoExport: true,
+      sessions: allSessions.map(function (s) {
+        return _objectSpread(_objectSpread({}, s), {}, {
+          metrics: computeMetrics(s)
+        });
+      }),
+      aggregate: {
+        totalSessions: allSessions.length,
+        totalSpins: allSessions.reduce(function (a, s) {
+          return a + s.spins.length;
+        }, 0),
+        netPnL: allSessions.reduce(function (a, s) {
+          return a + computeMetrics(s).netPnL;
+        }, 0)
+      }
+    };
+    var blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json"
+    });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "nexus-roulette-autosave-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {/* silently fail if download blocked */}
+}
+function exportSessionsJSON(saved) {
+  var data = {
+    exportedAt: new Date().toISOString(),
+    sessions: saved.map(function (s) {
+      return _objectSpread(_objectSpread({}, s), {}, {
+        metrics: computeMetrics(s)
+      });
+    }),
+    aggregate: {
+      totalSessions: saved.length,
+      totalSpins: saved.reduce(function (a, s) {
+        return a + s.spins.length;
+      }, 0),
+      netPnL: saved.reduce(function (a, s) {
+        return a + computeMetrics(s).netPnL;
+      }, 0)
+    }
+  };
+  var blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json"
+  });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "nexus-roulette-export-" + Date.now() + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function pickSessionsFile(updApp, setTab) {
+  var input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json,application/json";
+  input.onchange = function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        // Handle session exports and older whole-app snapshot files.
+        var sessions = data.sessions || data.savedSessions || data.appState && data.appState.savedSessions || [];
+        if (!sessions.length) {
+          alert("No sessions found in file.");
+          return;
+        }
+        var added = 0,
+          skipped = 0,
+          lastAdded = null;
+        updApp(function (s) {
+          sessions.forEach(function (sess) {
+            if (!s.savedSessions.find(function (x) {
+              return x.id === sess.id;
+            })) {
+              s.savedSessions.push(sess);
+              added++;
+              lastAdded = sess;
+            } else {
+              skipped++;
+            }
+          });
+          // Load the most recent imported session as current (paused)
+          if (lastAdded) {
+            var loaded = JSON.parse(JSON.stringify(lastAdded));
+            // Always end the session - don't auto-start after import
+            if (loaded.sessionStartedAt) {
+              loaded.sessionEndedAt = loaded.modified || Date.now();
+            }
+            // Park all tracks
+            (loaded.tracks || []).forEach(function (tr) {
+              if (tr.state === "active") tr.state = "parked";
+            });
+            s.currentSession = loaded;
+          }
+        });
+        setTab(0);
+        alert("Import complete!\n".concat(added, " session").concat(added !== 1 ? "s" : "", " added").concat(skipped ? ", " + skipped + " already existed (skipped)" : "", ".\n\nLoaded \"").concat(lastAdded ? lastAdded.name : "", "\"."));
+      } catch (err) {
+        alert("Failed to parse file: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  document.body.appendChild(input);
+  input.click();
+  document.body.removeChild(input);
+}
+
+// ===== components/onboarding-apply.jsx =====
+// Applies the first-run setup choices to app state. Moved from App.jsx; the only change is that updApp is a parameter.
+function completeOnboarding(updApp, _ref84) {
+  var roulette = _ref84.roulette,
+    bankroll = _ref84.bankroll,
+    defaultBuyIn = _ref84.defaultBuyIn,
+    curr = _ref84.currency,
+    tableMinBet = _ref84.tableMinBet,
+    tableMaxBet = _ref84.tableMaxBet,
+    tableMaxTotal = _ref84.tableMaxTotal;
+  updApp(function (s) {
+    var prevBankroll = s.settings._restartBankroll;
+    s.settings.onboarded = true;
+    s.settings.currency = curr;
+    s.settings.defaultBuyIn = defaultBuyIn;
+    if (tableMinBet) s.settings.tableMinBet = tableMinBet;
+    if (tableMaxBet) s.settings.tableMaxBet = tableMaxBet;
+    if (tableMaxTotal) s.settings.tableMaxTotal = tableMaxTotal;
+    delete s.settings._restartBankroll;
+    if (prevBankroll !== undefined) {
+      // Restart -- adjust existing session's bankroll
+      var delta = bankroll - prevBankroll;
+      s.currentSession.roulette = roulette;
+      s.currentSession.droughts = initDroughts(roulette);
+      if (delta > 0) {
+        // Added money → Buy In
+        s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent + delta) * 100) / 100;
+        s.currentSession.totalBuyIn = (s.currentSession.totalBuyIn || 0) + delta;
+        if (!s.currentSession.buyIns) s.currentSession.buyIns = [];
+        s.currentSession.buyIns.push({
+          amount: delta,
+          at: Date.now(),
+          spin: s.currentSession.spins.length,
+          note: "onboarding restart"
+        });
+      } else if (delta < 0) {
+        // Removed money → Cash Out
+        var cashAmt = Math.abs(delta);
+        s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent - cashAmt) * 100) / 100;
+        s.currentSession.totalCashOut = (s.currentSession.totalCashOut || 0) + cashAmt;
+        if (!s.currentSession.cashOuts) s.currentSession.cashOuts = [];
+        s.currentSession.cashOuts.push({
+          amount: cashAmt,
+          at: Date.now(),
+          spin: s.currentSession.spins.length,
+          note: "onboarding restart"
+        });
+      }
+    } else {
+      // Fresh start
+      s.currentSession = newSession(roulette, bankroll);
+      s.gameSession = newSession(roulette, bankroll);
+    }
+  });
+}
+
+// ===== components/UpdateBanner.jsx =====
+// App update prompt. Moved from App.jsx; the only change is that appState and updateAvailable are props.
+function UpdateBanner(_ref85) {
+  var appState = _ref85.appState,
+    updateAvailable = _ref85.updateAvailable;
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      saveApp(appState);
+      // Ask the worker to check for a new sw.js, then reload. Deliberately NOT
+      // a cache purge: the worker is versioned, so the new one installs under a
+      // new cache name and retires the old one only after its required shell is
+      // cached. Purging first left a client that lost connectivity mid-update
+      // with no cache at all — and the old code purged the whole ORIGIN,
+      // unregistering every other app hosted here.
+      // Reload only once the new worker is ACTIVATED. update() resolves at
+      // "installing", before the new cache is populated, so reloading on it can
+      // land a cache-busted URL on the OLD worker with nothing cached under that
+      // query. On failure we stay on this page — it still works — rather than
+      // navigating somewhere that may not resolve offline.
+      var go = function go() {
+        window.location.href = window.location.pathname + "?update=" + Date.now();
+      };
+      if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistration) {
+        navigator.serviceWorker.getRegistration().then(function (reg) {
+          if (!reg) {
+            go();
+            return;
+          }
+          return reg.update().then(function () {
+            var sw = reg.installing || reg.waiting;
+            if (!sw) {
+              go();
+              return;
+            }
+            if (sw.state === "activated") {
+              go();
+              return;
+            }
+            sw.addEventListener("statechange", function () {
+              if (sw.state === "activated") go();
+            });
+          });
+        }).catch(function () {});
+      } else {
+        go();
+      }
+    },
+    style: {
+      width: "100%",
+      padding: "12px 16px",
+      borderRadius: 12,
+      border: "2px solid #7c3aed",
+      background: "linear-gradient(135deg,#1e1040,#2d1060)",
+      color: "white",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800
+    }
+  }, "\uD83C\uDF89 Update Available \u2014 v", updateAvailable.version), updateAvailable.notes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#e9d5ff",
+      marginTop: 4,
+      lineHeight: 1.4
+    }
+  }, updateAvailable.notes), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#c4b5fd",
+      marginTop: 3
+    }
+  }, "Tap to update. No data will be lost.")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 22
+    }
+  }, "\u21BB"));
+}
+
+// ===== components/DroughtPanel.jsx =====
+// Even-money, dozen and column drought counts. Both play pages render it; moved from App.jsx unchanged.
+function DroughtPanel(_ref86) {
+  var emDroughts = _ref86.emDroughts,
+    dozD = _ref86.dozD,
+    colD = _ref86.colD;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(6,1fr)",
+      gap: 3
+    }
+  }, emDroughts.map(function (em) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: em.key,
+      style: {
+        borderRadius: 7,
+        border: "1px solid " + (em.drought >= 8 ? "#dc2626" : em.drought >= 5 ? "#f59e0b" : "#2d4057"),
+        background: em.drought >= 8 ? "#200505" : em.drought >= 5 ? "#1c1000" : "#0f1923",
+        padding: "6px 2px",
+        textAlign: "center"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: em.color,
+        fontWeight: 700,
+        textTransform: "uppercase"
+      }
+    }, em.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 15,
+        fontWeight: 800,
+        color: em.drought >= 8 ? "#f87171" : em.drought >= 5 ? "#fbbf24" : "#94a3b8"
+      }
+    }, em.drought));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: "1px solid #2d4057",
+      marginTop: 2,
+      paddingTop: 6,
+      display: "flex",
+      flexDirection: "column",
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4
+    }
+  }, [0, 1, 2].map(function (i) {
+    return /*#__PURE__*/React.createElement(DCard, {
+      key: "d" + i,
+      label: DOZEN_LABELS[i],
+      range: DOZEN_RANGES[i],
+      drought: dozD[i],
+      colorBd: DOZEN_BORDERS[i],
+      colorTx: DOZEN_TEXTS[i]
+    });
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4
+    }
+  }, [0, 1, 2].map(function (i) {
+    return /*#__PURE__*/React.createElement(DCard, {
+      key: "c" + i,
+      label: COLUMN_LABELS[i],
+      range: COLUMN_RANGES[i],
+      drought: colD[i],
+      colorBd: COLUMN_BORDERS[i],
+      colorTx: COLUMN_TEXTS[i]
+    });
+  }))));
+}
+
+// ===== components/GamePage.jsx =====
+// -- Game Page --
+// Moved from App.jsx. App renders it through a wrapper that passes every App value the page reads.
+// Body unchanged except two marked edits: the drought grid is now DroughtPanel, and the strategy chips
+// take the tracks as an argument.
+function GamePageView(_ref87) {
+  var addOpen = _ref87.addOpen,
+    addTrack = _ref87.addTrack,
+    animNumber = _ref87.animNumber,
+    betResults = _ref87.betResults,
+    clearTimerRef = _ref87.clearTimerRef,
+    closeTrack = _ref87.closeTrack,
+    colD = _ref87.colD,
+    cur = _ref87.cur,
+    currency = _ref87.currency,
+    dozD = _ref87.dozD,
+    editTrackId = _ref87.editTrackId,
+    emDroughts = _ref87.emDroughts,
+    endSession = _ref87.endSession,
+    recordGameSpin = _ref87.recordGameSpin,
+    gameResult = _ref87.gameResult,
+    gameSpinning = _ref87.gameSpinning,
+    isLandscape = _ref87.isLandscape,
+    lastBets = _ref87.lastBets,
+    lastSpinDelta = _ref87.lastSpinDelta,
+    manualBets = _ref87.manualBets,
+    nextColorIdx = _ref87.nextColorIdx,
+    nonClosedTracks = _ref87.nonClosedTracks,
+    parkToggle = _ref87.parkToggle,
+    pendingTrackCfg = _ref87.pendingTrackCfg,
+    pendingTrackType = _ref87.pendingTrackType,
+    pnlVal = _ref87.pnlVal,
+    saveSession = _ref87.saveSession,
+    selectedChip = _ref87.selectedChip,
+    sess = _ref87.sess,
+    setAddOpen = _ref87.setAddOpen,
+    setAnimNumber = _ref87.setAnimNumber,
+    setBetResults = _ref87.setBetResults,
+    setEditTrackId = _ref87.setEditTrackId,
+    setGameResult = _ref87.setGameResult,
+    setGameSpinning = _ref87.setGameSpinning,
+    setLastBets = _ref87.setLastBets,
+    setLastSpinDelta = _ref87.setLastSpinDelta,
+    setManualBets = _ref87.setManualBets,
+    setPendingTrackCfg = _ref87.setPendingTrackCfg,
+    setPendingTrackType = _ref87.setPendingTrackType,
+    setSelectedChip = _ref87.setSelectedChip,
+    setUndoStack = _ref87.setUndoStack,
+    settings = _ref87.settings,
+    tapNumber = _ref87.tapNumber,
+    updSess = _ref87.updSess,
+    updateTrackConfig = _ref87.updateTrackConfig,
+    wheelNums = _ref87.wheelNums;
+  var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
+  var hasActiveTracks = nonClosedTracks.some(function (t) {
+    return t.state === "active";
+  });
+  var tMin = settings.tableMinBet || 1;
+  var CHIPS = CHIP_DENOMS.filter(function (c) {
+    return c.val >= tMin;
+  });
+  var totalBetAmt = manualBets.reduce(function (s, b) {
+    return s + b.amount;
+  }, 0);
+  var canSpin = manualBets.length > 0 || hasActiveTracks;
+  function cancelPendingClear() {
+    if (clearTimerRef.current) {
+      clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = null;
+    }
+    if (betResults) {
+      setBetResults(null);
+      setManualBets([]);
+    }
+  }
+  function placeBet(type, target) {
+    if (gameSpinning) return;
+    if (betResults) cancelPendingClear();
+    setManualBets(function (prev) {
+      return [].concat(_toConsumableArray(prev), [{
+        id: Date.now() + Math.random(),
+        type: type,
+        target: target,
+        amount: selectedChip
+      }]);
+    });
+    setUndoStack(function (prev) {
+      return [].concat(_toConsumableArray(prev), [1]);
+    });
+    if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(10);
+  }
+  function undoBet() {
+    if (betResults) return;
+    setUndoStack(function (prev) {
+      if (prev.length === 0) return prev;
+      var count = prev[prev.length - 1];
+      setManualBets(function (mb) {
+        return mb.slice(0, -count);
+      });
+      return prev.slice(0, -1);
+    });
+  }
+  function clearBets() {
+    setManualBets([]);
+    setUndoStack([]);
+  }
+  function doubleBets() {
+    if (betResults) return;
+    setManualBets(function (prev) {
+      var doubled = prev.map(function (b) {
+        return _objectSpread(_objectSpread({}, b), {}, {
+          id: Date.now() + Math.random()
+        });
+      });
+      setUndoStack(function (us) {
+        return [].concat(_toConsumableArray(us), [prev.length]);
+      });
+      return [].concat(_toConsumableArray(prev), _toConsumableArray(doubled));
+    });
+  }
+  function repeatBets() {
+    if (lastBets.length === 0) return;
+    cancelPendingClear();
+    var repeated = lastBets.map(function (b) {
+      return _objectSpread(_objectSpread({}, b), {}, {
+        id: Date.now() + Math.random()
+      });
+    });
+    setManualBets(repeated);
+    setUndoStack([repeated.length]);
+  }
+
+  // Aggregate bets by position for display
+  var boardBets = {};
+  manualBets.forEach(function (b) {
+    var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+    boardBets[key] = (boardBets[key] || 0) + b.amount;
+  });
+  function resolveManualBets(winVal) {
+    var totalWin = 0,
+      totalBet = 0,
+      posResults = {};
+    manualBets.forEach(function (b) {
+      totalBet += b.amount;
+      var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+      var covered = betCoveredNumbers(b.type, b.target);
+      var won = covered.indexOf(winVal) >= 0;
+      if (won) {
+        totalWin += b.amount * betPayoutMult(b.type);
+        posResults[posKey] = "won";
+      } else {
+        if (!posResults[posKey]) posResults[posKey] = "lost";
+      }
+    });
+    return {
+      totalWin: totalWin,
+      totalBet: totalBet,
+      profit: totalWin - totalBet,
+      posResults: posResults
+    };
+  }
+  function doGameSpin() {
+    if (gameSpinning || betResults) return;
+    setGameSpinning(true);
+    setAnimNumber(null);
+    if (!sess.sessionStartedAt) updSess(function (s) {
+      s.sessionStartedAt = Date.now();
+    });
+    var nums = wheelNums;
+    var spinBets = _toConsumableArray(manualBets);
+    var ticks = 0;
+    var iv = setInterval(function () {
+      ticks++;
+      // Only update the animation display number, NOT gameResult
+      setAnimNumber(nums[Math.floor(Math.random() * nums.length)]);
+      if (ticks >= 15) {
+        clearInterval(iv);
+        var val = nums[Math.floor(Math.random() * nums.length)];
+        var casinoWager = mergeWagerSummaries(summarizeTrackWagers(sess.tracks, val), summarizeManualWagers(spinBets, val));
+        setAnimNumber(null);
+        setGameResult(val); // final result - board highlights winning number
+        if (hasActiveTracks) tapNumber(val, true, true);else {
+          updSess(function (s) {
+            s.spins.push(val);
+            var nd = _objectSpread({}, s.droughts);
+            Object.keys(nd).forEach(function (k) {
+              return nd[k]++;
+            });
+            nd[val] = 0;
+            s.droughts = nd;
+          });
+        }
+        if (spinBets.length > 0) {
+          var totalWin = 0,
+            totalBet = 0,
+            posResults = {};
+          spinBets.forEach(function (b) {
+            totalBet += b.amount;
+            var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+            var covered = betCoveredNumbers(b.type, b.target);
+            if (covered.indexOf(val) >= 0) {
+              totalWin += b.amount * betPayoutMult(b.type);
+              posResults[posKey] = "won";
+            } else {
+              if (!posResults[posKey]) posResults[posKey] = "lost";
+            }
+          });
+          var profit = totalWin - totalBet;
+          updSess(function (s) {
+            s.bankrollCurrent = Math.round((s.bankrollCurrent + profit) * 100) / 100;
+          });
+          if (hasActiveTracks) setLastSpinDelta(function (prev) {
+            return (prev || 0) + profit;
+          });else setLastSpinDelta(profit);
+          setBetResults(posResults);
+          setLastBets(_toConsumableArray(spinBets));
+          setUndoStack([]);
+          clearTimerRef.current = setTimeout(function () {
+            setBetResults(null);
+            setManualBets([]);
+            clearTimerRef.current = null;
+          }, 3000);
+        }
+        recordGameSpin(val, casinoWager);
+        if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(30);
+        setGameSpinning(false);
+      }
+    }, 70);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center"
+    }
+  }, function () {
+    var displayNum = gameSpinning ? animNumber : gameResult;
+    if (!displayNum) return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        background: "#1e2d3d",
+        border: "3px solid #2d4057",
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#64748b",
+        flexShrink: 0
+      }
+    }, "--");
+    var isZ = displayNum === "0" || displayNum === "00";
+    var r = !isZ && RED.has(+displayNum);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        background: isZ ? "#166534" : r ? "#991b1b" : "#1e293b",
+        border: "3px solid " + (isZ ? "#4ade80" : r ? "#f87171" : "#64748b"),
+        fontSize: 20,
+        fontWeight: 900,
+        color: "white",
+        animation: gameSpinning ? "pulse 0.15s infinite" : "none",
+        flexShrink: 0
+      }
+    }, displayNum);
+  }(), /*#__PURE__*/React.createElement("button", {
+    onClick: doGameSpin,
+    disabled: gameSpinning || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "12px 0" : "12px 0",
+      borderRadius: 10,
+      border: "none",
+      background: gameSpinning || betResults ? "#374151" : "linear-gradient(135deg,#16a34a,#059669)",
+      color: "white",
+      fontSize: isLandscape ? 15 : 16,
+      fontWeight: 900,
+      cursor: gameSpinning || betResults ? "not-allowed" : "pointer",
+      opacity: gameSpinning ? 0.7 : 1
+    }
+  }, gameSpinning ? "Spinning..." : "🎰 SPIN"), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      flexShrink: 0,
+      minWidth: 55
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 7,
+      color: "#64748b",
+      textTransform: "uppercase"
+    }
+  }, "Last"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 900,
+      color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
+    }
+  }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), function () {
+    var stratBets = {};
+    nonClosedTracks.filter(function (t) {
+      return t.state === "active";
+    }).forEach(function (t) {
+      if (t.type === "fibonacci") {
+        var dts = t.config.dozenTargets || [],
+          cts = t.config.colTargets || [],
+          evts = t.config.evenTargets || [];
+        dts.forEach(function (d) {
+          stratBets["dozen:" + d] = t.color;
+        });
+        cts.forEach(function (c) {
+          stratBets["column:" + c] = t.color;
+        });
+        evts.forEach(function (key) {
+          stratBets[key] = t.color;
+        });
+      }
+      if (t.type === "solution") {
+        (t.config.activeBets || []).forEach(function (b) {
+          if (!stratBets["s:" + b.number]) stratBets["s:" + b.number] = t.color;
+        });
+      }
+      if (t.type === "custom") {
+        (t.config.positions || []).forEach(function (p) {
+          var pk = p.type === "straight" ? "s:" + p.target : p.type + (p.target !== undefined ? ":" + p.target : "");
+          if (!stratBets[pk]) stratBets[pk] = t.color;
+        });
+      }
+    });
+    return /*#__PURE__*/React.createElement(RouletteBoard, {
+      roulette: sess.roulette,
+      winningNumber: gameSpinning ? null : gameResult,
+      stratBets: stratBets,
+      spinning: false,
+      onBet: placeBet,
+      boardBets: boardBets,
+      chipColor: (CHIPS.find(function (c) {
+        return c.val === selectedChip;
+      }) || CHIPS[0]).color,
+      betResults: betResults,
+      stratChips: computeStratChips(nonClosedTracks),
+      landscape: isLandscape
+    });
+  }(), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: isLandscape ? 6 : 3,
+      justifyContent: "center",
+      flexWrap: "wrap"
+    }
+  }, CHIPS.map(function (c) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: c.val,
+      onClick: function onClick() {
+        return setSelectedChip(c.val);
+      },
+      style: {
+        width: isLandscape ? 38 : 34,
+        height: isLandscape ? 38 : 34,
+        borderRadius: "50%",
+        border: (isLandscape ? "3" : "2") + "px solid " + (selectedChip === c.val ? "#fbbf24" : c.border),
+        background: c.color,
+        color: c.val >= 100 ? "#fff" : c.val <= 0.5 ? "#1e293b" : "#1e293b",
+        fontSize: isLandscape ? c.val < 1 ? 9 : 11 : c.val < 1 ? 7 : 8,
+        fontWeight: 900,
+        cursor: "pointer",
+        boxShadow: selectedChip === c.val ? "0 0 8px #fbbf24" : "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, c.label);
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: isLandscape ? 6 : 3
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: undoBet,
+    disabled: manualBets.length === 0 || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: manualBets.length > 0 && !betResults ? "#60a5fa" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "\u21A9Undo"), /*#__PURE__*/React.createElement("button", {
+    onClick: clearBets,
+    disabled: manualBets.length === 0 || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: manualBets.length > 0 && !betResults ? "#f87171" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "\u2715Clear"), /*#__PURE__*/React.createElement("button", {
+    onClick: doubleBets,
+    disabled: manualBets.length === 0 || !!betResults,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: manualBets.length > 0 && !betResults ? "#fbbf24" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "2\xD7"), /*#__PURE__*/React.createElement("button", {
+    onClick: repeatBets,
+    disabled: lastBets.length === 0,
+    style: {
+      flex: 1,
+      padding: isLandscape ? "6px 0" : "5px 0",
+      borderRadius: 6,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: lastBets.length > 0 ? "#86efac" : "#374151",
+      fontSize: isLandscape ? 11 : 8,
+      fontWeight: 700
+    }
+  }, "\u267BRpt")), totalBetAmt > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      fontSize: 10,
+      fontWeight: 800,
+      color: "#fbbf24"
+    }
+  }, "Bet: ", cur.symbol, formatNumber(totalBetAmt)), totalBetAmt > 0 && !betResults && /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      var posMap = {};
+      manualBets.forEach(function (b) {
+        var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
+        if (!posMap[key]) posMap[key] = {
+          type: b.type,
+          target: b.target,
+          baseAmount: 0
+        };
+        posMap[key].baseAmount += b.amount;
+      });
+      var positions = Object.values(posMap);
+      var hasInside = positions.some(function (p) {
+        return isInsideBet(p.type);
+      });
+      if (!hasInside) {
+        var dts = [],
+          cts = [],
+          evts = [];
+        positions.forEach(function (p) {
+          if (p.type === "dozen") dts.push(p.target);else if (p.type === "column") cts.push(p.target);else evts.push(p.type);
+        });
+        var cfg = defaultFibCfg();
+        cfg.betMode = "flat";
+        cfg.dozenTargets = dts;
+        cfg.colTargets = cts;
+        cfg.evenTargets = evts;
+        updSess(function (s) {
+          s.tracks.push(newTrack("fibonacci", s.tracks.length, cfg, pickTrackColor("fibonacci", cfg, s.tracks)));
+        });
+      } else {
+        var cfg = {
+          type: "custom",
+          unit: 1,
+          roi: 15,
+          betMode: "flat",
+          stopLoss: 200,
+          positions: positions
+        };
+        updSess(function (s) {
+          s.tracks.push({
+            id: generateId(),
+            type: "custom",
+            color: pickTrackColor("custom", cfg, s.tracks),
+            state: "active",
+            config: cfg,
+            level: 0,
+            pnl: 0,
+            bets: [],
+            createdAtSpin: s.spins.length,
+            closedAtSpin: null,
+            wins: 0,
+            sequences: 0
+          });
+        });
+      }
+      clearBets();
+      if (settings.vibration !== false && navigator.vibrate) navigator.vibrate([20, 10, 20]);
+    },
+    style: {
+      width: "100%",
+      padding: "8px 0",
+      borderRadius: 8,
+      border: "2px dashed #7c3aed",
+      background: "#1e1040",
+      color: "#c4b5fd",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "\uD83C\uDCCF Create Strategy from Bets"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      fontSize: 8,
+      color: "#374151"
+    }
+  }, "center=straight \xB7 edge=split \xB7 corner=corner"), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4,
+      overflowX: "auto",
+      paddingBottom: 2,
+      WebkitOverflowScrolling: "touch",
+      width: "100%",
+      maxWidth: "100%",
+      minWidth: 0,
+      boxSizing: "border-box"
+    }
+  }, recentSpins.map(function (val, i) {
+    var isZ = val === "0" || val === "00",
+      r = !isZ && RED.has(+val);
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        flexShrink: 0,
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
+        border: "2px solid " + (i === 0 ? "#ffffff" : isZ ? "#22c55e" : r ? "#ef4444" : "#374151"),
+        color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
+        fontSize: 10,
+        fontWeight: 800,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, val);
+  })), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: pnlVal >= 0 ? "#0a1f0a" : "#200505",
+      borderRadius: 12,
+      padding: "14px 10px",
+      border: "2px solid " + (pnlVal >= 0 ? "#16a34a" : "#991b1b"),
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#64748b",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 2
+    }
+  }, "Session Profit"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 28,
+      fontWeight: 900,
+      color: pnlVal >= 0 ? "#4ade80" : "#f87171"
+    }
+  }, pnlVal >= 0 ? "+" : "-", cur.symbol, formatNumber(pnlVal))), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 100,
+      background: lastSpinDelta > 0 ? "#0a1f0a" : lastSpinDelta < 0 ? "#200505" : "#0f1923",
+      borderRadius: 12,
+      padding: "14px 10px",
+      border: "2px solid " + (lastSpinDelta > 0 ? "#16a34a" : lastSpinDelta < 0 ? "#991b1b" : "#2d4057"),
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#64748b",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 2
+    }
+  }, "Last Spin"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 900,
+      color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
+    }
+  }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), sess.spins.length > 0 && /*#__PURE__*/React.createElement(DroughtPanel, {
+    emDroughts: emDroughts,
+    dozD: dozD,
+    colD: colD
+  }), /*#__PURE__*/React.createElement(FieldLabel, null, "Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, nonClosedTracks.map(function (t) {
+    var tbl = computeTableForTrack(t);
+    var isEditing = editTrackId === t.id;
+    var dolPnl = t.pnl * (t.config.unit || 1);
+    var row = tbl[Math.min(t.level, tbl.length - 1)];
+    return /*#__PURE__*/React.createElement("div", {
+      key: t.id
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#0f1923",
+        borderRadius: 12,
+        padding: "10px 12px",
+        border: "2px solid " + (isEditing ? "#60a5fa" : t.color + "66")
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 4
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 10,
+        height: 10,
+        borderRadius: "50%",
+        background: t.color,
+        flexShrink: 0
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: t.color,
+        flex: 1
+      }
+    }, TRACK_ICONS[t.type], " ", t.type === "fibonacci" ? "Progression" : t.type === "custom" ? "Custom Bet" : "The Solution"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: t.state === "active" ? "#4ade80" : "#fbbf24",
+        fontWeight: 700
+      }
+    }, "[", t.state.toUpperCase(), "]"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: dolPnl >= 0 ? "#4ade80" : "#f87171"
+      }
+    }, dolPnl >= 0 ? "+" : "-", cur.symbol, formatNumber(dolPnl))), /*#__PURE__*/React.createElement(BetTargets, {
+      type: t.type,
+      config: t.config,
+      style: {
+        marginBottom: 6
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#94a3b8"
+      }
+    }, "Lvl ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: t.level >= 10 ? "#f87171" : t.level >= 6 ? "#fbbf24" : "#e2e8f0"
+      }
+    }, t.level), "/", tbl.length), row && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#60a5fa"
+      }
+    }, "Bet: ", formatChips(row.totalBet, t.config.unit, currency), "/spin"), t.type === "custom" && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#8b5cf6"
+      }
+    }, (t.config.betMode || "flat") === "flat" ? "Flat" : "Prog", " \xB7 ", (t.config.positions || []).length, " pos")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 5
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: function onClick() {
+        return parkToggle(t.id);
+      },
+      style: {
+        flex: 1,
+        padding: "4px 0",
+        borderRadius: 6,
+        border: "1px solid #2d4057",
+        background: t.state === "parked" ? "#134e2a" : "#1e2d3d",
+        color: t.state === "parked" ? "#4ade80" : "#94a3b8",
+        fontSize: 9,
+        fontWeight: 700,
+        cursor: "pointer"
+      }
+    }, t.state === "parked" ? "▶ Resume" : "⏸ Park"), /*#__PURE__*/React.createElement("button", {
+      onClick: function onClick() {
+        return setEditTrackId(isEditing ? null : t.id);
+      },
+      style: {
+        padding: "4px 8px",
+        borderRadius: 6,
+        border: "1px solid " + (isEditing ? "#60a5fa" : "#1e3a5f"),
+        background: isEditing ? "#1e3a5f" : "transparent",
+        color: "#60a5fa",
+        fontSize: 9,
+        cursor: "pointer"
+      }
+    }, "\u270F\uFE0F Edit"), /*#__PURE__*/React.createElement("button", {
+      onClick: function onClick() {
+        if (window.confirm("Close track?")) closeTrack(t.id);
+      },
+      style: {
+        padding: "4px 8px",
+        borderRadius: 6,
+        border: "1px solid #7f1d1d",
+        background: "transparent",
+        color: "#f87171",
+        fontSize: 9,
+        cursor: "pointer"
+      }
+    }, "\xD7"))), isEditing && /*#__PURE__*/React.createElement(EditTrackCfg, {
+      track: t,
+      currency: currency,
+      tableMinBet: settings.tableMinBet || 1,
+      onSave: function onSave(cfg) {
+        return updateTrackConfig(t.id, cfg);
+      },
+      onCancel: function onCancel() {
+        return setEditTrackId(null);
+      }
+    }));
+  }), !addOpen && /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      return setAddOpen(true);
+    },
+    style: {
+      padding: "10px 0",
+      borderRadius: 12,
+      border: "2px dashed #2d4057",
+      background: "transparent",
+      color: "#64748b",
+      fontSize: 13,
+      cursor: "pointer"
+    }
+  }, "+ Add Strategy"), addOpen && /*#__PURE__*/React.createElement(AddTrackPanel, {
+    onAdd: addTrack,
+    onClose: function onClose() {
+      return setAddOpen(false);
+    },
+    nextColor: nextColorIdx,
+    type: pendingTrackType,
+    cfg: pendingTrackCfg,
+    onTypeChange: function onTypeChange(t) {
+      setPendingTrackType(t);
+      setPendingTrackCfg(t === "fibonacci" ? defaultFibCfg() : defaultSolCfg());
+    },
+    onCfgChange: setPendingTrackCfg,
+    closedTracks: sess.tracks.filter(function (t) {
+      return t.state === "closed";
+    }),
+    currency: currency,
+    tableMinBet: settings.tableMinBet || 1
+  })), sess.sessionStartedAt && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: saveSession,
+    style: {
+      flex: 1,
+      padding: 11,
+      borderRadius: 10,
+      border: "none",
+      background: "#16a34a",
+      color: "white",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "Save"), /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      if (window.confirm("End session and save?")) endSession();
+    },
+    style: {
+      flex: 1,
+      padding: 11,
+      borderRadius: 10,
+      border: "1px solid #7f1d1d",
+      background: "#200505",
+      color: "#f87171",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "End Session")));
+}
+
+// ===== components/TablePage.jsx =====
+// -- Full table page --
+// Moved from App.jsx unchanged. App renders it through a wrapper that passes the App values it reads.
+function TablePageView(_ref88) {
+  var sess = _ref88.sess,
+    selectedTrackId = _ref88.selectedTrackId,
+    setSelectedTrackId = _ref88.setSelectedTrackId,
+    nonClosedTracks = _ref88.nonClosedTracks,
+    cur = _ref88.cur;
+  var selTrack = sess.tracks.find(function (t) {
+    return t.id === selectedTrackId;
+  }) || nonClosedTracks[0] || null;
+  if (!selTrack) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#1e2d3d",
+      borderRadius: 14,
+      padding: "30px 20px",
+      textAlign: "center",
+      border: "1px dashed #2d4057",
+      color: "#64748b",
+      fontSize: 13
+    }
+  }, "Add a track to see the progression table");
+  var tbl = computeTableForTrack(selTrack);
+  var hasMix = selTrack.type === "fibonacci" && (selTrack.config.dozenTargets || []).length > 0 && (selTrack.config.colTargets || []).length > 0;
+  var unit = selTrack.config.unit || 1;
+  var headers = hasMix ? ["#", "Bet", "Invested", "PW Ret", "PW Profit", "JP Ret", "JP Profit"] : ["#", "Bet", "Invested", "Return", "Profit", "ROI"];
+  var hColors = ["#94a3b8", "#60a5fa", "#f87171", "#a78bfa", "#4ade80", "#fbbf24", "#fbbf24"];
+  var gridCols = hasMix ? "22px 1fr 1fr 1fr 1fr 1fr 1fr" : "22px 1fr 1fr 1fr 1fr 1fr";
+  var legendRows = hasMix ? [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["PW Ret", "Return if 1 bet hits"], ["PW Profit", "Profit on partial win"], ["JP Ret", "Return if dozen AND column hit"], ["JP Profit", "Profit on jackpot"]] : [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["Return", "Gross payout if you win"], ["Profit", "Net profit after all invested"], ["ROI", "Profit divided by invested"]];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+      width: "100%"
+    }
+  }, nonClosedTracks.length > 1 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      overflowX: "auto",
+      paddingBottom: 4
+    }
+  }, nonClosedTracks.map(function (t) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: function onClick() {
+        return setSelectedTrackId(t.id);
+      },
+      style: {
+        padding: "7px 12px",
+        borderRadius: 9,
+        border: "2px solid " + (selectedTrackId === t.id ? t.color : "#2d4057"),
+        background: selectedTrackId === t.id ? "#0f1923" : "transparent",
+        color: selectedTrackId === t.id ? t.color : "#64748b",
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      }
+    }, TRACK_ICONS[t.type], " ", betTargetText(t.type, t.config, false, 2));
+  })), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 10,
+      height: 10,
+      borderRadius: "50%",
+      background: selTrack.color,
+      flexShrink: 0
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: selTrack.color
+    }
+  }, TRACK_ICONS[selTrack.type], " ", selTrack.type === "fibonacci" ? "Progression Bet" : selTrack.type === "custom" ? "Custom Bet" : "The Solution")), /*#__PURE__*/React.createElement(BetTargets, {
+    type: selTrack.type,
+    config: selTrack.config,
+    style: {
+      marginBottom: 4
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#64748b",
+      marginBottom: 8
+    }
+  }, selTrack.config.roi, "% ROI \xB7 ", tbl.length, " levels \xB7 ", cur.symbol, selTrack.config.stopLoss, " stop"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#0f1923",
+      borderRadius: 8,
+      padding: "8px 10px",
+      marginBottom: 8,
+      border: "1px solid #2d4057",
+      display: "flex",
+      flexDirection: "column",
+      gap: 3
+    }
+  }, legendRows.map(function (_ref89) {
+    var _ref90 = _slicedToArray(_ref89, 2),
+      abbr = _ref90[0],
+      desc = _ref90[1];
+    return /*#__PURE__*/React.createElement("div", {
+      key: abbr,
+      style: {
+        display: "flex",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        fontWeight: 800,
+        color: "#86efac",
+        minWidth: 55
+      }
+    }, abbr), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#475569"
+      }
+    }, desc));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: gridCols,
+      gap: 2,
+      marginBottom: 4
+    }
+  }, headers.map(function (c, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: c,
+      style: {
+        fontSize: 8,
+        color: hColors[i],
+        textTransform: "uppercase",
+        textAlign: i === 0 ? "center" : "right",
+        fontWeight: 700
+      }
+    }, c);
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 2,
+      maxHeight: "55vh",
+      overflowY: "auto"
+    }
+  }, tbl.map(function (r, i) {
+    var isA = i === selTrack.level,
+      isP = i < selTrack.level;
+    var pw = 3 * r.c - r.totalInvest,
+      jp = hasMix ? 6 * r.c - r.totalInvest : null;
+    var cols = hasMix ? [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (3 * r.c * unit).toFixed(cur.dec), (pw * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(pw * unit).toFixed(cur.dec), cur.symbol + (6 * r.c * unit).toFixed(cur.dec), jp !== null ? (jp * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(jp * unit).toFixed(cur.dec) : "--"] : [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (r.ret * unit).toFixed(cur.dec), (r.profit * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(r.profit * unit).toFixed(cur.dec), r.roi.toFixed(1) + "%"];
+    var rowColors = hasMix ? ["#60a5fa", "#f87171", "#a78bfa", pw >= 0 ? "#4ade80" : "#f97316", "#fbbf24", jp !== null && jp >= 0 ? "#fbbf24" : "#f87171"] : ["#60a5fa", "#f87171", "#a78bfa", r.profit >= 0 ? "#4ade80" : "#f97316", "#86efac"];
+    return /*#__PURE__*/React.createElement("div", {
+      key: r.level,
+      style: {
+        display: "grid",
+        gridTemplateColumns: gridCols,
+        gap: 2,
+        padding: "5px 4px",
+        borderRadius: 6,
+        background: isA ? "#134e2a" : isP ? "#0f1923" : "transparent",
+        border: "1px solid " + (isA ? "#4ade80" : isP ? "#1e2d3d" : "#2d4057"),
+        opacity: isP ? 0.4 : 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        fontWeight: 800,
+        fontSize: 10,
+        color: isA ? "#4ade80" : r.level >= 10 ? "#f87171" : r.level >= 6 ? "#fbbf24" : "#94a3b8"
+      }
+    }, r.level), cols.map(function (v, ci) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: ci,
+        style: {
+          textAlign: "right",
+          fontSize: 9,
+          color: rowColors[ci],
+          fontWeight: 600
+        }
+      }, v);
+    }));
+  }))));
 }
 
 // ===== App.jsx =====
@@ -11435,6 +13192,14 @@ function App() {
     _useState136 = _slicedToArray(_useState135, 2),
     liveLastBets = _useState136[0],
     setLiveLastBets = _useState136[1];
+  var _useState137 = (0, _react.useState)(false),
+    _useState138 = _slicedToArray(_useState137, 2),
+    clearOpen = _useState138[0],
+    setClearOpen = _useState138[1];
+  var _useState139 = (0, _react.useState)(null),
+    _useState140 = _slicedToArray(_useState139, 2),
+    clearUndo = _useState140[0],
+    setClearUndo = _useState140[1]; // {sessionId, snapshot} while Undo for Clear numbers is offered
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(function () {
@@ -11473,19 +13238,19 @@ function App() {
       return window.removeEventListener('nexus-account-scope-ready', loadScopedUi);
     };
   }, []);
-  var _useState137 = (0, _react.useState)(null),
-    _useState138 = _slicedToArray(_useState137, 2),
-    liveBetResults = _useState138[0],
-    setLiveBetResults = _useState138[1];
-  var _useState139 = (0, _react.useState)([]),
-    _useState140 = _slicedToArray(_useState139, 2),
-    liveUndoStack = _useState140[0],
-    setLiveUndoStack = _useState140[1];
-  var liveClearTimerRef = React.useRef(null);
   var _useState141 = (0, _react.useState)(null),
     _useState142 = _slicedToArray(_useState141, 2),
-    updateAvailable = _useState142[0],
-    setUpdateAvailable = _useState142[1]; // {version, notes}
+    liveBetResults = _useState142[0],
+    setLiveBetResults = _useState142[1];
+  var _useState143 = (0, _react.useState)([]),
+    _useState144 = _slicedToArray(_useState143, 2),
+    liveUndoStack = _useState144[0],
+    setLiveUndoStack = _useState144[1];
+  var liveClearTimerRef = React.useRef(null);
+  var _useState145 = (0, _react.useState)(null),
+    _useState146 = _slicedToArray(_useState145, 2),
+    updateAvailable = _useState146[0],
+    setUpdateAvailable = _useState146[1]; // {version, notes}
 
   // Check for app updates
   (0, _react.useEffect)(function () {
@@ -11505,46 +13270,46 @@ function App() {
       return clearInterval(iv);
     };
   }, []);
-  var _useState143 = (0, _react.useState)(false),
-    _useState144 = _slicedToArray(_useState143, 2),
-    buyInOpen = _useState144[0],
-    setBuyInOpen = _useState144[1];
-  var _useState145 = (0, _react.useState)(false),
-    _useState146 = _slicedToArray(_useState145, 2),
-    currencyOpen = _useState146[0],
-    setCurrencyOpen = _useState146[1];
   var _useState147 = (0, _react.useState)(false),
     _useState148 = _slicedToArray(_useState147, 2),
-    changelogOpen = _useState148[0],
-    setChangelogOpen = _useState148[1];
+    buyInOpen = _useState148[0],
+    setBuyInOpen = _useState148[1];
   var _useState149 = (0, _react.useState)(false),
     _useState150 = _slicedToArray(_useState149, 2),
-    editBankroll = _useState150[0],
-    setEditBankroll = _useState150[1];
+    currencyOpen = _useState150[0],
+    setCurrencyOpen = _useState150[1];
   var _useState151 = (0, _react.useState)(false),
     _useState152 = _slicedToArray(_useState151, 2),
-    cashOutOpen = _useState152[0],
-    setCashOutOpen = _useState152[1];
+    changelogOpen = _useState152[0],
+    setChangelogOpen = _useState152[1];
   var _useState153 = (0, _react.useState)(false),
     _useState154 = _slicedToArray(_useState153, 2),
-    hardResetOpen = _useState154[0],
-    setHardResetOpen = _useState154[1];
+    editBankroll = _useState154[0],
+    setEditBankroll = _useState154[1];
   var _useState155 = (0, _react.useState)(false),
     _useState156 = _slicedToArray(_useState155, 2),
-    feedbackOpen = _useState156[0],
-    setFeedbackOpen = _useState156[1];
-  var _useState157 = (0, _react.useState)(""),
+    cashOutOpen = _useState156[0],
+    setCashOutOpen = _useState156[1];
+  var _useState157 = (0, _react.useState)(false),
     _useState158 = _slicedToArray(_useState157, 2),
-    feedbackText = _useState158[0],
-    setFeedbackText = _useState158[1];
-  var _useState159 = (0, _react.useState)("fibonacci"),
+    hardResetOpen = _useState158[0],
+    setHardResetOpen = _useState158[1];
+  var _useState159 = (0, _react.useState)(false),
     _useState160 = _slicedToArray(_useState159, 2),
-    pendingTrackType = _useState160[0],
-    setPendingTrackType = _useState160[1];
-  var _useState161 = (0, _react.useState)(defaultFibCfg()),
+    feedbackOpen = _useState160[0],
+    setFeedbackOpen = _useState160[1];
+  var _useState161 = (0, _react.useState)(""),
     _useState162 = _slicedToArray(_useState161, 2),
-    pendingTrackCfg = _useState162[0],
-    setPendingTrackCfg = _useState162[1];
+    feedbackText = _useState162[0],
+    setFeedbackText = _useState162[1];
+  var _useState163 = (0, _react.useState)("fibonacci"),
+    _useState164 = _slicedToArray(_useState163, 2),
+    pendingTrackType = _useState164[0],
+    setPendingTrackType = _useState164[1];
+  var _useState165 = (0, _react.useState)(defaultFibCfg()),
+    _useState166 = _slicedToArray(_useState165, 2),
+    pendingTrackCfg = _useState166[0],
+    setPendingTrackCfg = _useState166[1];
   var sessKey = appMode === "game" ? "gameSession" : "currentSession";
   var sess = appState[sessKey] || appState.currentSession;
   var livePauseOffset = livePausedTotal + (livePausedAt ? Date.now() - livePausedAt : 0);
@@ -11557,10 +13322,10 @@ function App() {
   }, [appState]);
 
   // Storage failures surface as a banner, never a blocking browser dialog
-  var _useState163 = (0, _react.useState)(null),
-    _useState164 = _slicedToArray(_useState163, 2),
-    saveError = _useState164[0],
-    setSaveError = _useState164[1];
+  var _useState167 = (0, _react.useState)(null),
+    _useState168 = _slicedToArray(_useState167, 2),
+    saveError = _useState168[0],
+    setSaveError = _useState168[1];
   (0, _react.useEffect)(function () {
     function onSaveError(e) {
       setSaveError(e && e.detail || "Unknown storage error");
@@ -11570,6 +13335,23 @@ function App() {
       return window.removeEventListener("nexus-save-error", onSaveError);
     };
   }, []);
+
+  // Undo after Clear numbers ends at the next spin, when the session changes or the mode leaves Live,
+  // or after 15 seconds, whichever comes first.
+  (0, _react.useEffect)(function () {
+    if (!clearUndo) return;
+    var timer = setTimeout(function () {
+      return setClearUndo(null);
+    }, 15000);
+    return function () {
+      return clearTimeout(timer);
+    };
+  }, [clearUndo]);
+  (0, _react.useEffect)(function () {
+    if (!clearUndo) return;
+    var live = appState.currentSession;
+    if (appMode !== "live" || live.id !== clearUndo.sessionId || live.spins.length > 0) setClearUndo(null);
+  }, [clearUndo, appMode, appState.currentSession.id, appState.currentSession.spins.length]);
 
   // Keep the selected chip legal when the table minimum changes: snap up to the
   // smallest chip at or above the minimum so bets can never slip under it.
@@ -11697,58 +13479,8 @@ function App() {
   if (!settings.onboarded) {
     return /*#__PURE__*/React.createElement(OnboardingScreen, {
       initialBankroll: settings._restartBankroll,
-      onComplete: function onComplete(_ref82) {
-        var roulette = _ref82.roulette,
-          bankroll = _ref82.bankroll,
-          defaultBuyIn = _ref82.defaultBuyIn,
-          curr = _ref82.currency,
-          tableMinBet = _ref82.tableMinBet,
-          tableMaxBet = _ref82.tableMaxBet,
-          tableMaxTotal = _ref82.tableMaxTotal;
-        updApp(function (s) {
-          var prevBankroll = s.settings._restartBankroll;
-          s.settings.onboarded = true;
-          s.settings.currency = curr;
-          s.settings.defaultBuyIn = defaultBuyIn;
-          if (tableMinBet) s.settings.tableMinBet = tableMinBet;
-          if (tableMaxBet) s.settings.tableMaxBet = tableMaxBet;
-          if (tableMaxTotal) s.settings.tableMaxTotal = tableMaxTotal;
-          delete s.settings._restartBankroll;
-          if (prevBankroll !== undefined) {
-            // Restart -- adjust existing session's bankroll
-            var delta = bankroll - prevBankroll;
-            s.currentSession.roulette = roulette;
-            s.currentSession.droughts = initDroughts(roulette);
-            if (delta > 0) {
-              // Added money → Buy In
-              s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent + delta) * 100) / 100;
-              s.currentSession.totalBuyIn = (s.currentSession.totalBuyIn || 0) + delta;
-              if (!s.currentSession.buyIns) s.currentSession.buyIns = [];
-              s.currentSession.buyIns.push({
-                amount: delta,
-                at: Date.now(),
-                spin: s.currentSession.spins.length,
-                note: "onboarding restart"
-              });
-            } else if (delta < 0) {
-              // Removed money → Cash Out
-              var cashAmt = Math.abs(delta);
-              s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent - cashAmt) * 100) / 100;
-              s.currentSession.totalCashOut = (s.currentSession.totalCashOut || 0) + cashAmt;
-              if (!s.currentSession.cashOuts) s.currentSession.cashOuts = [];
-              s.currentSession.cashOuts.push({
-                amount: cashAmt,
-                at: Date.now(),
-                spin: s.currentSession.spins.length,
-                note: "onboarding restart"
-              });
-            }
-          } else {
-            // Fresh start
-            s.currentSession = newSession(roulette, bankroll);
-            s.gameSession = newSession(roulette, bankroll);
-          }
-        });
+      onComplete: function onComplete(choices) {
+        return completeOnboarding(updApp, choices);
       }
     });
   }
@@ -12127,6 +13859,42 @@ function App() {
     });
     setPrevSessState(null);
   }
+  // Clear numbers empties the live session's spins and what is derived from them. Money and the session
+  // record are not touched, and the session is stamped modified. The snapshot holds only what the clear
+  // changes, so Undo can put exactly that back and leave anything done since (buy-ins, cash-outs) alone.
+  function clearNumbers() {
+    var now = Date.now();
+    var snapshot = {
+      spinState: snapshotSpinState(appState.currentSession),
+      prevSessState: prevSessState ? JSON.parse(JSON.stringify(prevSessState)) : null,
+      lastSpinDelta: lastSpinDelta
+    };
+    updApp(function (s) {
+      s.currentSession = clearSpins(s.currentSession, now);
+    });
+    setPrevSessState(null);
+    setLastSpinDelta(null);
+    setClearOpen(false);
+    setClearUndo({
+      sessionId: appState.currentSession.id,
+      snapshot: snapshot
+    });
+  }
+  function undoClearNumbers() {
+    if (!clearUndo) return;
+    var live = appState.currentSession;
+    if (appMode !== "live" || live.id !== clearUndo.sessionId || live.spins.length > 0) {
+      setClearUndo(null);
+      return;
+    }
+    var snapshot = clearUndo.snapshot;
+    updApp(function (s) {
+      s.currentSession = restoreSpinState(s.currentSession, snapshot.spinState, Date.now());
+    });
+    setPrevSessState(snapshot.prevSessState);
+    setLastSpinDelta(snapshot.lastSpinDelta);
+    setClearUndo(null);
+  }
   function reactivateTrack(id) {
     updSess(function (s) {
       var t = s.tracks.find(function (x) {
@@ -12217,41 +13985,6 @@ function App() {
         invest: 0
       }]);
     });
-  }
-  function autoExport(allSessions) {
-    // Keep the automatic backup on the user's filesystem. Cancelling the download never changes
-    // the saved session itself.
-    try {
-      var data = {
-        exportedAt: new Date().toISOString(),
-        autoExport: true,
-        sessions: allSessions.map(function (s) {
-          return _objectSpread(_objectSpread({}, s), {}, {
-            metrics: computeMetrics(s)
-          });
-        }),
-        aggregate: {
-          totalSessions: allSessions.length,
-          totalSpins: allSessions.reduce(function (a, s) {
-            return a + s.spins.length;
-          }, 0),
-          netPnL: allSessions.reduce(function (a, s) {
-            return a + computeMetrics(s).netPnL;
-          }, 0)
-        }
-      };
-      var blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json"
-      });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "nexus-roulette-autosave-" + new Date().toISOString().slice(0, 10) + ".json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (e) {/* silently fail if download blocked */}
   }
   function saveSession() {
     var allSessions;
@@ -12366,997 +14099,74 @@ function App() {
     return _submitFeedback.apply(this, arguments);
   }
   function exportJSON() {
-    var data = {
-      exportedAt: new Date().toISOString(),
-      sessions: saved.map(function (s) {
-        return _objectSpread(_objectSpread({}, s), {}, {
-          metrics: computeMetrics(s)
-        });
-      }),
-      aggregate: {
-        totalSessions: saved.length,
-        totalSpins: saved.reduce(function (a, s) {
-          return a + s.spins.length;
-        }, 0),
-        netPnL: saved.reduce(function (a, s) {
-          return a + computeMetrics(s).netPnL;
-        }, 0)
-      }
-    };
-    var blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json"
-    });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "nexus-roulette-export-" + Date.now() + ".json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    exportSessionsJSON(saved);
   }
   function importJSON() {
-    var input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".json,application/json";
-    input.onchange = function (e) {
-      var file = e.target.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function (ev) {
-        try {
-          var data = JSON.parse(ev.target.result);
-          // Handle session exports and older whole-app snapshot files.
-          var sessions = data.sessions || data.savedSessions || data.appState && data.appState.savedSessions || [];
-          if (!sessions.length) {
-            alert("No sessions found in file.");
-            return;
-          }
-          var added = 0,
-            skipped = 0,
-            lastAdded = null;
-          updApp(function (s) {
-            sessions.forEach(function (sess) {
-              if (!s.savedSessions.find(function (x) {
-                return x.id === sess.id;
-              })) {
-                s.savedSessions.push(sess);
-                added++;
-                lastAdded = sess;
-              } else {
-                skipped++;
-              }
-            });
-            // Load the most recent imported session as current (paused)
-            if (lastAdded) {
-              var loaded = JSON.parse(JSON.stringify(lastAdded));
-              // Always end the session - don't auto-start after import
-              if (loaded.sessionStartedAt) {
-                loaded.sessionEndedAt = loaded.modified || Date.now();
-              }
-              // Park all tracks
-              (loaded.tracks || []).forEach(function (tr) {
-                if (tr.state === "active") tr.state = "parked";
-              });
-              s.currentSession = loaded;
-            }
-          });
-          setTab(0);
-          alert("Import complete!\n".concat(added, " session").concat(added !== 1 ? "s" : "", " added").concat(skipped ? ", " + skipped + " already existed (skipped)" : "", ".\n\nLoaded \"").concat(lastAdded ? lastAdded.name : "", "\"."));
-        } catch (err) {
-          alert("Failed to parse file: " + err.message);
-        }
-      };
-      reader.readAsText(file);
-    };
-    document.body.appendChild(input);
-    input.click();
-    document.body.removeChild(input);
+    pickSessionsFile(updApp, setTab);
   }
 
-  // Compute strategy bet chips for display on roulette board
-  function computeStratChips() {
-    var chips = {};
-    function addChip(posKey, amount, color) {
-      if (!chips[posKey]) chips[posKey] = [];
-      // Merge with existing chip of same color
-      var existing = chips[posKey].find(function (c) {
-        return c.color === color;
-      });
-      if (existing) existing.amount += amount;else chips[posKey].push({
-        amount: amount,
-        color: color
-      });
-    }
-    nonClosedTracks.filter(function (t) {
-      return t.state === "active";
-    }).forEach(function (t) {
-      var tbl = computeTableForTrack(t);
-      var row = tbl[Math.min(t.level, tbl.length - 1)];
-      if (!row) return;
-      var betAmt = row.c * (t.config.unit || 1);
-      if (t.type === "fibonacci") {
-        var dts = t.config.dozenTargets || [],
-          cts = t.config.colTargets || [],
-          evts = t.config.evenTargets || [];
-        dts.forEach(function (d) {
-          addChip("dozen:" + d, betAmt, t.color);
-        });
-        cts.forEach(function (c) {
-          addChip("column:" + c, betAmt, t.color);
-        });
-        evts.forEach(function (key) {
-          addChip(key, betAmt, t.color);
-        });
-      }
-      if (t.type === "solution") {
-        (t.config.activeBets || []).forEach(function (b) {
-          var bRow = tbl[Math.min(b.level, tbl.length - 1)];
-          if (bRow) addChip("s:" + b.number, bRow.c * (t.config.unit || 1), t.color);
-        });
-      }
-      if (t.type === "custom") {
-        (t.config.positions || []).forEach(function (p) {
-          var chipAmt = p.baseAmount * row.c * (t.config.unit || 1);
-          if (isInsideBet(p.type)) {
-            // For inside bets, place chip on first number of the group
-            var nums = betCoveredNumbers(p.type, p.target);
-            if (nums.length > 0) addChip("s:" + nums[0], chipAmt, t.color);
-          } else {
-            var posKey = p.type + (p.target !== undefined ? ":" + p.target : "");
-            addChip(posKey, chipAmt, t.color);
-          }
-        });
-      }
-    });
-    return chips;
+  // Game-mode spin recording. GamePageView calls it once per spin.
+  function recordGameSpin(val, casinoWager) {
+    gameRecording.record(_objectSpread(_objectSpread({
+      segment: String(val)
+    }, casinoWager), {}, {
+      watched: casinoWager.staked === 0
+    }));
   }
 
   // -- Game Page --
+  // Declared inside App on purpose: a new component type on each render keeps the page remounting on every
+  // App render, as the inner function did before the split.
   function GamePage() {
-    var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
-    var hasActiveTracks = nonClosedTracks.some(function (t) {
-      return t.state === "active";
-    });
-    var tMin = settings.tableMinBet || 1;
-    var CHIPS = CHIP_DENOMS.filter(function (c) {
-      return c.val >= tMin;
-    });
-    var totalBetAmt = manualBets.reduce(function (s, b) {
-      return s + b.amount;
-    }, 0);
-    var canSpin = manualBets.length > 0 || hasActiveTracks;
-    function cancelPendingClear() {
-      if (clearTimerRef.current) {
-        clearTimeout(clearTimerRef.current);
-        clearTimerRef.current = null;
-      }
-      if (betResults) {
-        setBetResults(null);
-        setManualBets([]);
-      }
-    }
-    function placeBet(type, target) {
-      if (gameSpinning) return;
-      if (betResults) cancelPendingClear();
-      setManualBets(function (prev) {
-        return [].concat(_toConsumableArray(prev), [{
-          id: Date.now() + Math.random(),
-          type: type,
-          target: target,
-          amount: selectedChip
-        }]);
-      });
-      setUndoStack(function (prev) {
-        return [].concat(_toConsumableArray(prev), [1]);
-      });
-      if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(10);
-    }
-    function undoBet() {
-      if (betResults) return;
-      setUndoStack(function (prev) {
-        if (prev.length === 0) return prev;
-        var count = prev[prev.length - 1];
-        setManualBets(function (mb) {
-          return mb.slice(0, -count);
-        });
-        return prev.slice(0, -1);
-      });
-    }
-    function clearBets() {
-      setManualBets([]);
-      setUndoStack([]);
-    }
-    function doubleBets() {
-      if (betResults) return;
-      setManualBets(function (prev) {
-        var doubled = prev.map(function (b) {
-          return _objectSpread(_objectSpread({}, b), {}, {
-            id: Date.now() + Math.random()
-          });
-        });
-        setUndoStack(function (us) {
-          return [].concat(_toConsumableArray(us), [prev.length]);
-        });
-        return [].concat(_toConsumableArray(prev), _toConsumableArray(doubled));
-      });
-    }
-    function repeatBets() {
-      if (lastBets.length === 0) return;
-      cancelPendingClear();
-      var repeated = lastBets.map(function (b) {
-        return _objectSpread(_objectSpread({}, b), {}, {
-          id: Date.now() + Math.random()
-        });
-      });
-      setManualBets(repeated);
-      setUndoStack([repeated.length]);
-    }
-
-    // Aggregate bets by position for display
-    var boardBets = {};
-    manualBets.forEach(function (b) {
-      var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-      boardBets[key] = (boardBets[key] || 0) + b.amount;
-    });
-    function resolveManualBets(winVal) {
-      var totalWin = 0,
-        totalBet = 0,
-        posResults = {};
-      manualBets.forEach(function (b) {
-        totalBet += b.amount;
-        var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-        var covered = betCoveredNumbers(b.type, b.target);
-        var won = covered.indexOf(winVal) >= 0;
-        if (won) {
-          totalWin += b.amount * betPayoutMult(b.type);
-          posResults[posKey] = "won";
-        } else {
-          if (!posResults[posKey]) posResults[posKey] = "lost";
-        }
-      });
-      return {
-        totalWin: totalWin,
-        totalBet: totalBet,
-        profit: totalWin - totalBet,
-        posResults: posResults
-      };
-    }
-    function doGameSpin() {
-      if (gameSpinning || betResults) return;
-      setGameSpinning(true);
-      setAnimNumber(null);
-      if (!sess.sessionStartedAt) updSess(function (s) {
-        s.sessionStartedAt = Date.now();
-      });
-      var nums = wheelNums;
-      var spinBets = _toConsumableArray(manualBets);
-      var ticks = 0;
-      var iv = setInterval(function () {
-        ticks++;
-        // Only update the animation display number, NOT gameResult
-        setAnimNumber(nums[Math.floor(Math.random() * nums.length)]);
-        if (ticks >= 15) {
-          clearInterval(iv);
-          var val = nums[Math.floor(Math.random() * nums.length)];
-          var casinoWager = mergeWagerSummaries(summarizeTrackWagers(sess.tracks, val), summarizeManualWagers(spinBets, val));
-          setAnimNumber(null);
-          setGameResult(val); // final result - board highlights winning number
-          if (hasActiveTracks) tapNumber(val, true, true);else {
-            updSess(function (s) {
-              s.spins.push(val);
-              var nd = _objectSpread({}, s.droughts);
-              Object.keys(nd).forEach(function (k) {
-                return nd[k]++;
-              });
-              nd[val] = 0;
-              s.droughts = nd;
-            });
-          }
-          if (spinBets.length > 0) {
-            var totalWin = 0,
-              totalBet = 0,
-              posResults = {};
-            spinBets.forEach(function (b) {
-              totalBet += b.amount;
-              var posKey = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-              var covered = betCoveredNumbers(b.type, b.target);
-              if (covered.indexOf(val) >= 0) {
-                totalWin += b.amount * betPayoutMult(b.type);
-                posResults[posKey] = "won";
-              } else {
-                if (!posResults[posKey]) posResults[posKey] = "lost";
-              }
-            });
-            var profit = totalWin - totalBet;
-            updSess(function (s) {
-              s.bankrollCurrent = Math.round((s.bankrollCurrent + profit) * 100) / 100;
-            });
-            if (hasActiveTracks) setLastSpinDelta(function (prev) {
-              return (prev || 0) + profit;
-            });else setLastSpinDelta(profit);
-            setBetResults(posResults);
-            setLastBets(_toConsumableArray(spinBets));
-            setUndoStack([]);
-            clearTimerRef.current = setTimeout(function () {
-              setBetResults(null);
-              setManualBets([]);
-              clearTimerRef.current = null;
-            }, 3000);
-          }
-          gameRecording.record(_objectSpread(_objectSpread({
-            segment: String(val)
-          }, casinoWager), {}, {
-            watched: casinoWager.staked === 0
-          }));
-          if (settings.vibration !== false && navigator.vibrate) navigator.vibrate(30);
-          setGameSpinning(false);
-        }
-      }, 70);
-    }
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        width: "100%"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        alignItems: "center"
-      }
-    }, function () {
-      var displayNum = gameSpinning ? animNumber : gameResult;
-      if (!displayNum) return /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 48,
-          height: 48,
-          borderRadius: "50%",
-          background: "#1e2d3d",
-          border: "3px solid #2d4057",
-          fontSize: 12,
-          fontWeight: 700,
-          color: "#64748b",
-          flexShrink: 0
-        }
-      }, "--");
-      var isZ = displayNum === "0" || displayNum === "00";
-      var r = !isZ && RED.has(+displayNum);
-      return /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 48,
-          height: 48,
-          borderRadius: "50%",
-          background: isZ ? "#166534" : r ? "#991b1b" : "#1e293b",
-          border: "3px solid " + (isZ ? "#4ade80" : r ? "#f87171" : "#64748b"),
-          fontSize: 20,
-          fontWeight: 900,
-          color: "white",
-          animation: gameSpinning ? "pulse 0.15s infinite" : "none",
-          flexShrink: 0
-        }
-      }, displayNum);
-    }(), /*#__PURE__*/React.createElement("button", {
-      onClick: doGameSpin,
-      disabled: gameSpinning || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "12px 0" : "12px 0",
-        borderRadius: 10,
-        border: "none",
-        background: gameSpinning || betResults ? "#374151" : "linear-gradient(135deg,#16a34a,#059669)",
-        color: "white",
-        fontSize: isLandscape ? 15 : 16,
-        fontWeight: 900,
-        cursor: gameSpinning || betResults ? "not-allowed" : "pointer",
-        opacity: gameSpinning ? 0.7 : 1
-      }
-    }, gameSpinning ? "Spinning..." : "🎰 SPIN"), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        flexShrink: 0,
-        minWidth: 55
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 7,
-        color: "#64748b",
-        textTransform: "uppercase"
-      }
-    }, "Last"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 14,
-        fontWeight: 900,
-        color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
-      }
-    }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), function () {
-      var stratBets = {};
-      nonClosedTracks.filter(function (t) {
-        return t.state === "active";
-      }).forEach(function (t) {
-        if (t.type === "fibonacci") {
-          var dts = t.config.dozenTargets || [],
-            cts = t.config.colTargets || [],
-            evts = t.config.evenTargets || [];
-          dts.forEach(function (d) {
-            stratBets["dozen:" + d] = t.color;
-          });
-          cts.forEach(function (c) {
-            stratBets["column:" + c] = t.color;
-          });
-          evts.forEach(function (key) {
-            stratBets[key] = t.color;
-          });
-        }
-        if (t.type === "solution") {
-          (t.config.activeBets || []).forEach(function (b) {
-            if (!stratBets["s:" + b.number]) stratBets["s:" + b.number] = t.color;
-          });
-        }
-        if (t.type === "custom") {
-          (t.config.positions || []).forEach(function (p) {
-            var pk = p.type === "straight" ? "s:" + p.target : p.type + (p.target !== undefined ? ":" + p.target : "");
-            if (!stratBets[pk]) stratBets[pk] = t.color;
-          });
-        }
-      });
-      return /*#__PURE__*/React.createElement(RouletteBoard, {
-        roulette: sess.roulette,
-        winningNumber: gameSpinning ? null : gameResult,
-        stratBets: stratBets,
-        spinning: false,
-        onBet: placeBet,
-        boardBets: boardBets,
-        chipColor: (CHIPS.find(function (c) {
-          return c.val === selectedChip;
-        }) || CHIPS[0]).color,
-        betResults: betResults,
-        stratChips: computeStratChips(),
-        landscape: isLandscape
-      });
-    }(), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: isLandscape ? 6 : 3,
-        justifyContent: "center",
-        flexWrap: "wrap"
-      }
-    }, CHIPS.map(function (c) {
-      return /*#__PURE__*/React.createElement("button", {
-        key: c.val,
-        onClick: function onClick() {
-          return setSelectedChip(c.val);
-        },
-        style: {
-          width: isLandscape ? 38 : 34,
-          height: isLandscape ? 38 : 34,
-          borderRadius: "50%",
-          border: (isLandscape ? "3" : "2") + "px solid " + (selectedChip === c.val ? "#fbbf24" : c.border),
-          background: c.color,
-          color: c.val >= 100 ? "#fff" : c.val <= 0.5 ? "#1e293b" : "#1e293b",
-          fontSize: isLandscape ? c.val < 1 ? 9 : 11 : c.val < 1 ? 7 : 8,
-          fontWeight: 900,
-          cursor: "pointer",
-          boxShadow: selectedChip === c.val ? "0 0 8px #fbbf24" : "none",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, c.label);
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: isLandscape ? 6 : 3
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: undoBet,
-      disabled: manualBets.length === 0 || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: manualBets.length > 0 && !betResults ? "#60a5fa" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "\u21A9Undo"), /*#__PURE__*/React.createElement("button", {
-      onClick: clearBets,
-      disabled: manualBets.length === 0 || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: manualBets.length > 0 && !betResults ? "#f87171" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "\u2715Clear"), /*#__PURE__*/React.createElement("button", {
-      onClick: doubleBets,
-      disabled: manualBets.length === 0 || !!betResults,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: manualBets.length > 0 && !betResults ? "#fbbf24" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "2\xD7"), /*#__PURE__*/React.createElement("button", {
-      onClick: repeatBets,
-      disabled: lastBets.length === 0,
-      style: {
-        flex: 1,
-        padding: isLandscape ? "6px 0" : "5px 0",
-        borderRadius: 6,
-        border: "1px solid #2d4057",
-        background: "#0f1923",
-        color: lastBets.length > 0 ? "#86efac" : "#374151",
-        fontSize: isLandscape ? 11 : 8,
-        fontWeight: 700
-      }
-    }, "\u267BRpt")), totalBetAmt > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        fontSize: 10,
-        fontWeight: 800,
-        color: "#fbbf24"
-      }
-    }, "Bet: ", cur.symbol, formatNumber(totalBetAmt)), totalBetAmt > 0 && !betResults && /*#__PURE__*/React.createElement("button", {
-      onClick: function onClick() {
-        var posMap = {};
-        manualBets.forEach(function (b) {
-          var key = b.type === "straight" ? "s:" + b.target : b.type + (b.target !== undefined ? ":" + b.target : "");
-          if (!posMap[key]) posMap[key] = {
-            type: b.type,
-            target: b.target,
-            baseAmount: 0
-          };
-          posMap[key].baseAmount += b.amount;
-        });
-        var positions = Object.values(posMap);
-        var hasInside = positions.some(function (p) {
-          return isInsideBet(p.type);
-        });
-        if (!hasInside) {
-          var dts = [],
-            cts = [],
-            evts = [];
-          positions.forEach(function (p) {
-            if (p.type === "dozen") dts.push(p.target);else if (p.type === "column") cts.push(p.target);else evts.push(p.type);
-          });
-          var cfg = defaultFibCfg();
-          cfg.betMode = "flat";
-          cfg.dozenTargets = dts;
-          cfg.colTargets = cts;
-          cfg.evenTargets = evts;
-          updSess(function (s) {
-            s.tracks.push(newTrack("fibonacci", s.tracks.length, cfg, pickTrackColor("fibonacci", cfg, s.tracks)));
-          });
-        } else {
-          var cfg = {
-            type: "custom",
-            unit: 1,
-            roi: 15,
-            betMode: "flat",
-            stopLoss: 200,
-            positions: positions
-          };
-          updSess(function (s) {
-            s.tracks.push({
-              id: generateId(),
-              type: "custom",
-              color: pickTrackColor("custom", cfg, s.tracks),
-              state: "active",
-              config: cfg,
-              level: 0,
-              pnl: 0,
-              bets: [],
-              createdAtSpin: s.spins.length,
-              closedAtSpin: null,
-              wins: 0,
-              sequences: 0
-            });
-          });
-        }
-        clearBets();
-        if (settings.vibration !== false && navigator.vibrate) navigator.vibrate([20, 10, 20]);
-      },
-      style: {
-        width: "100%",
-        padding: "8px 0",
-        borderRadius: 8,
-        border: "2px dashed #7c3aed",
-        background: "#1e1040",
-        color: "#c4b5fd",
-        fontSize: 11,
-        fontWeight: 700,
-        cursor: "pointer"
-      }
-    }, "\uD83C\uDCCF Create Strategy from Bets"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        fontSize: 8,
-        color: "#374151"
-      }
-    }, "center=straight \xB7 edge=split \xB7 corner=corner"), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4,
-        overflowX: "auto",
-        paddingBottom: 2,
-        WebkitOverflowScrolling: "touch",
-        width: "100%",
-        maxWidth: "100%",
-        minWidth: 0,
-        boxSizing: "border-box"
-      }
-    }, recentSpins.map(function (val, i) {
-      var isZ = val === "0" || val === "00",
-        r = !isZ && RED.has(+val);
-      return /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          flexShrink: 0,
-          width: 28,
-          height: 28,
-          borderRadius: 6,
-          background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
-          border: "2px solid " + (i === 0 ? "#ffffff" : isZ ? "#22c55e" : r ? "#ef4444" : "#374151"),
-          color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
-          fontSize: 10,
-          fontWeight: 800,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, val);
-    })), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        width: "100%"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        background: pnlVal >= 0 ? "#0a1f0a" : "#200505",
-        borderRadius: 12,
-        padding: "14px 10px",
-        border: "2px solid " + (pnlVal >= 0 ? "#16a34a" : "#991b1b"),
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#64748b",
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 2
-      }
-    }, "Session Profit"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 28,
-        fontWeight: 900,
-        color: pnlVal >= 0 ? "#4ade80" : "#f87171"
-      }
-    }, pnlVal >= 0 ? "+" : "-", cur.symbol, formatNumber(pnlVal))), lastSpinDelta !== null && /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 100,
-        background: lastSpinDelta > 0 ? "#0a1f0a" : lastSpinDelta < 0 ? "#200505" : "#0f1923",
-        borderRadius: 12,
-        padding: "14px 10px",
-        border: "2px solid " + (lastSpinDelta > 0 ? "#16a34a" : lastSpinDelta < 0 ? "#991b1b" : "#2d4057"),
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#64748b",
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 2
-      }
-    }, "Last Spin"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 900,
-        color: lastSpinDelta > 0 ? "#4ade80" : lastSpinDelta < 0 ? "#f87171" : "#94a3b8"
-      }
-    }, lastSpinDelta > 0 ? "+" : lastSpinDelta < 0 ? "-" : "", cur.symbol, formatNumber(lastSpinDelta)))), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "repeat(6,1fr)",
-        gap: 3
-      }
-    }, emDroughts.map(function (em) {
-      return /*#__PURE__*/React.createElement("div", {
-        key: em.key,
-        style: {
-          borderRadius: 7,
-          border: "1px solid " + (em.drought >= 8 ? "#dc2626" : em.drought >= 5 ? "#f59e0b" : "#2d4057"),
-          background: em.drought >= 8 ? "#200505" : em.drought >= 5 ? "#1c1000" : "#0f1923",
-          padding: "6px 2px",
-          textAlign: "center"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: em.color,
-          fontWeight: 700,
-          textTransform: "uppercase"
-        }
-      }, em.label), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 15,
-          fontWeight: 800,
-          color: em.drought >= 8 ? "#f87171" : em.drought >= 5 ? "#fbbf24" : "#94a3b8"
-        }
-      }, em.drought));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        borderTop: "1px solid #2d4057",
-        marginTop: 2,
-        paddingTop: 6,
-        display: "flex",
-        flexDirection: "column",
-        gap: 4
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "d" + i,
-        label: DOZEN_LABELS[i],
-        range: DOZEN_RANGES[i],
-        drought: dozD[i],
-        colorBd: DOZEN_BORDERS[i],
-        colorTx: DOZEN_TEXTS[i]
-      });
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "c" + i,
-        label: COLUMN_LABELS[i],
-        range: COLUMN_RANGES[i],
-        drought: colD[i],
-        colorBd: COLUMN_BORDERS[i],
-        colorTx: COLUMN_TEXTS[i]
-      });
-    })))), /*#__PURE__*/React.createElement(FieldLabel, null, "Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
-      }
-    }, nonClosedTracks.map(function (t) {
-      var tbl = computeTableForTrack(t);
-      var isEditing = editTrackId === t.id;
-      var dolPnl = t.pnl * (t.config.unit || 1);
-      var row = tbl[Math.min(t.level, tbl.length - 1)];
-      return /*#__PURE__*/React.createElement("div", {
-        key: t.id
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          background: "#0f1923",
-          borderRadius: 12,
-          padding: "10px 12px",
-          border: "2px solid " + (isEditing ? "#60a5fa" : t.color + "66")
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          marginBottom: 4
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          background: t.color,
-          flexShrink: 0
-        }
-      }), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11,
-          fontWeight: 700,
-          color: t.color,
-          flex: 1
-        }
-      }, TRACK_ICONS[t.type], " ", t.type === "fibonacci" ? "Progression" : t.type === "custom" ? "Custom Bet" : "The Solution"), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: t.state === "active" ? "#4ade80" : "#fbbf24",
-          fontWeight: 700
-        }
-      }, "[", t.state.toUpperCase(), "]"), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 12,
-          fontWeight: 800,
-          color: dolPnl >= 0 ? "#4ade80" : "#f87171"
-        }
-      }, dolPnl >= 0 ? "+" : "-", cur.symbol, formatNumber(dolPnl))), /*#__PURE__*/React.createElement(BetTargets, {
-        type: t.type,
-        config: t.config,
-        style: {
-          marginBottom: 6
-        }
-      }), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 8,
-          marginBottom: 6
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          color: "#94a3b8"
-        }
-      }, "Lvl ", /*#__PURE__*/React.createElement("strong", {
-        style: {
-          color: t.level >= 10 ? "#f87171" : t.level >= 6 ? "#fbbf24" : "#e2e8f0"
-        }
-      }, t.level), "/", tbl.length), row && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          color: "#60a5fa"
-        }
-      }, "Bet: ", formatChips(row.totalBet, t.config.unit, currency), "/spin"), t.type === "custom" && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: "#8b5cf6"
-        }
-      }, (t.config.betMode || "flat") === "flat" ? "Flat" : "Prog", " \xB7 ", (t.config.positions || []).length, " pos")), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 5
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: function onClick() {
-          return parkToggle(t.id);
-        },
-        style: {
-          flex: 1,
-          padding: "4px 0",
-          borderRadius: 6,
-          border: "1px solid #2d4057",
-          background: t.state === "parked" ? "#134e2a" : "#1e2d3d",
-          color: t.state === "parked" ? "#4ade80" : "#94a3b8",
-          fontSize: 9,
-          fontWeight: 700,
-          cursor: "pointer"
-        }
-      }, t.state === "parked" ? "▶ Resume" : "⏸ Park"), /*#__PURE__*/React.createElement("button", {
-        onClick: function onClick() {
-          return setEditTrackId(isEditing ? null : t.id);
-        },
-        style: {
-          padding: "4px 8px",
-          borderRadius: 6,
-          border: "1px solid " + (isEditing ? "#60a5fa" : "#1e3a5f"),
-          background: isEditing ? "#1e3a5f" : "transparent",
-          color: "#60a5fa",
-          fontSize: 9,
-          cursor: "pointer"
-        }
-      }, "\u270F\uFE0F Edit"), /*#__PURE__*/React.createElement("button", {
-        onClick: function onClick() {
-          if (window.confirm("Close track?")) closeTrack(t.id);
-        },
-        style: {
-          padding: "4px 8px",
-          borderRadius: 6,
-          border: "1px solid #7f1d1d",
-          background: "transparent",
-          color: "#f87171",
-          fontSize: 9,
-          cursor: "pointer"
-        }
-      }, "\xD7"))), isEditing && /*#__PURE__*/React.createElement(EditTrackCfg, {
-        track: t,
-        currency: currency,
-        tableMinBet: settings.tableMinBet || 1,
-        onSave: function onSave(cfg) {
-          return updateTrackConfig(t.id, cfg);
-        },
-        onCancel: function onCancel() {
-          return setEditTrackId(null);
-        }
-      }));
-    }), !addOpen && /*#__PURE__*/React.createElement("button", {
-      onClick: function onClick() {
-        return setAddOpen(true);
-      },
-      style: {
-        padding: "10px 0",
-        borderRadius: 12,
-        border: "2px dashed #2d4057",
-        background: "transparent",
-        color: "#64748b",
-        fontSize: 13,
-        cursor: "pointer"
-      }
-    }, "+ Add Strategy"), addOpen && /*#__PURE__*/React.createElement(AddTrackPanel, {
-      onAdd: addTrack,
-      onClose: function onClose() {
-        return setAddOpen(false);
-      },
-      nextColor: nextColorIdx,
-      type: pendingTrackType,
-      cfg: pendingTrackCfg,
-      onTypeChange: function onTypeChange(t) {
-        setPendingTrackType(t);
-        setPendingTrackCfg(t === "fibonacci" ? defaultFibCfg() : defaultSolCfg());
-      },
-      onCfgChange: setPendingTrackCfg,
-      closedTracks: sess.tracks.filter(function (t) {
-        return t.state === "closed";
-      }),
+    return /*#__PURE__*/React.createElement(GamePageView, {
+      addOpen: addOpen,
+      addTrack: addTrack,
+      animNumber: animNumber,
+      betResults: betResults,
+      clearTimerRef: clearTimerRef,
+      closeTrack: closeTrack,
+      colD: colD,
+      cur: cur,
       currency: currency,
-      tableMinBet: settings.tableMinBet || 1
-    })), sess.sessionStartedAt && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        marginTop: 4
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: saveSession,
-      style: {
-        flex: 1,
-        padding: 11,
-        borderRadius: 10,
-        border: "none",
-        background: "#16a34a",
-        color: "white",
-        fontSize: 13,
-        fontWeight: 700,
-        cursor: "pointer"
-      }
-    }, "Save"), /*#__PURE__*/React.createElement("button", {
-      onClick: function onClick() {
-        if (window.confirm("End session and save?")) endSession();
-      },
-      style: {
-        flex: 1,
-        padding: 11,
-        borderRadius: 10,
-        border: "1px solid #7f1d1d",
-        background: "#200505",
-        color: "#f87171",
-        fontSize: 13,
-        fontWeight: 700,
-        cursor: "pointer"
-      }
-    }, "End Session")));
+      dozD: dozD,
+      editTrackId: editTrackId,
+      emDroughts: emDroughts,
+      endSession: endSession,
+      recordGameSpin: recordGameSpin,
+      gameResult: gameResult,
+      gameSpinning: gameSpinning,
+      isLandscape: isLandscape,
+      lastBets: lastBets,
+      lastSpinDelta: lastSpinDelta,
+      manualBets: manualBets,
+      nextColorIdx: nextColorIdx,
+      nonClosedTracks: nonClosedTracks,
+      parkToggle: parkToggle,
+      pendingTrackCfg: pendingTrackCfg,
+      pendingTrackType: pendingTrackType,
+      pnlVal: pnlVal,
+      saveSession: saveSession,
+      selectedChip: selectedChip,
+      sess: sess,
+      setAddOpen: setAddOpen,
+      setAnimNumber: setAnimNumber,
+      setBetResults: setBetResults,
+      setEditTrackId: setEditTrackId,
+      setGameResult: setGameResult,
+      setGameSpinning: setGameSpinning,
+      setLastBets: setLastBets,
+      setLastSpinDelta: setLastSpinDelta,
+      setManualBets: setManualBets,
+      setPendingTrackCfg: setPendingTrackCfg,
+      setPendingTrackType: setPendingTrackType,
+      setSelectedChip: setSelectedChip,
+      setUndoStack: setUndoStack,
+      settings: settings,
+      tapNumber: tapNumber,
+      updSess: updSess,
+      updateTrackConfig: updateTrackConfig,
+      wheelNums: wheelNums
+    });
   }
 
   // -- Tracker Page --
@@ -13376,7 +14186,6 @@ function App() {
       } : null
     } : null;
     var solBets = primaryTrack && primaryTrack.type === "solution" ? primaryTrack.config.activeBets || [] : [];
-    var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
     return /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
@@ -13459,44 +14268,22 @@ function App() {
         fontWeight: 700,
         cursor: "pointer"
       }
-    }, "\u25A0 End Session")), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4,
-        overflowX: "auto",
-        paddingBottom: 2,
-        WebkitOverflowScrolling: "touch"
-      }
-    }, recentSpins.map(function (val, i) {
-      var isZ = val === "0" || val === "00",
-        r = !isZ && RED.has(+val);
-      var hitTracks = (trackOverlays || []).filter(function (o) {
-        if (isZ) return false;
-        if (o.type === "fibonacci") return (o.dozenTargets || []).includes(dozenOf(val)) || (o.colTargets || []).includes(columnOf(val));
-        if (o.type === "solution") return (o.activeBets || []).some(function (b) {
-          return b.number === val;
-        });
-        return false;
-      });
-      var borderColor = i === 0 ? "#ffffff" : hitTracks.length > 0 ? hitTracks[0].color : isZ ? "#22c55e" : r ? "#ef4444" : "#374151";
-      return /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          flexShrink: 0,
-          width: 28,
-          height: 28,
-          borderRadius: 6,
-          background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
-          border: "2px solid " + borderColor,
-          color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
-          fontSize: 10,
-          fontWeight: 800,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, val);
-    })), function () {
+    }, "\u25A0 End Session")), /*#__PURE__*/React.createElement(SpinTools, {
+      spinCount: sess.spins.length,
+      confirmOpen: clearOpen,
+      undoVisible: !!clearUndo && clearUndo.sessionId === appState.currentSession.id && appState.currentSession.spins.length === 0,
+      onAsk: function onAsk() {
+        return setClearOpen(true);
+      },
+      onCancel: function onCancel() {
+        return setClearOpen(false);
+      },
+      onConfirm: clearNumbers,
+      onUndo: undoClearNumbers
+    }), /*#__PURE__*/React.createElement(RecentNumbersStrip, {
+      spins: sess.spins,
+      trackOverlays: trackOverlays
+    }), function () {
       var tMin = settings.tableMinBet || 1;
       var CHIPS = CHIP_DENOMS.filter(function (c) {
         return c.val >= tMin;
@@ -13680,7 +14467,7 @@ function App() {
           return c.val === selectedChip;
         }) || CHIPS[0]).color,
         betResults: liveBetResults,
-        stratChips: computeStratChips(),
+        stratChips: computeStratChips(nonClosedTracks),
         landscape: isLandscape
       }), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -13783,80 +14570,17 @@ function App() {
           color: "#374151"
         }
       }, "center=straight \xB7 edge=split \xB7 corner=corner"));
-    }(), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }(), /*#__PURE__*/React.createElement("div", {
+      "aria-hidden": sess.spins.length === 0,
       style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
+        minHeight: DROUGHT_PANEL_HEIGHT,
+        visibility: sess.spins.length > 0 ? "visible" : "hidden"
       }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "repeat(6,1fr)",
-        gap: 3
-      }
-    }, emDroughts.map(function (em) {
-      return /*#__PURE__*/React.createElement("div", {
-        key: em.key,
-        style: {
-          borderRadius: 7,
-          border: "1px solid " + (em.drought >= 8 ? "#dc2626" : em.drought >= 5 ? "#f59e0b" : "#2d4057"),
-          background: em.drought >= 8 ? "#200505" : em.drought >= 5 ? "#1c1000" : "#0f1923",
-          padding: "6px 2px",
-          textAlign: "center"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: em.color,
-          fontWeight: 700,
-          textTransform: "uppercase"
-        }
-      }, em.label), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 15,
-          fontWeight: 800,
-          color: em.drought >= 8 ? "#f87171" : em.drought >= 5 ? "#fbbf24" : "#94a3b8"
-        }
-      }, em.drought));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        borderTop: "1px solid #2d4057",
-        marginTop: 2,
-        paddingTop: 6,
-        display: "flex",
-        flexDirection: "column",
-        gap: 4
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "d" + i,
-        label: DOZEN_LABELS[i],
-        range: DOZEN_RANGES[i],
-        drought: dozD[i],
-        colorBd: DOZEN_BORDERS[i],
-        colorTx: DOZEN_TEXTS[i]
-      });
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4
-      }
-    }, [0, 1, 2].map(function (i) {
-      return /*#__PURE__*/React.createElement(DCard, {
-        key: "c" + i,
-        label: COLUMN_LABELS[i],
-        range: COLUMN_RANGES[i],
-        drought: colD[i],
-        colorBd: COLUMN_BORDERS[i],
-        colorTx: COLUMN_TEXTS[i]
-      });
-    })))), /*#__PURE__*/React.createElement(FieldLabel, null, "Active Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement(DroughtPanel, {
+      emDroughts: emDroughts,
+      dozD: dozD,
+      colD: colD
+    })), /*#__PURE__*/React.createElement(FieldLabel, null, "Active Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -14190,10 +14914,10 @@ function App() {
       l: "JP Profit",
       v: (outcomes.jackpot.profit * (primaryTrack.config.unit || 1) >= 0 ? "+" : "-") + cur.symbol + Math.abs(outcomes.jackpot.profit * (primaryTrack.config.unit || 1)).toFixed(cur.dec),
       c: outcomes.jackpot.profit >= 0 ? "#4ade80" : "#f87171"
-    }].map(function (_ref83) {
-      var l = _ref83.l,
-        v = _ref83.v,
-        c = _ref83.c;
+    }].map(function (_ref91) {
+      var l = _ref91.l,
+        v = _ref91.v,
+        c = _ref91.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -14275,10 +14999,10 @@ function App() {
       l: "Partial Profit",
       v: outcomes ? signChips(outcomes.partial.profit, primaryTrack.config.unit || 1, currency) : "--",
       c: outcomes && outcomes.partial.profit >= 0 ? "#4ade80" : "#f97316"
-    }].map(function (_ref84) {
-      var l = _ref84.l,
-        v = _ref84.v,
-        c = _ref84.c;
+    }].map(function (_ref92) {
+      var l = _ref92.l,
+        v = _ref92.v,
+        c = _ref92.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -14508,203 +15232,26 @@ function App() {
       }), TRACK_ICONS[t.type], " ", betTargetText(t.type, t.config, false, 2), " \xB7 Lvl ", t.level);
     }))));
   }
+  // Declared inside App for the same reason as GamePage.
   function TablePage() {
-    var selTrack = sess.tracks.find(function (t) {
-      return t.id === selectedTrackId;
-    }) || nonClosedTracks[0] || null;
-    if (!selTrack) return /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#1e2d3d",
-        borderRadius: 14,
-        padding: "30px 20px",
-        textAlign: "center",
-        border: "1px dashed #2d4057",
-        color: "#64748b",
-        fontSize: 13
-      }
-    }, "Add a track to see the progression table");
-    var tbl = computeTableForTrack(selTrack);
-    var hasMix = selTrack.type === "fibonacci" && (selTrack.config.dozenTargets || []).length > 0 && (selTrack.config.colTargets || []).length > 0;
-    var unit = selTrack.config.unit || 1;
-    var headers = hasMix ? ["#", "Bet", "Invested", "PW Ret", "PW Profit", "JP Ret", "JP Profit"] : ["#", "Bet", "Invested", "Return", "Profit", "ROI"];
-    var hColors = ["#94a3b8", "#60a5fa", "#f87171", "#a78bfa", "#4ade80", "#fbbf24", "#fbbf24"];
-    var gridCols = hasMix ? "22px 1fr 1fr 1fr 1fr 1fr 1fr" : "22px 1fr 1fr 1fr 1fr 1fr";
-    var legendRows = hasMix ? [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["PW Ret", "Return if 1 bet hits"], ["PW Profit", "Profit on partial win"], ["JP Ret", "Return if dozen AND column hit"], ["JP Profit", "Profit on jackpot"]] : [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["Return", "Gross payout if you win"], ["Profit", "Net profit after all invested"], ["ROI", "Profit divided by invested"]];
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        width: "100%"
-      }
-    }, nonClosedTracks.length > 1 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 6,
-        overflowX: "auto",
-        paddingBottom: 4
-      }
-    }, nonClosedTracks.map(function (t) {
-      return /*#__PURE__*/React.createElement("button", {
-        key: t.id,
-        onClick: function onClick() {
-          return setSelectedTrackId(t.id);
-        },
-        style: {
-          padding: "7px 12px",
-          borderRadius: 9,
-          border: "2px solid " + (selectedTrackId === t.id ? t.color : "#2d4057"),
-          background: selectedTrackId === t.id ? "#0f1923" : "transparent",
-          color: selectedTrackId === t.id ? t.color : "#64748b",
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-          flexShrink: 0
-        }
-      }, TRACK_ICONS[t.type], " ", betTargetText(t.type, t.config, false, 2));
-    })), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        marginBottom: 4
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 10,
-        height: 10,
-        borderRadius: "50%",
-        background: selTrack.color,
-        flexShrink: 0
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        fontWeight: 700,
-        color: selTrack.color
-      }
-    }, TRACK_ICONS[selTrack.type], " ", selTrack.type === "fibonacci" ? "Progression Bet" : selTrack.type === "custom" ? "Custom Bet" : "The Solution")), /*#__PURE__*/React.createElement(BetTargets, {
-      type: selTrack.type,
-      config: selTrack.config,
-      style: {
-        marginBottom: 4
-      }
-    }), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#64748b",
-        marginBottom: 8
-      }
-    }, selTrack.config.roi, "% ROI \xB7 ", tbl.length, " levels \xB7 ", cur.symbol, selTrack.config.stopLoss, " stop"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#0f1923",
-        borderRadius: 8,
-        padding: "8px 10px",
-        marginBottom: 8,
-        border: "1px solid #2d4057",
-        display: "flex",
-        flexDirection: "column",
-        gap: 3
-      }
-    }, legendRows.map(function (_ref85) {
-      var _ref86 = _slicedToArray(_ref85, 2),
-        abbr = _ref86[0],
-        desc = _ref86[1];
-      return /*#__PURE__*/React.createElement("div", {
-        key: abbr,
-        style: {
-          display: "flex",
-          gap: 6
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          fontWeight: 800,
-          color: "#86efac",
-          minWidth: 55
-        }
-      }, abbr), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: "#475569"
-        }
-      }, desc));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: gridCols,
-        gap: 2,
-        marginBottom: 4
-      }
-    }, headers.map(function (c, i) {
-      return /*#__PURE__*/React.createElement("div", {
-        key: c,
-        style: {
-          fontSize: 8,
-          color: hColors[i],
-          textTransform: "uppercase",
-          textAlign: i === 0 ? "center" : "right",
-          fontWeight: 700
-        }
-      }, c);
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 2,
-        maxHeight: "55vh",
-        overflowY: "auto"
-      }
-    }, tbl.map(function (r, i) {
-      var isA = i === selTrack.level,
-        isP = i < selTrack.level;
-      var pw = 3 * r.c - r.totalInvest,
-        jp = hasMix ? 6 * r.c - r.totalInvest : null;
-      var cols = hasMix ? [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (3 * r.c * unit).toFixed(cur.dec), (pw * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(pw * unit).toFixed(cur.dec), cur.symbol + (6 * r.c * unit).toFixed(cur.dec), jp !== null ? (jp * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(jp * unit).toFixed(cur.dec) : "--"] : [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (r.ret * unit).toFixed(cur.dec), (r.profit * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(r.profit * unit).toFixed(cur.dec), r.roi.toFixed(1) + "%"];
-      var rowColors = hasMix ? ["#60a5fa", "#f87171", "#a78bfa", pw >= 0 ? "#4ade80" : "#f97316", "#fbbf24", jp !== null && jp >= 0 ? "#fbbf24" : "#f87171"] : ["#60a5fa", "#f87171", "#a78bfa", r.profit >= 0 ? "#4ade80" : "#f97316", "#86efac"];
-      return /*#__PURE__*/React.createElement("div", {
-        key: r.level,
-        style: {
-          display: "grid",
-          gridTemplateColumns: gridCols,
-          gap: 2,
-          padding: "5px 4px",
-          borderRadius: 6,
-          background: isA ? "#134e2a" : isP ? "#0f1923" : "transparent",
-          border: "1px solid " + (isA ? "#4ade80" : isP ? "#1e2d3d" : "#2d4057"),
-          opacity: isP ? 0.4 : 1
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          textAlign: "center",
-          fontWeight: 800,
-          fontSize: 10,
-          color: isA ? "#4ade80" : r.level >= 10 ? "#f87171" : r.level >= 6 ? "#fbbf24" : "#94a3b8"
-        }
-      }, r.level), cols.map(function (v, ci) {
-        return /*#__PURE__*/React.createElement("div", {
-          key: ci,
-          style: {
-            textAlign: "right",
-            fontSize: 9,
-            color: rowColors[ci],
-            fontWeight: 600
-          }
-        }, v);
-      }));
-    }))));
+    return /*#__PURE__*/React.createElement(TablePageView, {
+      sess: sess,
+      selectedTrackId: selectedTrackId,
+      setSelectedTrackId: setSelectedTrackId,
+      nonClosedTracks: nonClosedTracks,
+      cur: cur
+    });
   }
 
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
 
   // -- Bankroll Edit --
-  function BankrollEdit(_ref87) {
-    var onClose = _ref87.onClose;
-    var _useState165 = (0, _react.useState)(sess.bankrollCurrent),
-      _useState166 = _slicedToArray(_useState165, 2),
-      val = _useState166[0],
-      setVal = _useState166[1];
+  function BankrollEdit(_ref93) {
+    var onClose = _ref93.onClose;
+    var _useState169 = (0, _react.useState)(sess.bankrollCurrent),
+      _useState170 = _slicedToArray(_useState169, 2),
+      val = _useState170[0],
+      setVal = _useState170[1];
     function save() {
       updSess(function (s) {
         s.bankrollCurrent = val;
@@ -14967,91 +15514,10 @@ function App() {
       fontWeight: 700,
       cursor: "pointer"
     }
-  }, "Dismiss")), updateAvailable && /*#__PURE__*/React.createElement("button", {
-    onClick: function onClick() {
-      saveApp(appState);
-      // Ask the worker to check for a new sw.js, then reload. Deliberately NOT
-      // a cache purge: the worker is versioned, so the new one installs under a
-      // new cache name and retires the old one only after its required shell is
-      // cached. Purging first left a client that lost connectivity mid-update
-      // with no cache at all — and the old code purged the whole ORIGIN,
-      // unregistering every other app hosted here.
-      // Reload only once the new worker is ACTIVATED. update() resolves at
-      // "installing", before the new cache is populated, so reloading on it can
-      // land a cache-busted URL on the OLD worker with nothing cached under that
-      // query. On failure we stay on this page — it still works — rather than
-      // navigating somewhere that may not resolve offline.
-      var go = function go() {
-        window.location.href = window.location.pathname + "?update=" + Date.now();
-      };
-      if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistration) {
-        navigator.serviceWorker.getRegistration().then(function (reg) {
-          if (!reg) {
-            go();
-            return;
-          }
-          return reg.update().then(function () {
-            var sw = reg.installing || reg.waiting;
-            if (!sw) {
-              go();
-              return;
-            }
-            if (sw.state === "activated") {
-              go();
-              return;
-            }
-            sw.addEventListener("statechange", function () {
-              if (sw.state === "activated") go();
-            });
-          });
-        }).catch(function () {});
-      } else {
-        go();
-      }
-    },
-    style: {
-      width: "100%",
-      padding: "12px 16px",
-      borderRadius: 12,
-      border: "2px solid #7c3aed",
-      background: "linear-gradient(135deg,#1e1040,#2d1060)",
-      color: "white",
-      fontSize: 13,
-      fontWeight: 700,
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      textAlign: "left"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 800
-    }
-  }, "\uD83C\uDF89 Update Available \u2014 v", updateAvailable.version), updateAvailable.notes && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#e9d5ff",
-      marginTop: 4,
-      lineHeight: 1.4
-    }
-  }, updateAvailable.notes), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "#c4b5fd",
-      marginTop: 3
-    }
-  }, "Tap to update. No data will be lost.")), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 22
-    }
-  }, "\u21BB")), /*#__PURE__*/React.createElement("div", {
+  }, "Dismiss")), updateAvailable && /*#__PURE__*/React.createElement(UpdateBanner, {
+    appState: appState,
+    updateAvailable: updateAvailable
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 9,
       color: "#374151",
