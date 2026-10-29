@@ -2054,6 +2054,106 @@ function newTrack(type, colorIdx, config, color) {
     sequences: 0
   };
 }
+
+// Clears the spin history and everything derived from it. Money and the session record are kept:
+// bankroll, buy-ins, cash-outs, timing, and each track's pnl, state and config. loadApp recomputes
+// bankrollCurrent from track pnl, so pnl has to survive for that recompute to land on the same value.
+// The session is stamped modified = now: clearing the numbers is a change to the session.
+// Returns a new object; the input is never mutated.
+function clearSpins(sess, now) {
+  var next = JSON.parse(JSON.stringify(sess));
+  next.spins = [];
+  next.droughts = initDroughts(next.roulette);
+  next.tracks = (next.tracks || []).map(function (t) {
+    var config = _objectSpread({}, t.config || {});
+    // A solution bet carries its own progression level; restart it the way addSolBet creates a bet.
+    if (Array.isArray(config.activeBets)) config.activeBets = config.activeBets.map(function (b) {
+      return _objectSpread(_objectSpread({}, b), {}, {
+        level: 0,
+        invest: 0
+      });
+    });
+    return _objectSpread(_objectSpread({}, t), {}, {
+      config: config,
+      bets: [],
+      wins: 0,
+      sequences: 0,
+      level: 0,
+      createdAtSpin: 0,
+      closedAtSpin: null
+    });
+  });
+  next.modified = now;
+  return next;
+}
+
+// What clearSpins changes, copied before it runs, so Undo can put exactly that back. Anything outside
+// this snapshot (money, the session record, a buy-in or a track added after the clear) is not part of it.
+function snapshotSpinState(sess) {
+  return JSON.parse(JSON.stringify({
+    spins: sess.spins,
+    droughts: sess.droughts,
+    tracks: (sess.tracks || []).map(function (t) {
+      return {
+        id: t.id,
+        bets: t.bets,
+        wins: t.wins,
+        sequences: t.sequences,
+        level: t.level,
+        createdAtSpin: t.createdAtSpin,
+        closedAtSpin: t.closedAtSpin,
+        betProgress: Array.isArray(t.config && t.config.activeBets) ? t.config.activeBets.map(function (b) {
+          return {
+            number: b.number,
+            level: b.level,
+            invest: b.invest
+          };
+        }) : null
+      };
+    })
+  }));
+}
+
+// Puts back what snapshotSpinState recorded and stamps the session modified = now. Money is not in the
+// snapshot, so a buy-in, cash-out or bankroll edit made after the clear survives. A track that did not
+// exist at the snapshot is left as it is. A solution number added after the clear keeps its own progress.
+function restoreSpinState(sess, snap, now) {
+  var next = JSON.parse(JSON.stringify(sess));
+  next.spins = JSON.parse(JSON.stringify(snap.spins));
+  next.droughts = JSON.parse(JSON.stringify(snap.droughts));
+  var saved = {};
+  snap.tracks.forEach(function (s) {
+    saved[s.id] = s;
+  });
+  next.tracks = (next.tracks || []).map(function (t) {
+    var s = saved[t.id];
+    if (!s) return t;
+    var config = _objectSpread({}, t.config || {});
+    if (s.betProgress && Array.isArray(config.activeBets)) {
+      var byNumber = {};
+      s.betProgress.forEach(function (b) {
+        byNumber[b.number] = b;
+      });
+      config.activeBets = config.activeBets.map(function (b) {
+        return byNumber[b.number] ? _objectSpread(_objectSpread({}, b), {}, {
+          level: byNumber[b.number].level,
+          invest: byNumber[b.number].invest
+        }) : b;
+      });
+    }
+    return _objectSpread(_objectSpread({}, t), {}, {
+      config: config,
+      bets: s.bets,
+      wins: s.wins,
+      sequences: s.sequences,
+      level: s.level,
+      createdAtSpin: s.createdAtSpin,
+      closedAtSpin: s.closedAtSpin
+    });
+  });
+  next.modified = now;
+  return next;
+}
 function defaultParkRules() {
   return {
     droughtThreshold: null,
@@ -6506,6 +6606,193 @@ function HardResetModal(_ref34) {
   }, "Cancel")));
 }
 
+// ===== components/SpinTools.jsx =====
+// -- Live-mode spin tools: the Clear numbers row with its inline Undo, and the recent-numbers strip --
+// Every slot here holds its height whether or not it has anything in it, so clearing the numbers changes
+// what is shown inside a slot and moves nothing below it (shared rule 82). App.jsx owns the state (confirm
+// open, undo offered, the snapshot) and passes it in.
+
+// Reserved heights, in px. Each is the populated height of its control, measured in headless Chrome at a
+// 420 px viewport: the strip is 30 with five numbers (28 px chips and 2 px bottom padding) and 40 with thirty,
+// where the horizontal scrollbar takes 10 px. A platform with a thicker scrollbar would grow the strip past
+// this reservation when it first overflows. The drought panel is 251 px with five spins and with thirty.
+var SPIN_TOOLS_ROW_HEIGHT = 30;
+var RECENT_STRIP_MIN_HEIGHT = 40;
+var DROUGHT_PANEL_HEIGHT = 251;
+var RECENT_STRIP_LIMIT = 30;
+function SpinTools(_ref35) {
+  var spinCount = _ref35.spinCount,
+    confirmOpen = _ref35.confirmOpen,
+    undoVisible = _ref35.undoVisible,
+    onAsk = _ref35.onAsk,
+    onCancel = _ref35.onCancel,
+    onConfirm = _ref35.onConfirm,
+    onUndo = _ref35.onUndo;
+  var hasSpins = spinCount > 0;
+  var noun = spinCount === 1 ? "spin" : "spins";
+  var confirmBody = "Removes the ".concat(spinCount, " ").concat(noun, " from this session. Each track's bets and progression level restart at zero. Bankroll, buy-ins, cash-outs and track profit and loss are not changed. Undo stays available until the next spin, or for 15 seconds.");
+  // Clear numbers and the undo notice share one grid cell, so the cell is as large as the larger of the two.
+  // Only the one that applies is visible; the other keeps its place.
+  var cell = function cell(shown) {
+    return {
+      gridRow: 1,
+      gridColumn: 1,
+      justifySelf: "end",
+      alignSelf: "center",
+      visibility: shown ? "visible" : "hidden"
+    };
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      alignItems: "center",
+      justifyItems: "end",
+      minHeight: SPIN_TOOLS_ROW_HEIGHT,
+      width: "100%",
+      boxSizing: "border-box"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    disabled: !hasSpins,
+    "aria-hidden": undoVisible,
+    onClick: onAsk,
+    style: _objectSpread(_objectSpread({}, cell(!undoVisible)), {}, {
+      padding: "4px 10px",
+      borderRadius: 8,
+      border: "1px solid #2d4057",
+      background: "transparent",
+      color: hasSpins ? "#94a3b8" : "#374151",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: hasSpins ? "pointer" : "not-allowed"
+    })
+  }, "Clear numbers"), /*#__PURE__*/React.createElement("div", {
+    role: "status",
+    "aria-hidden": !undoVisible,
+    style: _objectSpread(_objectSpread({}, cell(undoVisible)), {}, {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      color: "#fbbf24",
+      fontSize: 11,
+      fontWeight: 700,
+      whiteSpace: "nowrap"
+    })
+  }, /*#__PURE__*/React.createElement("span", null, "Numbers cleared"), /*#__PURE__*/React.createElement("span", {
+    "aria-hidden": "true"
+  }, "\xB7"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: onUndo,
+    style: {
+      padding: "4px 10px",
+      borderRadius: 8,
+      border: "1px solid #f59e0b",
+      background: "transparent",
+      color: "#fbbf24",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "Undo"))), confirmOpen && /*#__PURE__*/React.createElement(Modal, {
+    onClose: onCancel
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 17,
+      fontWeight: 800,
+      color: "#e2e8f0",
+      marginBottom: 10
+    }
+  }, "Clear numbers?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#94a3b8",
+      lineHeight: 1.5,
+      marginBottom: 16
+    }
+  }, confirmBody), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: onCancel,
+    style: {
+      flex: 1,
+      padding: "14px 0",
+      borderRadius: 12,
+      border: "1px solid #2d4057",
+      background: "#0f1923",
+      color: "#94a3b8",
+      fontSize: 15,
+      fontWeight: 800,
+      cursor: "pointer"
+    }
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: onConfirm,
+    style: {
+      flex: 1,
+      padding: "14px 0",
+      borderRadius: 12,
+      border: "none",
+      background: "#b91c1c",
+      color: "white",
+      fontSize: 15,
+      fontWeight: 800,
+      cursor: "pointer"
+    }
+  }, "Clear numbers"))));
+}
+
+// Recent numbers, newest first, up to RECENT_STRIP_LIMIT. The container is always rendered at its reserved
+// height: with no numbers it is an empty slot, so the first spin and a clear both leave the layout where it is.
+function RecentNumbersStrip(_ref36) {
+  var spins = _ref36.spins,
+    trackOverlays = _ref36.trackOverlays;
+  var recent = _toConsumableArray(spins).reverse().slice(0, RECENT_STRIP_LIMIT);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4,
+      overflowX: "auto",
+      paddingBottom: 2,
+      WebkitOverflowScrolling: "touch",
+      minHeight: RECENT_STRIP_MIN_HEIGHT,
+      boxSizing: "border-box"
+    }
+  }, recent.map(function (val, i) {
+    var isZ = val === "0" || val === "00",
+      r = !isZ && RED.has(+val);
+    var hitTracks = (trackOverlays || []).filter(function (o) {
+      if (isZ) return false;
+      if (o.type === "fibonacci") return (o.dozenTargets || []).includes(dozenOf(val)) || (o.colTargets || []).includes(columnOf(val));
+      if (o.type === "solution") return (o.activeBets || []).some(function (b) {
+        return b.number === val;
+      });
+      return false;
+    });
+    var borderColor = i === 0 ? "#ffffff" : hitTracks.length > 0 ? hitTracks[0].color : isZ ? "#22c55e" : r ? "#ef4444" : "#374151";
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        flexShrink: 0,
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
+        border: "2px solid " + borderColor,
+        color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
+        fontSize: 10,
+        fontWeight: 800,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, val);
+  }));
+}
+
 // ===== components/SimModePage.jsx =====
 // -- Simulation Mode UI --
 function NotificationEnablePage() {
@@ -6602,12 +6889,12 @@ function NotificationEnablePage() {
     }
   }, "Return to Roulette")));
 }
-function StatContextBar(_ref35) {
-  var simResults = _ref35.simResults,
-    simCfg = _ref35.simCfg,
-    sess = _ref35.sess,
-    cur = _ref35.cur,
-    pnlVal = _ref35.pnlVal;
+function StatContextBar(_ref37) {
+  var simResults = _ref37.simResults,
+    simCfg = _ref37.simCfg,
+    sess = _ref37.sess,
+    cur = _ref37.cur,
+    pnlVal = _ref37.pnlVal;
   // Match live tracks to sim strategies by type+roi+stopLoss
   var liveTracks = sess.tracks.filter(function (t) {
     return t.state !== "closed";
@@ -6678,14 +6965,14 @@ function StatContextBar(_ref35) {
       letterSpacing: 1,
       marginBottom: 2
     }
-  }, "vs Simulation Benchmark"), bars.map(function (_ref36, i) {
-    var t = _ref36.t,
-      status = _ref36.status,
-      statusColor = _ref36.statusColor,
-      statusIcon = _ref36.statusIcon,
-      pctRank = _ref36.pctRank,
-      stats = _ref36.stats,
-      livePnl = _ref36.livePnl;
+  }, "vs Simulation Benchmark"), bars.map(function (_ref38, i) {
+    var t = _ref38.t,
+      status = _ref38.status,
+      statusColor = _ref38.statusColor,
+      statusIcon = _ref38.statusIcon,
+      pctRank = _ref38.pctRank,
+      stats = _ref38.stats,
+      livePnl = _ref38.livePnl;
     return /*#__PURE__*/React.createElement("div", {
       key: t.id,
       style: {
@@ -6736,11 +7023,11 @@ function StatContextBar(_ref35) {
 // -- Experiment Comparison Panel (Results view, Repeat Experiment) --
 // One row per experiment (identical parameters), with aggregate stats across all
 // of them: overall P&L per experiment, or sessions survived in bankroll mode.
-function ExperimentPanel(_ref37) {
-  var experiments = _ref37.experiments,
-    bankrollMode = _ref37.bankrollMode,
-    sessionsPerExperiment = _ref37.sessionsPerExperiment,
-    cur = _ref37.cur;
+function ExperimentPanel(_ref39) {
+  var experiments = _ref39.experiments,
+    bankrollMode = _ref39.bankrollMode,
+    sessionsPerExperiment = _ref39.sessionsPerExperiment,
+    cur = _ref39.cur;
   if (!experiments || experiments.length < 2) return null;
   var pnls = experiments.map(function (e) {
     return e.pnl;
@@ -6797,11 +7084,11 @@ function ExperimentPanel(_ref37) {
       gap: 6,
       marginBottom: 8
     }
-  }, tiles.map(function (_ref38) {
-    var _ref39 = _slicedToArray(_ref38, 3),
-      l = _ref39[0],
-      v = _ref39[1],
-      c = _ref39[2];
+  }, tiles.map(function (_ref40) {
+    var _ref41 = _slicedToArray(_ref40, 3),
+      l = _ref41[0],
+      v = _ref41[1],
+      c = _ref41[2];
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -6892,9 +7179,9 @@ function ExperimentPanel(_ref37) {
 
 // -- Per-Session Explorer (Results view) --
 // Filterable, sortable drill-down into every simulated session.
-function SessionExplorer(_ref40) {
-  var sessions = _ref40.sessions,
-    cur = _ref40.cur;
+function SessionExplorer(_ref42) {
+  var sessions = _ref42.sessions,
+    cur = _ref42.cur;
   var _useState35 = (0, _react.useState)("all"),
     _useState36 = _slicedToArray(_useState35, 2),
     filter = _useState36[0],
@@ -6966,10 +7253,10 @@ function SessionExplorer(_ref40) {
       gap: 4,
       marginBottom: 4
     }
-  }, filterChips.map(function (_ref41) {
-    var _ref42 = _slicedToArray(_ref41, 2),
-      key = _ref42[0],
-      label = _ref42[1];
+  }, filterChips.map(function (_ref43) {
+    var _ref44 = _slicedToArray(_ref43, 2),
+      key = _ref44[0],
+      label = _ref44[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -6984,10 +7271,10 @@ function SessionExplorer(_ref40) {
       gap: 4,
       marginBottom: 6
     }
-  }, sortChips.map(function (_ref43) {
-    var _ref44 = _slicedToArray(_ref43, 2),
-      key = _ref44[0],
-      label = _ref44[1];
+  }, sortChips.map(function (_ref45) {
+    var _ref46 = _slicedToArray(_ref45, 2),
+      key = _ref46[0],
+      label = _ref46[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -7086,20 +7373,20 @@ function SessionExplorer(_ref40) {
 }
 
 // -- Simulation Mode Page --
-function SimModePage(_ref45) {
-  var simCfg = _ref45.simCfg,
-    setSimCfg = _ref45.setSimCfg,
-    simRunning = _ref45.simRunning,
-    setSimRunning = _ref45.setSimRunning,
-    simProgress = _ref45.simProgress,
-    setSimProgress = _ref45.setSimProgress,
-    simResults = _ref45.simResults,
-    setSimResults = _ref45.setSimResults,
-    simDone = _ref45.simDone,
-    setSimDone = _ref45.setSimDone,
-    simStopRef = _ref45.simStopRef,
-    currency = _ref45.currency,
-    cur = _ref45.cur;
+function SimModePage(_ref47) {
+  var simCfg = _ref47.simCfg,
+    setSimCfg = _ref47.setSimCfg,
+    simRunning = _ref47.simRunning,
+    setSimRunning = _ref47.setSimRunning,
+    simProgress = _ref47.simProgress,
+    setSimProgress = _ref47.setSimProgress,
+    simResults = _ref47.simResults,
+    setSimResults = _ref47.setSimResults,
+    simDone = _ref47.simDone,
+    setSimDone = _ref47.setSimDone,
+    simStopRef = _ref47.simStopRef,
+    currency = _ref47.currency,
+    cur = _ref47.cur;
   var _useState41 = (0, _react.useState)("setup"),
     _useState42 = _slicedToArray(_useState41, 2),
     view = _useState42[0],
@@ -7350,10 +7637,10 @@ function SimModePage(_ref45) {
       display: "flex",
       gap: 8
     }
-  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref46) {
-    var _ref47 = _slicedToArray(_ref46, 2),
-      v = _ref47[0],
-      l = _ref47[1];
+  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref48) {
+    var _ref49 = _slicedToArray(_ref48, 2),
+      v = _ref49[0],
+      l = _ref49[1];
     var sel = simCfg.roulette === v;
     return /*#__PURE__*/React.createElement("button", {
       key: v,
@@ -8155,11 +8442,11 @@ function SimModePage(_ref45) {
         gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
         gap: 4
       }
-    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref48) {
-      var _ref49 = _slicedToArray(_ref48, 3),
-        l = _ref49[0],
-        v = _ref49[1],
-        c = _ref49[2];
+    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref50) {
+      var _ref51 = _slicedToArray(_ref50, 3),
+        l = _ref51[0],
+        v = _ref51[1],
+        c = _ref51[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8204,11 +8491,11 @@ function SimModePage(_ref45) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref50) {
-      var _ref51 = _slicedToArray(_ref50, 3),
-        l = _ref51[0],
-        v = _ref51[1],
-        c = _ref51[2];
+    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref52) {
+      var _ref53 = _slicedToArray(_ref52, 3),
+        l = _ref53[0],
+        v = _ref53[1],
+        c = _ref53[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8311,11 +8598,11 @@ function SimModePage(_ref45) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref52) {
-      var _ref53 = _slicedToArray(_ref52, 3),
-        l = _ref53[0],
-        v = _ref53[1],
-        c = _ref53[2];
+    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref54) {
+      var _ref55 = _slicedToArray(_ref54, 3),
+        l = _ref55[0],
+        v = _ref55[1],
+        c = _ref55[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -8355,9 +8642,9 @@ function SimModePage(_ref45) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.winStreakDist.slice(0, 10).map(function (_ref54) {
-      var len = _ref54.len,
-        p = _ref54.pct;
+    }, stats.winStreakDist.slice(0, 10).map(function (_ref56) {
+      var len = _ref56.len,
+        p = _ref56.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -8409,9 +8696,9 @@ function SimModePage(_ref45) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.lossStreakDist.slice(0, 10).map(function (_ref55) {
-      var len = _ref55.len,
-        p = _ref55.pct;
+    }, stats.lossStreakDist.slice(0, 10).map(function (_ref57) {
+      var len = _ref57.len,
+        p = _ref57.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -8458,13 +8745,13 @@ function SimModePage(_ref45) {
 }
 
 // -- Sim Strategy Editor --
-function SimStratEditor(_ref56) {
-  var strat = _ref56.strat,
-    idx = _ref56.idx,
-    simCfg = _ref56.simCfg,
-    setSimCfg = _ref56.setSimCfg,
-    cur = _ref56.cur,
-    onClose = _ref56.onClose;
+function SimStratEditor(_ref58) {
+  var strat = _ref58.strat,
+    idx = _ref58.idx,
+    simCfg = _ref58.simCfg,
+    setSimCfg = _ref58.setSimCfg,
+    cur = _ref58.cur,
+    onClose = _ref58.onClose;
   var _useState47 = (0, _react.useState)(_objectSpread({}, strat.config)),
     _useState48 = _slicedToArray(_useState47, 2),
     cfg = _useState48[0],
@@ -8583,10 +8870,10 @@ function SimStratEditor(_ref56) {
       display: "flex",
       gap: 5
     }
-  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref57) {
-    var _ref58 = _slicedToArray(_ref57, 2),
-      m = _ref58[0],
-      l = _ref58[1];
+  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref59) {
+    var _ref60 = _slicedToArray(_ref59, 2),
+      m = _ref60[0],
+      l = _ref60[1];
     var sel = (cfg.betMode || "progression") === m;
     return /*#__PURE__*/React.createElement("button", {
       key: m,
@@ -8809,11 +9096,11 @@ function SimStratEditor(_ref56) {
       flexDirection: "column",
       gap: 6
     }
-  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref59) {
-    var _ref60 = _slicedToArray(_ref59, 3),
-      key = _ref60[0],
-      label = _ref60[1],
-      desc = _ref60[2];
+  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref61) {
+    var _ref62 = _slicedToArray(_ref61, 3),
+      key = _ref62[0],
+      label = _ref62[1],
+      desc = _ref62[2];
     return /*#__PURE__*/React.createElement("div", {
       key: key,
       style: {
@@ -8988,10 +9275,10 @@ function SimStratEditor(_ref56) {
 
 // ===== components/SecondaryPages.jsx =====
 // -- Spin Log Page --
-function SpinPage(_ref61) {
-  var sess = _ref61.sess,
-    updSess = _ref61.updSess,
-    trackOverlays = _ref61.trackOverlays;
+function SpinPage(_ref63) {
+  var sess = _ref63.sess,
+    updSess = _ref63.updSess,
+    trackOverlays = _ref63.trackOverlays;
   var _useState51 = (0, _react.useState)(false),
     _useState52 = _slicedToArray(_useState51, 2),
     showAll = _useState52[0],
@@ -9098,20 +9385,20 @@ function SpinPage(_ref61) {
   }, showAll ? "Show less" : "Show all " + sess.spins.length + " spins"))));
 }
 // -- Session Stats Page --
-function StatsPage(_ref62) {
-  var sess = _ref62.sess,
-    livePauseOffset = _ref62.livePauseOffset,
-    pnlVal = _ref62.pnlVal,
-    cur = _ref62.cur,
-    currency = _ref62.currency,
-    pnlColor = _ref62.pnlColor,
-    saveSession = _ref62.saveSession,
-    newEmptySession = _ref62.newEmptySession,
-    tearSession = _ref62.tearSession,
-    reactivateTrack = _ref62.reactivateTrack,
-    saved = _ref62.saved,
-    loadSession = _ref62.loadSession,
-    exportJSON = _ref62.exportJSON;
+function StatsPage(_ref64) {
+  var sess = _ref64.sess,
+    livePauseOffset = _ref64.livePauseOffset,
+    pnlVal = _ref64.pnlVal,
+    cur = _ref64.cur,
+    currency = _ref64.currency,
+    pnlColor = _ref64.pnlColor,
+    saveSession = _ref64.saveSession,
+    newEmptySession = _ref64.newEmptySession,
+    tearSession = _ref64.tearSession,
+    reactivateTrack = _ref64.reactivateTrack,
+    saved = _ref64.saved,
+    loadSession = _ref64.loadSession,
+    exportJSON = _ref64.exportJSON;
   // Group tracks by type + roi + stopLoss for consolidated view
   var trackGroups = (0, _react.useMemo)(function () {
     var groups = {};
@@ -9244,10 +9531,10 @@ function StatsPage(_ref62) {
     l: "Net P&L",
     v: (pnlVal >= 0 ? "+" : "-") + cur.symbol + formatNumber(pnlVal),
     c: pnlColor
-  }].map(function (_ref63) {
-    var l = _ref63.l,
-      v = _ref63.v,
-      c = _ref63.c;
+  }].map(function (_ref65) {
+    var l = _ref65.l,
+      v = _ref65.v,
+      c = _ref65.c;
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -9394,11 +9681,11 @@ function StatsPage(_ref62) {
         gap: 6,
         marginBottom: 8
       }
-    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref64) {
-      var _ref65 = _slicedToArray(_ref64, 3),
-        l = _ref65[0],
-        v = _ref65[1],
-        c = _ref65[2];
+    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref66) {
+      var _ref67 = _slicedToArray(_ref66, 3),
+        l = _ref67[0],
+        v = _ref67[1],
+        c = _ref67[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -9541,18 +9828,18 @@ function StatsPage(_ref62) {
 }
 
 // -- Settings Page --
-function SettingsPage(_ref66) {
-  var settings = _ref66.settings,
-    updSettings = _ref66.updSettings,
-    setCurrencyOpen = _ref66.setCurrencyOpen,
-    currency = _ref66.currency,
-    cur = _ref66.cur,
-    updSess = _ref66.updSess,
-    sess = _ref66.sess,
-    setChangelogOpen = _ref66.setChangelogOpen,
-    updApp = _ref66.updApp,
-    importJSON = _ref66.importJSON,
-    setHardResetOpen = _ref66.setHardResetOpen;
+function SettingsPage(_ref68) {
+  var settings = _ref68.settings,
+    updSettings = _ref68.updSettings,
+    setCurrencyOpen = _ref68.setCurrencyOpen,
+    currency = _ref68.currency,
+    cur = _ref68.cur,
+    updSess = _ref68.updSess,
+    sess = _ref68.sess,
+    setChangelogOpen = _ref68.setChangelogOpen,
+    updApp = _ref68.updApp,
+    importJSON = _ref68.importJSON,
+    setHardResetOpen = _ref68.setHardResetOpen;
   var _useState53 = (0, _react.useState)(settings.defaultBuyIn || 100),
     _useState54 = _slicedToArray(_useState53, 2),
     localBuyIn = _useState54[0],
@@ -9632,10 +9919,10 @@ function SettingsPage(_ref66) {
       display: "flex",
       gap: 8
     }
-  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref67) {
-    var _ref68 = _slicedToArray(_ref67, 2),
-      v = _ref68[0],
-      label = _ref68[1];
+  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref69) {
+    var _ref70 = _slicedToArray(_ref69, 2),
+      v = _ref70[0],
+      label = _ref70[1];
     return /*#__PURE__*/React.createElement("button", {
       key: v,
       onClick: function onClick() {
@@ -9725,10 +10012,10 @@ function SettingsPage(_ref66) {
     label: "Max Total (per spin)",
     key: "tableMaxTotal",
     color: "#f87171"
-  }].map(function (_ref69) {
-    var label = _ref69.label,
-      key = _ref69.key,
-      color = _ref69.color;
+  }].map(function (_ref71) {
+    var label = _ref71.label,
+      key = _ref71.key,
+      color = _ref71.color;
     var val = settings[key] || 1;
     function dec() {
       if (key === "tableMinBet") {
@@ -10749,9 +11036,9 @@ function casinoDuration(ms) {
     };
   return hours ? hours + ':' + pad(minutes) + ':' + pad(seconds) : minutes + ':' + pad(seconds);
 }
-function CasinoRecordingBar(_ref77) {
-  var recording = _ref77.recording,
-    label = _ref77.label;
+function CasinoRecordingBar(_ref79) {
+  var recording = _ref79.recording,
+    label = _ref79.label;
   var text = '';
   if (recording.availability === 'unknown') text = 'Checking Nexus Casino recording before the first spin…';else if (recording.availability === 'unavailable') text = 'Not connected to Nexus Casino — nothing is being recorded.';else if (recording.availability === 'off') text = 'Casino recording is off for Roulette.';else if (!recording.session) text = 'Casino recording is on. This session starts on the first spin.';else text = (recording.session.status === 'running' ? 'Recording' : recording.session.status === 'paused' ? 'Paused' : 'Stopped') + ' · ' + casinoDuration(recording.elapsedMs) + ' · ' + recording.session.spins + ' spins';
   var controls = [];
@@ -11006,7 +11293,7 @@ function useCasinoAccountSync(appState, setAppState) {
     };
   }, []);
   var push = React.useCallback(/*#__PURE__*/function () {
-    var _ref78 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
+    var _ref80 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
       var next, attempt, result, stored, _current, current;
       return _regenerator().w(function (_context9) {
         while (1) switch (_context9.n) {
@@ -11084,7 +11371,7 @@ function useCasinoAccountSync(appState, setAppState) {
       }, _callee9);
     }));
     return function (_x2, _x3) {
-      return _ref78.apply(this, arguments);
+      return _ref80.apply(this, arguments);
     };
   }(), [applySnapshot]);
   var queuePush = React.useCallback(function (candidate) {
@@ -11253,8 +11540,8 @@ function useCasinoAccountSync(appState, setAppState) {
 function markRouletteAccountReset() {
   writeSyncMeta(nextResetSyncMeta(readSyncMeta(loadApp()), Date.now()));
 }
-function CasinoSyncBar(_ref81) {
-  var sync = _ref81.sync;
+function CasinoSyncBar(_ref83) {
+  var sync = _ref83.sync;
   var text = sync.status === 'local' ? sync.deviceSaved ? 'Saved on this device · export and import through Casino to add it to an account' : 'Not saved · browser storage unavailable' : sync.status === 'checking' ? 'Checking account sync…' : sync.status === 'syncing' ? 'Syncing with your Casino account…' : sync.status === 'synced' ? 'Synced with your Casino account' : sync.deviceSaved ? 'Saved for this account on this device · cloud sync unavailable' : 'Not saved · Casino account storage unavailable';
   return React.createElement('section', {
     'aria-label': 'Roulette account sync',
@@ -11468,14 +11755,14 @@ function pickSessionsFile(updApp, setTab) {
 
 // ===== components/onboarding-apply.jsx =====
 // Applies the first-run setup choices to app state. Moved from App.jsx; the only change is that updApp is a parameter.
-function completeOnboarding(updApp, _ref82) {
-  var roulette = _ref82.roulette,
-    bankroll = _ref82.bankroll,
-    defaultBuyIn = _ref82.defaultBuyIn,
-    curr = _ref82.currency,
-    tableMinBet = _ref82.tableMinBet,
-    tableMaxBet = _ref82.tableMaxBet,
-    tableMaxTotal = _ref82.tableMaxTotal;
+function completeOnboarding(updApp, _ref84) {
+  var roulette = _ref84.roulette,
+    bankroll = _ref84.bankroll,
+    defaultBuyIn = _ref84.defaultBuyIn,
+    curr = _ref84.currency,
+    tableMinBet = _ref84.tableMinBet,
+    tableMaxBet = _ref84.tableMaxBet,
+    tableMaxTotal = _ref84.tableMaxTotal;
   updApp(function (s) {
     var prevBankroll = s.settings._restartBankroll;
     s.settings.onboarded = true;
@@ -11524,9 +11811,9 @@ function completeOnboarding(updApp, _ref82) {
 
 // ===== components/UpdateBanner.jsx =====
 // App update prompt. Moved from App.jsx; the only change is that appState and updateAvailable are props.
-function UpdateBanner(_ref83) {
-  var appState = _ref83.appState,
-    updateAvailable = _ref83.updateAvailable;
+function UpdateBanner(_ref85) {
+  var appState = _ref85.appState,
+    updateAvailable = _ref85.updateAvailable;
   return /*#__PURE__*/React.createElement("button", {
     onClick: function onClick() {
       saveApp(appState);
@@ -11616,10 +11903,10 @@ function UpdateBanner(_ref83) {
 
 // ===== components/DroughtPanel.jsx =====
 // Even-money, dozen and column drought counts. Both play pages render it; moved from App.jsx unchanged.
-function DroughtPanel(_ref84) {
-  var emDroughts = _ref84.emDroughts,
-    dozD = _ref84.dozD,
-    colD = _ref84.colD;
+function DroughtPanel(_ref86) {
+  var emDroughts = _ref86.emDroughts,
+    dozD = _ref86.dozD,
+    colD = _ref86.colD;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -11701,54 +11988,54 @@ function DroughtPanel(_ref84) {
 // Moved from App.jsx. App renders it through a wrapper that passes every App value the page reads.
 // Body unchanged except two marked edits: the drought grid is now DroughtPanel, and the strategy chips
 // take the tracks as an argument.
-function GamePageView(_ref85) {
-  var addOpen = _ref85.addOpen,
-    addTrack = _ref85.addTrack,
-    animNumber = _ref85.animNumber,
-    betResults = _ref85.betResults,
-    clearTimerRef = _ref85.clearTimerRef,
-    closeTrack = _ref85.closeTrack,
-    colD = _ref85.colD,
-    cur = _ref85.cur,
-    currency = _ref85.currency,
-    dozD = _ref85.dozD,
-    editTrackId = _ref85.editTrackId,
-    emDroughts = _ref85.emDroughts,
-    endSession = _ref85.endSession,
-    recordGameSpin = _ref85.recordGameSpin,
-    gameResult = _ref85.gameResult,
-    gameSpinning = _ref85.gameSpinning,
-    isLandscape = _ref85.isLandscape,
-    lastBets = _ref85.lastBets,
-    lastSpinDelta = _ref85.lastSpinDelta,
-    manualBets = _ref85.manualBets,
-    nextColorIdx = _ref85.nextColorIdx,
-    nonClosedTracks = _ref85.nonClosedTracks,
-    parkToggle = _ref85.parkToggle,
-    pendingTrackCfg = _ref85.pendingTrackCfg,
-    pendingTrackType = _ref85.pendingTrackType,
-    pnlVal = _ref85.pnlVal,
-    saveSession = _ref85.saveSession,
-    selectedChip = _ref85.selectedChip,
-    sess = _ref85.sess,
-    setAddOpen = _ref85.setAddOpen,
-    setAnimNumber = _ref85.setAnimNumber,
-    setBetResults = _ref85.setBetResults,
-    setEditTrackId = _ref85.setEditTrackId,
-    setGameResult = _ref85.setGameResult,
-    setGameSpinning = _ref85.setGameSpinning,
-    setLastBets = _ref85.setLastBets,
-    setLastSpinDelta = _ref85.setLastSpinDelta,
-    setManualBets = _ref85.setManualBets,
-    setPendingTrackCfg = _ref85.setPendingTrackCfg,
-    setPendingTrackType = _ref85.setPendingTrackType,
-    setSelectedChip = _ref85.setSelectedChip,
-    setUndoStack = _ref85.setUndoStack,
-    settings = _ref85.settings,
-    tapNumber = _ref85.tapNumber,
-    updSess = _ref85.updSess,
-    updateTrackConfig = _ref85.updateTrackConfig,
-    wheelNums = _ref85.wheelNums;
+function GamePageView(_ref87) {
+  var addOpen = _ref87.addOpen,
+    addTrack = _ref87.addTrack,
+    animNumber = _ref87.animNumber,
+    betResults = _ref87.betResults,
+    clearTimerRef = _ref87.clearTimerRef,
+    closeTrack = _ref87.closeTrack,
+    colD = _ref87.colD,
+    cur = _ref87.cur,
+    currency = _ref87.currency,
+    dozD = _ref87.dozD,
+    editTrackId = _ref87.editTrackId,
+    emDroughts = _ref87.emDroughts,
+    endSession = _ref87.endSession,
+    recordGameSpin = _ref87.recordGameSpin,
+    gameResult = _ref87.gameResult,
+    gameSpinning = _ref87.gameSpinning,
+    isLandscape = _ref87.isLandscape,
+    lastBets = _ref87.lastBets,
+    lastSpinDelta = _ref87.lastSpinDelta,
+    manualBets = _ref87.manualBets,
+    nextColorIdx = _ref87.nextColorIdx,
+    nonClosedTracks = _ref87.nonClosedTracks,
+    parkToggle = _ref87.parkToggle,
+    pendingTrackCfg = _ref87.pendingTrackCfg,
+    pendingTrackType = _ref87.pendingTrackType,
+    pnlVal = _ref87.pnlVal,
+    saveSession = _ref87.saveSession,
+    selectedChip = _ref87.selectedChip,
+    sess = _ref87.sess,
+    setAddOpen = _ref87.setAddOpen,
+    setAnimNumber = _ref87.setAnimNumber,
+    setBetResults = _ref87.setBetResults,
+    setEditTrackId = _ref87.setEditTrackId,
+    setGameResult = _ref87.setGameResult,
+    setGameSpinning = _ref87.setGameSpinning,
+    setLastBets = _ref87.setLastBets,
+    setLastSpinDelta = _ref87.setLastSpinDelta,
+    setManualBets = _ref87.setManualBets,
+    setPendingTrackCfg = _ref87.setPendingTrackCfg,
+    setPendingTrackType = _ref87.setPendingTrackType,
+    setSelectedChip = _ref87.setSelectedChip,
+    setUndoStack = _ref87.setUndoStack,
+    settings = _ref87.settings,
+    tapNumber = _ref87.tapNumber,
+    updSess = _ref87.updSess,
+    updateTrackConfig = _ref87.updateTrackConfig,
+    wheelNums = _ref87.wheelNums;
   var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
   var hasActiveTracks = nonClosedTracks.some(function (t) {
     return t.state === "active";
@@ -12524,12 +12811,12 @@ function GamePageView(_ref85) {
 // ===== components/TablePage.jsx =====
 // -- Full table page --
 // Moved from App.jsx unchanged. App renders it through a wrapper that passes the App values it reads.
-function TablePageView(_ref86) {
-  var sess = _ref86.sess,
-    selectedTrackId = _ref86.selectedTrackId,
-    setSelectedTrackId = _ref86.setSelectedTrackId,
-    nonClosedTracks = _ref86.nonClosedTracks,
-    cur = _ref86.cur;
+function TablePageView(_ref88) {
+  var sess = _ref88.sess,
+    selectedTrackId = _ref88.selectedTrackId,
+    setSelectedTrackId = _ref88.setSelectedTrackId,
+    nonClosedTracks = _ref88.nonClosedTracks,
+    cur = _ref88.cur;
   var selTrack = sess.tracks.find(function (t) {
     return t.id === selectedTrackId;
   }) || nonClosedTracks[0] || null;
@@ -12628,10 +12915,10 @@ function TablePageView(_ref86) {
       flexDirection: "column",
       gap: 3
     }
-  }, legendRows.map(function (_ref87) {
-    var _ref88 = _slicedToArray(_ref87, 2),
-      abbr = _ref88[0],
-      desc = _ref88[1];
+  }, legendRows.map(function (_ref89) {
+    var _ref90 = _slicedToArray(_ref89, 2),
+      abbr = _ref90[0],
+      desc = _ref90[1];
     return /*#__PURE__*/React.createElement("div", {
       key: abbr,
       style: {
@@ -12900,6 +13187,14 @@ function App() {
     _useState136 = _slicedToArray(_useState135, 2),
     liveLastBets = _useState136[0],
     setLiveLastBets = _useState136[1];
+  var _useState137 = (0, _react.useState)(false),
+    _useState138 = _slicedToArray(_useState137, 2),
+    clearOpen = _useState138[0],
+    setClearOpen = _useState138[1];
+  var _useState139 = (0, _react.useState)(null),
+    _useState140 = _slicedToArray(_useState139, 2),
+    clearUndo = _useState140[0],
+    setClearUndo = _useState140[1]; // {sessionId, snapshot} while Undo for Clear numbers is offered
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(function () {
@@ -12938,19 +13233,19 @@ function App() {
       return window.removeEventListener('nexus-account-scope-ready', loadScopedUi);
     };
   }, []);
-  var _useState137 = (0, _react.useState)(null),
-    _useState138 = _slicedToArray(_useState137, 2),
-    liveBetResults = _useState138[0],
-    setLiveBetResults = _useState138[1];
-  var _useState139 = (0, _react.useState)([]),
-    _useState140 = _slicedToArray(_useState139, 2),
-    liveUndoStack = _useState140[0],
-    setLiveUndoStack = _useState140[1];
-  var liveClearTimerRef = React.useRef(null);
   var _useState141 = (0, _react.useState)(null),
     _useState142 = _slicedToArray(_useState141, 2),
-    updateAvailable = _useState142[0],
-    setUpdateAvailable = _useState142[1]; // {version, notes}
+    liveBetResults = _useState142[0],
+    setLiveBetResults = _useState142[1];
+  var _useState143 = (0, _react.useState)([]),
+    _useState144 = _slicedToArray(_useState143, 2),
+    liveUndoStack = _useState144[0],
+    setLiveUndoStack = _useState144[1];
+  var liveClearTimerRef = React.useRef(null);
+  var _useState145 = (0, _react.useState)(null),
+    _useState146 = _slicedToArray(_useState145, 2),
+    updateAvailable = _useState146[0],
+    setUpdateAvailable = _useState146[1]; // {version, notes}
 
   // Check for app updates
   (0, _react.useEffect)(function () {
@@ -12970,46 +13265,46 @@ function App() {
       return clearInterval(iv);
     };
   }, []);
-  var _useState143 = (0, _react.useState)(false),
-    _useState144 = _slicedToArray(_useState143, 2),
-    buyInOpen = _useState144[0],
-    setBuyInOpen = _useState144[1];
-  var _useState145 = (0, _react.useState)(false),
-    _useState146 = _slicedToArray(_useState145, 2),
-    currencyOpen = _useState146[0],
-    setCurrencyOpen = _useState146[1];
   var _useState147 = (0, _react.useState)(false),
     _useState148 = _slicedToArray(_useState147, 2),
-    changelogOpen = _useState148[0],
-    setChangelogOpen = _useState148[1];
+    buyInOpen = _useState148[0],
+    setBuyInOpen = _useState148[1];
   var _useState149 = (0, _react.useState)(false),
     _useState150 = _slicedToArray(_useState149, 2),
-    editBankroll = _useState150[0],
-    setEditBankroll = _useState150[1];
+    currencyOpen = _useState150[0],
+    setCurrencyOpen = _useState150[1];
   var _useState151 = (0, _react.useState)(false),
     _useState152 = _slicedToArray(_useState151, 2),
-    cashOutOpen = _useState152[0],
-    setCashOutOpen = _useState152[1];
+    changelogOpen = _useState152[0],
+    setChangelogOpen = _useState152[1];
   var _useState153 = (0, _react.useState)(false),
     _useState154 = _slicedToArray(_useState153, 2),
-    hardResetOpen = _useState154[0],
-    setHardResetOpen = _useState154[1];
+    editBankroll = _useState154[0],
+    setEditBankroll = _useState154[1];
   var _useState155 = (0, _react.useState)(false),
     _useState156 = _slicedToArray(_useState155, 2),
-    feedbackOpen = _useState156[0],
-    setFeedbackOpen = _useState156[1];
-  var _useState157 = (0, _react.useState)(""),
+    cashOutOpen = _useState156[0],
+    setCashOutOpen = _useState156[1];
+  var _useState157 = (0, _react.useState)(false),
     _useState158 = _slicedToArray(_useState157, 2),
-    feedbackText = _useState158[0],
-    setFeedbackText = _useState158[1];
-  var _useState159 = (0, _react.useState)("fibonacci"),
+    hardResetOpen = _useState158[0],
+    setHardResetOpen = _useState158[1];
+  var _useState159 = (0, _react.useState)(false),
     _useState160 = _slicedToArray(_useState159, 2),
-    pendingTrackType = _useState160[0],
-    setPendingTrackType = _useState160[1];
-  var _useState161 = (0, _react.useState)(defaultFibCfg()),
+    feedbackOpen = _useState160[0],
+    setFeedbackOpen = _useState160[1];
+  var _useState161 = (0, _react.useState)(""),
     _useState162 = _slicedToArray(_useState161, 2),
-    pendingTrackCfg = _useState162[0],
-    setPendingTrackCfg = _useState162[1];
+    feedbackText = _useState162[0],
+    setFeedbackText = _useState162[1];
+  var _useState163 = (0, _react.useState)("fibonacci"),
+    _useState164 = _slicedToArray(_useState163, 2),
+    pendingTrackType = _useState164[0],
+    setPendingTrackType = _useState164[1];
+  var _useState165 = (0, _react.useState)(defaultFibCfg()),
+    _useState166 = _slicedToArray(_useState165, 2),
+    pendingTrackCfg = _useState166[0],
+    setPendingTrackCfg = _useState166[1];
   var sessKey = appMode === "game" ? "gameSession" : "currentSession";
   var sess = appState[sessKey] || appState.currentSession;
   var livePauseOffset = livePausedTotal + (livePausedAt ? Date.now() - livePausedAt : 0);
@@ -13022,10 +13317,10 @@ function App() {
   }, [appState]);
 
   // Storage failures surface as a banner, never a blocking browser dialog
-  var _useState163 = (0, _react.useState)(null),
-    _useState164 = _slicedToArray(_useState163, 2),
-    saveError = _useState164[0],
-    setSaveError = _useState164[1];
+  var _useState167 = (0, _react.useState)(null),
+    _useState168 = _slicedToArray(_useState167, 2),
+    saveError = _useState168[0],
+    setSaveError = _useState168[1];
   (0, _react.useEffect)(function () {
     function onSaveError(e) {
       setSaveError(e && e.detail || "Unknown storage error");
@@ -13035,6 +13330,23 @@ function App() {
       return window.removeEventListener("nexus-save-error", onSaveError);
     };
   }, []);
+
+  // Undo after Clear numbers ends at the next spin, when the session changes or the mode leaves Live,
+  // or after 15 seconds, whichever comes first.
+  (0, _react.useEffect)(function () {
+    if (!clearUndo) return;
+    var timer = setTimeout(function () {
+      return setClearUndo(null);
+    }, 15000);
+    return function () {
+      return clearTimeout(timer);
+    };
+  }, [clearUndo]);
+  (0, _react.useEffect)(function () {
+    if (!clearUndo) return;
+    var live = appState.currentSession;
+    if (appMode !== "live" || live.id !== clearUndo.sessionId || live.spins.length > 0) setClearUndo(null);
+  }, [clearUndo, appMode, appState.currentSession.id, appState.currentSession.spins.length]);
 
   // Keep the selected chip legal when the table minimum changes: snap up to the
   // smallest chip at or above the minimum so bets can never slip under it.
@@ -13542,6 +13854,42 @@ function App() {
     });
     setPrevSessState(null);
   }
+  // Clear numbers empties the live session's spins and what is derived from them. Money and the session
+  // record are not touched, and the session is stamped modified. The snapshot holds only what the clear
+  // changes, so Undo can put exactly that back and leave anything done since (buy-ins, cash-outs) alone.
+  function clearNumbers() {
+    var now = Date.now();
+    var snapshot = {
+      spinState: snapshotSpinState(appState.currentSession),
+      prevSessState: prevSessState ? JSON.parse(JSON.stringify(prevSessState)) : null,
+      lastSpinDelta: lastSpinDelta
+    };
+    updApp(function (s) {
+      s.currentSession = clearSpins(s.currentSession, now);
+    });
+    setPrevSessState(null);
+    setLastSpinDelta(null);
+    setClearOpen(false);
+    setClearUndo({
+      sessionId: appState.currentSession.id,
+      snapshot: snapshot
+    });
+  }
+  function undoClearNumbers() {
+    if (!clearUndo) return;
+    var live = appState.currentSession;
+    if (appMode !== "live" || live.id !== clearUndo.sessionId || live.spins.length > 0) {
+      setClearUndo(null);
+      return;
+    }
+    var snapshot = clearUndo.snapshot;
+    updApp(function (s) {
+      s.currentSession = restoreSpinState(s.currentSession, snapshot.spinState, Date.now());
+    });
+    setPrevSessState(snapshot.prevSessState);
+    setLastSpinDelta(snapshot.lastSpinDelta);
+    setClearUndo(null);
+  }
   function reactivateTrack(id) {
     updSess(function (s) {
       var t = s.tracks.find(function (x) {
@@ -13833,7 +14181,6 @@ function App() {
       } : null
     } : null;
     var solBets = primaryTrack && primaryTrack.type === "solution" ? primaryTrack.config.activeBets || [] : [];
-    var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
     return /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
@@ -13916,44 +14263,22 @@ function App() {
         fontWeight: 700,
         cursor: "pointer"
       }
-    }, "\u25A0 End Session")), sess.spins.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 4,
-        overflowX: "auto",
-        paddingBottom: 2,
-        WebkitOverflowScrolling: "touch"
-      }
-    }, recentSpins.map(function (val, i) {
-      var isZ = val === "0" || val === "00",
-        r = !isZ && RED.has(+val);
-      var hitTracks = (trackOverlays || []).filter(function (o) {
-        if (isZ) return false;
-        if (o.type === "fibonacci") return (o.dozenTargets || []).includes(dozenOf(val)) || (o.colTargets || []).includes(columnOf(val));
-        if (o.type === "solution") return (o.activeBets || []).some(function (b) {
-          return b.number === val;
-        });
-        return false;
-      });
-      var borderColor = i === 0 ? "#ffffff" : hitTracks.length > 0 ? hitTracks[0].color : isZ ? "#22c55e" : r ? "#ef4444" : "#374151";
-      return /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          flexShrink: 0,
-          width: 28,
-          height: 28,
-          borderRadius: 6,
-          background: isZ ? "#166534" : r ? "#7f1d1d" : "#0d1117",
-          border: "2px solid " + borderColor,
-          color: isZ ? "#bbf7d0" : r ? "#fecaca" : "#f1f5f9",
-          fontSize: 10,
-          fontWeight: 800,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, val);
-    })), function () {
+    }, "\u25A0 End Session")), /*#__PURE__*/React.createElement(SpinTools, {
+      spinCount: sess.spins.length,
+      confirmOpen: clearOpen,
+      undoVisible: !!clearUndo && clearUndo.sessionId === appState.currentSession.id && appState.currentSession.spins.length === 0,
+      onAsk: function onAsk() {
+        return setClearOpen(true);
+      },
+      onCancel: function onCancel() {
+        return setClearOpen(false);
+      },
+      onConfirm: clearNumbers,
+      onUndo: undoClearNumbers
+    }), /*#__PURE__*/React.createElement(RecentNumbersStrip, {
+      spins: sess.spins,
+      trackOverlays: trackOverlays
+    }), function () {
       var tMin = settings.tableMinBet || 1;
       var CHIPS = CHIP_DENOMS.filter(function (c) {
         return c.val >= tMin;
@@ -14240,11 +14565,17 @@ function App() {
           color: "#374151"
         }
       }, "center=straight \xB7 edge=split \xB7 corner=corner"));
-    }(), sess.spins.length > 0 && /*#__PURE__*/React.createElement(DroughtPanel, {
+    }(), /*#__PURE__*/React.createElement("div", {
+      "aria-hidden": sess.spins.length === 0,
+      style: {
+        minHeight: DROUGHT_PANEL_HEIGHT,
+        visibility: sess.spins.length > 0 ? "visible" : "hidden"
+      }
+    }, /*#__PURE__*/React.createElement(DroughtPanel, {
       emDroughts: emDroughts,
       dozD: dozD,
       colD: colD
-    }), /*#__PURE__*/React.createElement(FieldLabel, null, "Active Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
+    })), /*#__PURE__*/React.createElement(FieldLabel, null, "Active Strategy Tracks"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -14578,10 +14909,10 @@ function App() {
       l: "JP Profit",
       v: (outcomes.jackpot.profit * (primaryTrack.config.unit || 1) >= 0 ? "+" : "-") + cur.symbol + Math.abs(outcomes.jackpot.profit * (primaryTrack.config.unit || 1)).toFixed(cur.dec),
       c: outcomes.jackpot.profit >= 0 ? "#4ade80" : "#f87171"
-    }].map(function (_ref89) {
-      var l = _ref89.l,
-        v = _ref89.v,
-        c = _ref89.c;
+    }].map(function (_ref91) {
+      var l = _ref91.l,
+        v = _ref91.v,
+        c = _ref91.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -14663,10 +14994,10 @@ function App() {
       l: "Partial Profit",
       v: outcomes ? signChips(outcomes.partial.profit, primaryTrack.config.unit || 1, currency) : "--",
       c: outcomes && outcomes.partial.profit >= 0 ? "#4ade80" : "#f97316"
-    }].map(function (_ref90) {
-      var l = _ref90.l,
-        v = _ref90.v,
-        c = _ref90.c;
+    }].map(function (_ref92) {
+      var l = _ref92.l,
+        v = _ref92.v,
+        c = _ref92.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -14910,12 +15241,12 @@ function App() {
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
 
   // -- Bankroll Edit --
-  function BankrollEdit(_ref91) {
-    var onClose = _ref91.onClose;
-    var _useState165 = (0, _react.useState)(sess.bankrollCurrent),
-      _useState166 = _slicedToArray(_useState165, 2),
-      val = _useState166[0],
-      setVal = _useState166[1];
+  function BankrollEdit(_ref93) {
+    var onClose = _ref93.onClose;
+    var _useState169 = (0, _react.useState)(sess.bankrollCurrent),
+      _useState170 = _slicedToArray(_useState169, 2),
+      val = _useState170[0],
+      setVal = _useState170[1];
     function save() {
       updSess(function (s) {
         s.bankrollCurrent = val;

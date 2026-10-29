@@ -59,6 +59,8 @@ export default function App() {
   const [liveWinNumber, setLiveWinNumber] = useState(null);
   const [liveManualBets, setLiveManualBets] = useState(()=>initialUiState.liveManualBets||[]);
   const [liveLastBets, setLiveLastBets] = useState(()=>initialUiState.liveLastBets||[]);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
@@ -131,6 +133,19 @@ export default function App() {
     window.addEventListener("nexus-save-error", onSaveError);
     return () => window.removeEventListener("nexus-save-error", onSaveError);
   }, []);
+
+  // Undo after Clear numbers ends at the next spin, when the session changes or the mode leaves Live,
+  // or after 15 seconds, whichever comes first.
+  useEffect(() => {
+    if(!clearUndo) return;
+    const timer = setTimeout(() => setClearUndo(null), 15000);
+    return () => clearTimeout(timer);
+  }, [clearUndo]);
+  useEffect(() => {
+    if(!clearUndo) return;
+    const live = appState.currentSession;
+    if(appMode!=="live" || live.id!==clearUndo.sessionId || live.spins.length>0) setClearUndo(null);
+  }, [clearUndo, appMode, appState.currentSession.id, appState.currentSession.spins.length]);
 
   // Keep the selected chip legal when the table minimum changes: snap up to the
   // smallest chip at or above the minimum so bets can never slip under it.
@@ -402,6 +417,32 @@ export default function App() {
     });
     setPrevSessState(null);
   }
+  // Clear numbers empties the live session's spins and what is derived from them. Money and the session
+  // record are not touched, and the session is stamped modified. The snapshot holds only what the clear
+  // changes, so Undo can put exactly that back and leave anything done since (buy-ins, cash-outs) alone.
+  function clearNumbers() {
+    const now = Date.now();
+    const snapshot = {
+      spinState: snapshotSpinState(appState.currentSession),
+      prevSessState: prevSessState ? JSON.parse(JSON.stringify(prevSessState)) : null,
+      lastSpinDelta,
+    };
+    updApp(s => { s.currentSession = clearSpins(s.currentSession, now); });
+    setPrevSessState(null);
+    setLastSpinDelta(null);
+    setClearOpen(false);
+    setClearUndo({sessionId:appState.currentSession.id, snapshot});
+  }
+  function undoClearNumbers() {
+    if(!clearUndo) return;
+    const live = appState.currentSession;
+    if(appMode!=="live" || live.id!==clearUndo.sessionId || live.spins.length>0) { setClearUndo(null); return; }
+    const {snapshot} = clearUndo;
+    updApp(s => { s.currentSession = restoreSpinState(s.currentSession, snapshot.spinState, Date.now()); });
+    setPrevSessState(snapshot.prevSessState);
+    setLastSpinDelta(snapshot.lastSpinDelta);
+    setClearUndo(null);
+  }
   function reactivateTrack(id) {
     updSess(s=>{
       const t=s.tracks.find(x=>x.id===id);
@@ -565,7 +606,6 @@ export default function App() {
       jackpot:hasMix?{ret:6*row.c,profit:6*row.c-row.totalInvest}:null
     } : null;
     const solBets = primaryTrack&&primaryTrack.type==="solution" ? primaryTrack.config.activeBets||[] : [];
-    const recentSpins = [...sess.spins].reverse().slice(0,30);
 
     return (
       <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
@@ -590,25 +630,8 @@ export default function App() {
             <button onClick={()=>{if(window.confirm("End session and save?"))endSession();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
           )}
         </div>
-        {sess.spins.length>0 && (
-          <div style={{display:"flex",gap:4,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
-            {recentSpins.map((val,i)=>{
-              const isZ=val==="0"||val==="00", r=!isZ&&RED.has(+val);
-              const hitTracks=(trackOverlays||[]).filter(o=>{
-                if(isZ)return false;
-                if(o.type==="fibonacci")return (o.dozenTargets||[]).includes(dozenOf(val))||(o.colTargets||[]).includes(columnOf(val));
-                if(o.type==="solution")return (o.activeBets||[]).some(b=>b.number===val);
-                return false;
-              });
-              const borderColor=i===0?"#ffffff":hitTracks.length>0?hitTracks[0].color:isZ?"#22c55e":r?"#ef4444":"#374151";
-              return(
-                <div key={i} style={{flexShrink:0,width:28,height:28,borderRadius:6,background:isZ?"#166534":r?"#7f1d1d":"#0d1117",border:"2px solid "+borderColor,color:isZ?"#bbf7d0":r?"#fecaca":"#f1f5f9",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  {val}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers}/>
+        <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
 
         {/* Roulette Table for Live Mode */}
         {(()=>{
@@ -645,10 +668,10 @@ export default function App() {
           );
         })()}
 
-        {/* Drought panel */}
-        {sess.spins.length>0 && (
+        {/* Drought panel. Its slot is reserved at DROUGHT_PANEL_HEIGHT and hidden, not removed, when there are no numbers, so clearing moves nothing below it. */}
+        <div aria-hidden={sess.spins.length===0} style={{minHeight:DROUGHT_PANEL_HEIGHT,visibility:sess.spins.length>0?"visible":"hidden"}}>
           <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD}/>
-        )}
+        </div>
 
         {/* Track cards with drag-to-reorder */}
         <FieldLabel>Active Strategy Tracks</FieldLabel>

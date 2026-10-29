@@ -35,6 +35,8 @@ const FILES = [
   'components/TrackPanel.jsx',
   // Modals — depends on ui
   'components/modals.jsx',
+  // Live-mode spin tools (clear numbers with inline undo) and the recent-numbers strip — depends on ui (Modal) and constants
+  'components/SpinTools.jsx',
   // Sim UI — depends on simulation + ui + engine
   'components/SimModePage.jsx',
   // Secondary pages split from App.jsx before the Casino bridge was added.
