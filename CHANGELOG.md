@@ -7,6 +7,10 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- `deploy.sh` no longer references `$TAR`, a variable left over from the old tarball upload and never set. After a successful production deploy it printed "TAR: unbound variable" from its exit trap, and on the failure path the same line would have replaced the deploy's exit code with 1 after the rollback ran.
+
 ## [0.50.0] - 2026-10-30
 
 ### Changed
