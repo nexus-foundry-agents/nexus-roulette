@@ -65,6 +65,7 @@ export default function App() {
   // A board photo read returns in location.hash. It is taken once, here, and removed from the URL at once. A numbers
   // return waits as a review (live mode only) and a status shows under the spin tools. Nothing is added until Add.
   const [boardReturn, setBoardReturn] = useState(() => takeBoardReturn(window.location, window.history, appState.currentSession.roulette));
+  useCasinoBoardReturn(appState.currentSession.roulette, setAppMode, setBoardReturn, casinoSync.status);
   const [boardAdd, setBoardAdd] = useState([]); // numbers still to enter, oldest first; one is entered per render
   // Add enters the read numbers one tap at a time through tapNumber, the path a live tap takes. Each step is its own
   // render, so each tap settles on the session the one before it left, as a run of taps does. A mode change mid-run drops the rest.
@@ -521,7 +522,7 @@ export default function App() {
             <button onClick={()=>{if(window.confirm("End session and save?"))endSession();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
           )}
         </div>
-        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={()=>openBoardPhoto(window.location,sess.roulette)}/>
+        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)}/>
         <BoardPhotoStatus result={boardReturn}/>
         <SpinCorrectionContext.Provider value={openSpinCorrection}>
           <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>

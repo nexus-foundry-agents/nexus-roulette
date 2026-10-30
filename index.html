@@ -977,7 +977,7 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js');}
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.CASINO_SHELL_ORIGIN = exports.CASINO_BRIDGE_RESPONSE = exports.CASINO_BRIDGE_REQUEST = exports.CASINO_BRIDGE_OPERATIONS = exports.CASINO_BRIDGE_HELLO = void 0;
+exports.CASINO_UI_OPERATIONS = exports.CASINO_SHELL_ORIGIN = exports.CASINO_BRIDGE_RESPONSE = exports.CASINO_BRIDGE_REQUEST = exports.CASINO_BRIDGE_OPERATIONS = exports.CASINO_BRIDGE_HELLO = void 0;
 exports.CasinoRecordingBar = CasinoRecordingBar;
 exports.CasinoSyncBar = CasinoSyncBar;
 exports.ROULETTE_BOARD_ROWS = void 0;
@@ -993,6 +993,7 @@ exports.mergeWagerSummaries = mergeWagerSummaries;
 exports.nextLocalSyncMeta = nextLocalSyncMeta;
 exports.nextResetSyncMeta = nextResetSyncMeta;
 exports.nextSequenceForSession = nextSequenceForSession;
+exports.openCasinoReadBoard = openCasinoReadBoard;
 exports.readRouletteSnapshot = readRouletteSnapshot;
 exports.recordingForMode = recordingForMode;
 exports.rouletteSnapshot = rouletteSnapshot;
@@ -1002,6 +1003,7 @@ exports.shouldApplySyncReceipt = shouldApplySyncReceipt;
 exports.summarizeManualWagers = summarizeManualWagers;
 exports.summarizeTrackWagers = summarizeTrackWagers;
 exports.syncMetaFromStored = syncMetaFromStored;
+exports.takeCasinoReadBoard = takeCasinoReadBoard;
 exports.useCasinoAccountSync = useCasinoAccountSync;
 exports.useCasinoRecording = useCasinoRecording;
 exports.writeRouletteStorage = writeRouletteStorage;
@@ -7599,8 +7601,16 @@ function boardPhotoUrl(wheel) {
   return wheel === "american" ? BOARD_PHOTO_URLS.american : BOARD_PHOTO_URLS.european;
 }
 
-// Opens the photo page in this tab. loc is window.location, passed in so the tests can supply their own.
-function openBoardPhoto(loc, wheel) {
+// Standalone opens this tab; a frame asks the pinned shell directly during the click, without awaiting anything.
+function openBoardPhoto(loc, wheel, onResult) {
+  if (window.parent !== window) {
+    return openCasinoReadBoard(wheel).then(function (result) {
+      if (!result.ok && onResult) onResult({
+        kind: "status",
+        status: "unavailable"
+      });
+    });
+  }
   loc.assign(boardPhotoUrl(wheel));
 }
 function isBoardReturn(hash) {
@@ -7652,6 +7662,41 @@ function takeBoardReturn(loc, hist, wheel) {
   var result = parseBoardReturn(hash, wheel);
   if (!result || result.kind === "status" && result.status === "canceled") return null;
   return result;
+}
+
+// Pull once after hello, including when hello preceded this effect. Keep the request across effect restarts so a
+// consumed shell result cannot be lost to Strict Mode cleanup. The active effect validates for its current live wheel.
+function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
+  var pull = React.useRef({
+    request: null,
+    consumed: false
+  });
+  React.useEffect(function () {
+    if (window.parent === window) return;
+    installCasinoBridge();
+    var active = true;
+    var ready = function ready() {
+      var slot = pull.current;
+      if (!casinoBridge.ready || slot.consumed) return;
+      if (!slot.request) slot.request = takeCasinoReadBoard();
+      slot.request.then(function (reply) {
+        // The account may restore a European wheel after the shell result arrives.
+        if (!active || slot.consumed || syncStatus === "checking") return;
+        slot.consumed = true;
+        var fragment = reply.ok && reply.body && reply.body.fragment;
+        if (typeof fragment !== "string" || fragment === "none" || fragment === "canceled") return;
+        setAppMode("live");
+        var result = parseBoardReturn(BOARD_HASH_PREFIX + fragment, wheel);
+        if (result) setBoardReturn(result);
+      });
+    };
+    casinoBridge.listeners.add(ready);
+    ready();
+    return function () {
+      active = false;
+      casinoBridge.listeners.delete(ready);
+    };
+  }, [wheel, setAppMode, setBoardReturn, syncStatus]);
 }
 
 // The board lists the most recent number first. Add enters the numbers oldest first, so the last one entered is the most recent.
@@ -11211,6 +11256,9 @@ var CASINO_BRIDGE_HELLO = exports.CASINO_BRIDGE_HELLO = 'nexus-casino:recording:
 var CASINO_BRIDGE_REQUEST = exports.CASINO_BRIDGE_REQUEST = 'nexus-casino:recording:request';
 var CASINO_BRIDGE_RESPONSE = exports.CASINO_BRIDGE_RESPONSE = 'nexus-casino:recording:response';
 var CASINO_BRIDGE_OPERATIONS = exports.CASINO_BRIDGE_OPERATIONS = ['settings', 'history', 'start', 'pause', 'resume', 'stop', 'spin', 'layout', 'setLayout', 'deleteSession', 'readState', 'writeState'];
+
+// Shell UI requests are separate from the mirrored recording/HTTP contract.
+var CASINO_UI_OPERATIONS = exports.CASINO_UI_OPERATIONS = ['openReadBoard', 'readBoardResult'];
 var casinoBridge = {
   installed: false,
   ready: false,
@@ -11280,7 +11328,7 @@ function askCasino(op, payload) {
       error: 'not-framed'
     });
   }
-  if (CASINO_BRIDGE_OPERATIONS.indexOf(op) < 0) {
+  if (CASINO_BRIDGE_OPERATIONS.indexOf(op) < 0 && CASINO_UI_OPERATIONS.indexOf(op) < 0) {
     return Promise.resolve({
       ok: false,
       status: 400,
@@ -11308,6 +11356,23 @@ function askCasino(op, payload) {
       payload: payload || {}
     }, CASINO_SHELL_ORIGIN);
   });
+}
+
+// Do not wait for hello here: the shell must receive this request during the tap's activation.
+function openCasinoReadBoard(wheel) {
+  if (wheel !== 'american' && wheel !== 'european') {
+    return Promise.resolve({
+      ok: false,
+      status: 400,
+      error: 'invalid wheel'
+    });
+  }
+  return askCasino('openReadBoard', {
+    wheel: wheel
+  });
+}
+function takeCasinoReadBoard() {
+  return askCasino('readBoardResult');
 }
 function casinoSession(body) {
   var value = body && body.session;
@@ -14213,6 +14278,7 @@ function App() {
     _useState144 = _slicedToArray(_useState143, 2),
     boardReturn = _useState144[0],
     setBoardReturn = _useState144[1];
+  useCasinoBoardReturn(appState.currentSession.roulette, setAppMode, setBoardReturn, casinoSync.status);
   var _useState145 = (0, _react.useState)([]),
     _useState146 = _slicedToArray(_useState145, 2),
     boardAdd = _useState146[0],
@@ -15057,7 +15123,7 @@ function App() {
       onConfirm: clearNumbers,
       onUndo: undoClearNumbers,
       onReadPhoto: function onReadPhoto() {
-        return openBoardPhoto(window.location, sess.roulette);
+        return openBoardPhoto(window.location, sess.roulette, setBoardReturn);
       }
     }), /*#__PURE__*/React.createElement(BoardPhotoStatus, {
       result: boardReturn

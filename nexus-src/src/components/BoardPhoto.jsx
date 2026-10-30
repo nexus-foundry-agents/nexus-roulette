@@ -31,8 +31,13 @@ function boardPhotoUrl(wheel) {
   return wheel === "american" ? BOARD_PHOTO_URLS.american : BOARD_PHOTO_URLS.european;
 }
 
-// Opens the photo page in this tab. loc is window.location, passed in so the tests can supply their own.
-function openBoardPhoto(loc, wheel) {
+// Standalone opens this tab; a frame asks the pinned shell directly during the click, without awaiting anything.
+function openBoardPhoto(loc, wheel, onResult) {
+  if(window.parent !== window) {
+    return openCasinoReadBoard(wheel).then(function(result) {
+      if(!result.ok && onResult) onResult({kind:"status",status:"unavailable"});
+    });
+  }
   loc.assign(boardPhotoUrl(wheel));
 }
 
@@ -72,6 +77,35 @@ function takeBoardReturn(loc, hist, wheel) {
   const result = parseBoardReturn(hash, wheel);
   if (!result || (result.kind === "status" && result.status === "canceled")) return null;
   return result;
+}
+
+// Pull once after hello, including when hello preceded this effect. Keep the request across effect restarts so a
+// consumed shell result cannot be lost to Strict Mode cleanup. The active effect validates for its current live wheel.
+function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
+  const pull = React.useRef({request:null,consumed:false});
+  React.useEffect(function() {
+    if(window.parent === window) return;
+    installCasinoBridge();
+    let active = true;
+    const ready = function() {
+      const slot = pull.current;
+      if(!casinoBridge.ready || slot.consumed) return;
+      if(!slot.request) slot.request = takeCasinoReadBoard();
+      slot.request.then(function(reply) {
+        // The account may restore a European wheel after the shell result arrives.
+        if(!active || slot.consumed || syncStatus === "checking") return;
+        slot.consumed = true;
+        const fragment = reply.ok && reply.body && reply.body.fragment;
+        if(typeof fragment !== "string" || fragment === "none" || fragment === "canceled") return;
+        setAppMode("live");
+        const result = parseBoardReturn(BOARD_HASH_PREFIX + fragment, wheel);
+        if(result) setBoardReturn(result);
+      });
+    };
+    casinoBridge.listeners.add(ready);
+    ready();
+    return function() { active = false; casinoBridge.listeners.delete(ready); };
+  }, [wheel, setAppMode, setBoardReturn, syncStatus]);
 }
 
 // The board lists the most recent number first. Add enters the numbers oldest first, so the last one entered is the most recent.

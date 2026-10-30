@@ -16,12 +16,12 @@ const EU = 'https://nexusfoundry.app/roulette/read-board?wheel=european';
 // The files the bundle concatenates ahead of the pieces these tests use, in build.js order.
 const SLICE = [
   'constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'spin-apply.js',
-  'roulette-bets.mjs', 'components/ui.jsx', 'components/SpinTools.jsx', 'components/BoardPhoto.jsx',
+  'roulette-bets.mjs', 'casino-recording.mjs', 'components/ui.jsx', 'components/SpinTools.jsx', 'components/BoardPhoto.jsx',
 ];
 
 // Loads source files the way build.js does: the same concatenation and transforms, in one shared global scope.
 // Nothing is copied from source; the functions under test are the ones the bundle runs.
-async function loadSlice() {
+async function loadSlice({ framed = false } = {}) {
   const sources = await Promise.all(SLICE.map((f) => readFile(new URL(f, SRC), 'utf8')));
   const combined = SLICE.map((f, i) => `\n// ===== ${f} =====\n${sources[i]}`).join('\n');
   const { code } = transformSync(combined, {
@@ -34,9 +34,14 @@ async function loadSlice() {
     ],
   });
   const store = {};
+  const messages = new Set();
+  const posted = [];
   const sandbox = {
     console: { log() {}, warn() {}, error() {} },
     React,
+    setTimeout, clearTimeout,
+    addEventListener(name, listener) { if (name === 'message') messages.add(listener); },
+    removeEventListener(name, listener) { if (name === 'message') messages.delete(listener); },
     localStorage: {
       getItem: (key) => (key in store ? store[key] : null),
       setItem: (key, value) => { store[key] = String(value); },
@@ -50,10 +55,18 @@ async function loadSlice() {
   sandbox.module = { exports: {} };
   sandbox.exports = sandbox.module.exports;
   sandbox.window = sandbox;
-  sandbox.window.parent = sandbox; // standalone page: window.parent === window
+  sandbox.window.parent = framed ? { postMessage(data, origin) { posted.push({ data, origin }); } } : sandbox;
   vm.createContext(sandbox);
   vm.runInContext(code, sandbox, { filename: 'bundle-slice.js' });
-  return { ctx: sandbox };
+  const emit = (data, origin = 'https://casino.nexus-foundry.ai', source = sandbox.parent) => {
+    for (const listener of messages) listener({ data, origin, source });
+  };
+  const hello = () => emit({ kind: 'nexus-casino:recording:hello', gameId: 'roulette' });
+  const reply = (request, body, extra = {}) => emit({
+    kind: 'nexus-casino:recording:response', id: request.data.id, op: request.data.op,
+    ok: true, status: 200, body, ...extra,
+  });
+  return { ctx: sandbox, posted, emit, hello, reply };
 }
 
 let slice = null;
@@ -291,7 +304,7 @@ test('nothing settles a spin on read: the reader only parses, and App enters num
 test('the review is live-only, the status sits under the spin tools, and a spin entered by hand ends a status', async () => {
   const app = await readFile(new URL('App.jsx', SRC), 'utf8');
   assert.match(app, /appMode==="live" && boardReturn && boardReturn\.kind==="numbers" && <BoardPhotoReview /);
-  assert.match(app, /onReadPhoto=\{\(\)=>openBoardPhoto\(window\.location,sess\.roulette\)\}\/>\s*<BoardPhotoStatus result=\{boardReturn\}\/>/);
+  assert.match(app, /onReadPhoto=\{\(\)=>openBoardPhoto\(window\.location,sess\.roulette,setBoardReturn\)\}\/>\s*<BoardPhotoStatus result=\{boardReturn\}\/>/);
   assert.match(app, /if\(boardReturn&&boardReturn\.kind==="status"\) setBoardReturn\(null\);/);
 });
 
@@ -301,4 +314,157 @@ test('BoardPhoto is built after SpinTools (for NumberPicker) and before App', as
   assert.ok(at('components/BoardPhoto.jsx') > at('components/SpinTools.jsx'));
   assert.ok(at('components/BoardPhoto.jsx') > at('components/ui.jsx'));
   assert.ok(at('App.jsx') > at('components/BoardPhoto.jsx'));
+});
+
+// -- The Casino UI contract and framed round trip --
+
+test('UI requests have their own roster and the pinned recording verb list is unchanged', async () => {
+  const { ctx } = await load();
+  assert.deepEqual(plain(ctx.exports.CASINO_UI_OPERATIONS), ['openReadBoard', 'readBoardResult']);
+  assert.deepEqual(plain(ctx.exports.CASINO_BRIDGE_OPERATIONS), [
+    'settings', 'history', 'start', 'pause', 'resume', 'stop', 'spin', 'layout', 'setLayout',
+    'deleteSession', 'readState', 'writeState',
+  ]);
+});
+
+test('a framed tap posts openReadBoard synchronously to the pinned shell and never assigns the frame', async () => {
+  const { ctx, posted, hello, reply } = await loadSlice({ framed: true });
+  ctx.installCasinoBridge();
+  hello();
+  const statuses = [];
+  const pending = ctx.openBoardPhoto({ assign() { assert.fail('frame navigated'); } }, 'american', (r) => statuses.push(r));
+  assert.equal(posted.length, 1, 'posted before the click handler yields');
+  assert.equal(posted[0].origin, 'https://casino.nexus-foundry.ai');
+  assert.equal(posted[0].data.kind, 'nexus-casino:recording:request');
+  assert.equal(posted[0].data.op, 'openReadBoard');
+  assert.deepEqual(plain(posted[0].data.payload), { wheel: 'american' });
+  reply(posted[0], null);
+  await pending;
+  assert.equal(statuses.length, 0);
+});
+
+test('a frame without a live bridge reports unavailable without assigning or waiting for hello', async () => {
+  const { ctx, posted } = await loadSlice({ framed: true });
+  const statuses = [];
+  await ctx.openBoardPhoto({ assign() { assert.fail('frame navigated'); } }, 'european', (r) => statuses.push(plain(r)));
+  assert.deepEqual(statuses, [{ kind: 'status', status: 'unavailable' }]);
+  assert.equal(posted.length, 0);
+});
+
+test('a refused framed open shows the existing unavailable status', async () => {
+  const { ctx, posted, hello, reply } = await loadSlice({ framed: true });
+  ctx.installCasinoBridge(); hello();
+  const statuses = [];
+  const pending = ctx.openBoardPhoto({ assign() { assert.fail('frame navigated'); } }, 'european', (r) => statuses.push(plain(r)));
+  reply(posted[0], null, { ok: false, status: 403 });
+  await pending;
+  assert.deepEqual(statuses, [{ kind: 'status', status: 'unavailable' }]);
+});
+
+// Exercise the effect lifecycle, including hello after mount, repeated hellos and an effect restart.
+async function mountReturn(wheel = 'american', framed = true, syncStatus) {
+  const bridge = await loadSlice({ framed });
+  const { ctx } = bridge;
+  const refs = [];
+  let cursor = 0;
+  let effect;
+  const changes = [];
+  ctx.React = { ...React,
+    useRef(value) { const i = cursor++; return refs[i] || (refs[i] = { current: value }); },
+    useEffect(run) { effect = run; },
+  };
+  const mount = () => {
+    cursor = 0;
+    ctx.useCasinoBoardReturn(wheel, (v) => changes.push(['mode', v]), (v) => changes.push(['review', plain(v)]), syncStatus);
+    return effect();
+  };
+  return { ...bridge, changes, mount, setWheel(value) { wheel = value; }, setSyncStatus(value) { syncStatus = value; } };
+}
+
+const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
+
+test('the framed return waits for a pinned hello, pulls once, and opens live review without adding', async () => {
+  const { ctx, posted, emit, hello, reply, changes, mount } = await mountReturn();
+  const cleanup = mount();
+  assert.equal(posted.length, 0);
+  emit({ kind: 'nexus-casino:recording:hello', gameId: 'roulette' }, 'https://attacker.test');
+  emit({ kind: 'nexus-casino:recording:hello', gameId: 'roulette' }, undefined, {});
+  emit({ kind: 'nexus-casino:recording:hello', gameId: 'monopoly' });
+  assert.equal(posted.length, 0, 'untrusted hellos cannot trigger the pull');
+  hello(); hello();
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].data.op, 'readBoardResult');
+  assert.equal(posted[0].origin, 'https://casino.nexus-foundry.ai');
+  assert.deepEqual(plain(posted[0].data.payload), {});
+  emit({ kind: 'nexus-casino:recording:response', id: posted[0].data.id, ok: true, body: { fragment: 'ok:37' } }, 'https://attacker.test');
+  await flushPromises();
+  assert.deepEqual(changes, []);
+  reply(posted[0], { fragment: 'ok:16,0,00' });
+  await flushPromises();
+  assert.deepEqual(changes, [['mode', 'live'], ['review', { kind: 'numbers', numbers: ['16', '0', '00'] }]]);
+  hello();
+  assert.equal(posted.length, 1);
+  cleanup();
+});
+
+test('a pulled ok value is strictly revalidated whole for the active wheel and forty-entry limit', async () => {
+  for (const [wheel, fragment] of [
+    ['american', 'ok:16,37,4'], ['european', 'ok:16,00,4'],
+    ['american', 'ok:' + Array(41).fill('5').join(',')], ['american', 'ok:05,4'],
+  ]) {
+    const { posted, hello, reply, changes, mount } = await mountReturn(wheel);
+    const cleanup = mount(); hello(); reply(posted[0], { fragment });
+    await flushPromises();
+    assert.deepEqual(changes, [['mode', 'live'], ['review', { kind: 'status', status: 'unreadable' }]], wheel + ': ' + fragment);
+    cleanup();
+  }
+});
+
+test('none, null and unsuccessful pulls are no-ops; a status uses the existing status screen', async () => {
+  for (const [body, extra, expected] of [
+    [{ fragment: 'none' }, {}, []], [{ fragment: null }, {}, []],
+    [null, {}, []], [{ fragment: 'ok:5' }, { ok: false }, []],
+    [{ fragment: 'busy' }, {}, [['mode', 'live'], ['review', { kind: 'status', status: 'busy' }]]],
+    [{ fragment: 'canceled' }, {}, []],
+  ]) {
+    const { posted, hello, reply, changes, mount } = await mountReturn();
+    const cleanup = mount(); hello(); reply(posted[0], body, extra);
+    await flushPromises(); assert.deepEqual(changes, expected); cleanup();
+  }
+});
+
+test('an effect restart preserves the one pull and delivers its pending result once', async () => {
+  const { posted, hello, reply, changes, mount } = await mountReturn();
+  hello(); // no listener yet; the mount must still wait for a real hello
+  const firstCleanup = mount(); hello(); firstCleanup();
+  const cleanup = mount();
+  assert.equal(posted.length, 1);
+  reply(posted[0], { fragment: 'ok:5' });
+  await flushPromises();
+  assert.deepEqual(changes, [['mode', 'live'], ['review', { kind: 'numbers', numbers: ['5'] }]]);
+  cleanup();
+});
+
+test('standalone never pulls a Casino result, and App only wires the return hook within its line budget', async () => {
+  const { posted, changes, mount } = await mountReturn('american', false);
+  const cleanup = mount();
+  await flushPromises();
+  assert.equal(posted.length, 0); assert.deepEqual(changes, []);
+  if (cleanup) cleanup();
+  const app = await readFile(new URL('App.jsx', SRC), 'utf8');
+  assert.match(app, /useCasinoBoardReturn\(appState\.currentSession\.roulette, setAppMode, setBoardReturn, casinoSync\.status\)/);
+  assert.ok(app.split('\n').length - 1 < 900);
+});
+
+test('a pulled result waits for account hydration and validates against the restored live wheel', async () => {
+  const { posted, hello, reply, changes, mount, setWheel, setSyncStatus } = await mountReturn('american', true, 'checking');
+  const cleanup = mount(); hello(); reply(posted[0], { fragment: 'ok:16,00' });
+  await flushPromises();
+  assert.deepEqual(changes, [], 'the initial default wheel is not the account wheel');
+  cleanup(); setWheel('european'); setSyncStatus('synced');
+  const finalCleanup = mount();
+  await flushPromises();
+  assert.equal(posted.length, 1, 'hydration never consumes the shell result twice');
+  assert.deepEqual(changes, [['mode', 'live'], ['review', { kind: 'status', status: 'unreadable' }]]);
+  finalCleanup();
 });
