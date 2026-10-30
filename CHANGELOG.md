@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-30
+
 ### Changed
 
 - The photo reader's "busy" line now reads "Reader busy or warming up, try in 1 min". A cold load can take about a minute. The PC loads its reading model in the background on a cold read and answers busy straight away, so this line also covers the warm-up.
