@@ -1,6 +1,6 @@
 // -- Main App Component --
 export default function App() {
-  const [appState, setAppState] = useState(loadApp);
+  const [appState, setAppState, boardDecision, commitBoardAdd] = useBoardPhotoState(loadApp);
   const casinoSync = useCasinoAccountSync(appState,setAppState);
   const [initialUiState] = useState(loadRouletteUiState);
   const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
@@ -63,7 +63,8 @@ export default function App() {
   const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
   const [spinCorrection, setSpinCorrection] = useState(null); // {index} while the number picker for a recent spin is open
   const {boardReturn, setBoardReturn, setBoardAdd, addBoardNumbers} = useBoardPhotoReturn(
-    appState.currentSession, appMode, setAppMode, casinoSync.status, tapNumber);
+    appState.currentSession, appMode, setAppMode, casinoSync.status, boardDecision, commitBoardAdd,
+    {setPrevSessState, setResult, setLastSpinDelta, setFlashNum, liveRecording, vibration:(appState.settings||{}).vibration});
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{

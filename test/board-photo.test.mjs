@@ -26,7 +26,7 @@ async function loadSlice({ framed = false, app = false, mutate = (source) => sou
   const build = app && await readFile(new URL("../nexus-src/build.js", import.meta.url), "utf8");
   const files = app ? [...build.match(/const FILES = \[([\s\S]*?)\];/)[1].matchAll(/^\s*\x27([^\x27]+)\x27/gm)].map(m => m[1]) : SLICE;
   const sources = await Promise.all(files.map((f) => readFile(new URL(f, SRC), 'utf8')));
-  const combined = mutate(files.map((f, i) => `\n// ===== ${f} =====\n${sources[i]}`).join('\n'));
+  const combined = mutate(files.map((f, i) => `\n// ===== ${f} =====\n${sources[i]}`).join('\n').replace(/\r\n?/g, '\n'));
   let code = compiledSlices.get(combined);
   if (!code) {
     ({ code } = transformSync(combined, {
@@ -470,13 +470,49 @@ test('a pulled result waits for account hydration and validates against the rest
   finalCleanup();
 });
 
+// React 18's real concurrent root and scheduler, with a null host tree. Host tasks are held so a
+// sync receipt can arrive after a queue commit but before its passive effect, exactly as in M2.
+async function realReactRoot({strict = false, development = false} = {}) {
+  const tasks = new Map();
+  let nextTask = 0, clock = 0, commits = 0;
+  const document = {nodeType:9, addEventListener() {}, removeEventListener() {}, activeElement:null};
+  const container = {nodeType:1, tagName:'DIV', namespaceURI:'http://www.w3.org/1999/xhtml',
+    ownerDocument:document, addEventListener() {}, removeEventListener() {}, textContent:''};
+  const host = {console, document, HTMLIFrameElement:class {},
+    performance:{now:() => clock},
+    setTimeout(run) { const id = ++nextTask; tasks.set(id, run); return id; },
+    clearTimeout(id) { tasks.delete(id); }};
+  host.window = host; host.self = host;
+  vm.createContext(host);
+  const variant = development ? 'development.js' : 'production.min.js';
+  for (const file of ['react/umd/react.' + variant, 'react-dom/umd/react-dom.' + variant]) {
+    vm.runInContext(await readFile(new URL('../node_modules/' + file, import.meta.url), 'utf8'), host, {filename:file});
+  }
+  assert.match(host.React.version, /^18\./, 'the regression runs real React 18');
+  const root = host.ReactDOM.createRoot(container);
+  return {React:host.React, get pending() { return tasks.size > 0; }, get commits() { return commits; },
+    render(run) {
+      function Probe() {
+        run();
+        host.React.useLayoutEffect(() => { commits++; clock += 10; });
+        return null;
+      }
+      const element = host.React.createElement(Probe);
+      root.render(strict ? host.React.createElement(host.React.StrictMode, null, element) : element);
+    },
+    step() { const task = tasks.entries().next().value; if(task) { tasks.delete(task[0]); task[1](); } },
+    unmount() { root.unmount(); tasks.clear(); },
+  };
+}
+
 // Execute the actual App and all of its effects. The hook runner models batched render/effect turns;
 // only browser timers, storage and the recording transport are replaced. Account sync is real.
-async function mountApp({framed = true, hash = '', wheel = 'american', mutate} = {}) {
+async function mountApp({framed = true, hash = '', wheel = 'american', mutate, runtime} = {}) {
   const hooks = [];
   const effects = [];
   const timers = new Map();
   const recordings = [];
+  const recordingStates = [];
   const spinWrites = [];
   const saves = [];
   let cursor = 0, dirty = true, tree;
@@ -489,7 +525,7 @@ async function mountApp({framed = true, hash = '', wheel = 'american', mutate} =
       if (!slot.set) slot.set = value => {
         const next = typeof value === 'function' ? value(slot.value) : value;
         if (!Object.is(next, slot.value)) {
-          if (i === 0 && JSON.stringify(next.currentSession.spins) !== JSON.stringify(slot.value.currentSession.spins)) spinWrites.push(plain(next.currentSession.spins));
+          if (i === 0 && JSON.stringify(next.appState.currentSession.spins) !== JSON.stringify(slot.value.appState.currentSession.spins)) spinWrites.push(plain(next.appState.currentSession.spins));
           slot.value = next;
           dirty = true;
         }
@@ -512,8 +548,16 @@ async function mountApp({framed = true, hash = '', wheel = 'american', mutate} =
       }
     },
   };
-  const bridge = await loadSlice({framed, app: true, mutate, react});
+  const bridge = await loadSlice({framed, app: true, mutate, react:runtime ? runtime.React : react});
   const {ctx} = bridge;
+  let committedState, appSetter;
+  const boardActions = [];
+  const usePhotoState = ctx.useBoardPhotoState;
+  ctx.useBoardPhotoState = load => {
+    const value = usePhotoState(load);
+    [committedState, appSetter] = value;
+    return [value[0], value[1], value[2], action => { boardActions.push(plain(action)); value[3](action); }];
+  };
   const initial = plain(ctx.loadApp());
   initial.settings.onboarded = true;
   initial.settings.vibration = false;
@@ -521,7 +565,10 @@ async function mountApp({framed = true, hash = '', wheel = 'american', mutate} =
   initial.currentSession.id = 'photo-session';
   ctx.loadApp = () => plain(initial);
   ctx.saveApp = state => { saves.push(plain(state)); return true; };
-  ctx.useCasinoRecording = mode => ({record: spin => recordings.push({mode, ...plain(spin)})});
+  ctx.useCasinoRecording = mode => ({record: spin => {
+    recordings.push({mode, ...plain(spin)});
+    recordingStates.push(plain(runtime ? committedState : hooks[0].value.appState));
+  }});
   ctx.navigator = {};
   ctx.document = {addEventListener() {}, removeEventListener() {}};
   ctx.location = {hash, pathname: '/roulette/', search: ''};
@@ -537,15 +584,16 @@ async function mountApp({framed = true, hash = '', wheel = 'american', mutate} =
   ctx.clearTimeout = id => timers.delete(id);
   function render() {
     cursor = 0; dirty = false;
-    tree = ctx.module.exports.default();
+    if(runtime) runtime.render(() => { tree = ctx.module.exports.default(); });
+    else tree = ctx.module.exports.default();
   }
   function runEffects() { for (const effect of effects.splice(0)) effect(); }
   async function flush() {
     for (let i = 0; i < 100; i++) {
       if (dirty) render();
-      runEffects();
+      if(runtime) runtime.step(); else runEffects();
       await flushPromises();
-      if (!dirty && effects.length === 0) return;
+      if (!dirty && effects.length === 0 && (!runtime || !runtime.pending)) return;
     }
     assert.fail('App did not settle');
   }
@@ -564,8 +612,8 @@ async function mountApp({framed = true, hash = '', wheel = 'american', mutate} =
     };
     walk(tree);
   }
-  const state = () => hooks[0].value;
-  const restore = session => hooks[0].set({...state(), currentSession: {...state().currentSession, ...session}});
+  const state = () => runtime ? committedState : hooks[0].value.appState;
+  const restore = session => appSetter(previous => ({...previous, currentSession:{...previous.currentSession, ...session}}));
   const review = () => find(ctx.BoardPhotoReview, tree);
   const statusText = () => {
     const tracker = find('TrackerPage', tree);
@@ -576,15 +624,15 @@ async function mountApp({framed = true, hash = '', wheel = 'american', mutate} =
   };
   async function hydrate() {
     await flush(); bridge.hello(); await flush();
-    const request = bridge.posted.find(p => p.data.op === 'readState');
-    assert.ok(request, 'the actual sync hook reads the account');
-    bridge.reply(request, {scope: 'a'.repeat(32), state: null});
+    const requests = bridge.posted.filter(p => p.data.op === 'readState');
+    assert.ok(requests.length, 'the actual sync hook reads the account');
+    for (const request of requests) bridge.reply(request, {scope: 'a'.repeat(32), state: null});
     await flush();
     assert.ok(bridge.posted.some(p => p.data.op === 'writeState'), 'account sync is now syncing');
   }
-  return {...bridge, flush, render, runEffects, state, restore, review, statusText, live, hydrate, recordings, spinWrites, saves, timers,
+  return {...bridge, flush, render, runEffects, state, restore, review, statusText, live, hydrate, recordings, recordingStates, spinWrites, saves, timers, boardActions,
     pressAdd(numbers) { const element = review(); assert.ok(element, 'review is visible'); element.props.onAdd(numbers || element.props.numbers); },
-    unmount() { for (const slot of hooks) if (slot && slot.cleanup) slot.cleanup(); },
+    unmount() { if(runtime) runtime.unmount(); else for (const slot of hooks) if (slot && slot.cleanup) slot.cleanup(); },
   };
 }
 
@@ -608,7 +656,7 @@ async function explicitAddScenario(mutate) {
     app.pressAdd();
     await app.flush();
     assert.deepEqual(plain(app.state().currentSession.spins), ['00', '0', '16']);
-    assert.equal(app.spinWrites.length, 3);
+    assert.equal(app.spinWrites.length, 1, 'the whole list is one state mutation');
     assert.deepEqual(app.recordings.map(spin => spin.segment), ['00', '0', '16']);
     assert.deepEqual(app.saves.at(-1).currentSession.spins, ['00', '0', '16']);
   } finally { app.unmount(); }
@@ -664,8 +712,7 @@ test('App: ok:00 while syncing American, then conflict restore to European, then
 const unboundMutant = source => source
   .replace('bound.sessionId === session.id && bound.wheel === session.roulette', 'true')
   .replace('scope.current.id !== session.id || scope.current.wheel !== session.roulette', 'false')
-  .replaceAll('!legalBoardList(listBoardOrder, live.current.roulette)', 'false')
-  .replaceAll('!legalBoardList(queue.numbers, live.current.roulette)', 'false');
+  .replace('!legalBoardList(action.numbers, session.roulette)', 'false');
 
 test('the sync-restore reproduction kills the stale unvalidated Add mutant', async () => {
   await assert.rejects(() => syncRestoreScenario(unboundMutant), /sync restored European session must get no 00/);
@@ -698,13 +745,14 @@ for (const field of ['wheel', 'session']) {
 }
 
 test('Add revalidates the whole edited list and refuses it without partial writes', async () => {
-  for (const numbers of [['17', '37', '4'], ['17', '00', '4'], Array(41).fill('5')]) {
+  for (const numbers of [['17', '37', '4'], ['17', '00', '4'], Array(41).fill('5'), [], Array(2)]) {
     const app = await mountApp({framed: false, wheel: 'european', hash: '#readboard=ok:17,4'});
     try {
       await app.flush(); app.live(); await app.flush();
       app.pressAdd(numbers); await app.flush();
       assert.deepEqual(plain(app.state().currentSession.spins), []);
       assert.equal(app.recordings.length, 0);
+      assert.equal(app.statusText(), 'Session or wheel changed, read again');
     } finally { app.unmount(); }
   }
 });
@@ -738,15 +786,15 @@ test('pending framed replies are discarded when their session or wheel changes',
   }
 });
 
-test('session or wheel changes drop the remaining Add queue before another spin writes', async () => {
+test('session or wheel changes before the queued Add refuse the whole list', async () => {
   for (const change of [{roulette: 'european'}, {id: 'other-session'}]) {
     const app = await deliverApp('ok:17,4,0');
     try {
-      app.pressAdd(); app.render(); app.runEffects(); // exactly the first queued tap
-      assert.deepEqual(plain(app.state().currentSession.spins), ['0']);
+      app.pressAdd(); app.render(); // queue committed; its passive effect has not run
       app.restore(change); await app.flush();
-      assert.deepEqual(plain(app.state().currentSession.spins), ['0']);
-      assert.deepEqual(app.recordings.map(spin => spin.segment), ['0']);
+      assert.deepEqual(plain(app.state().currentSession.spins), []);
+      assert.equal(app.recordings.length, 0);
+      assert.equal(app.statusText(), 'Session or wheel changed, read again');
     } finally { app.unmount(); }
   }
 });
@@ -754,4 +802,78 @@ test('session or wheel changes drop the remaining Add queue before another spin 
 test('the changed-wheel Add test kills a silent refusal mutant', async () => {
   const mutant = source => source.replace('changed: "Session or wheel changed, read again"', 'changed: ""');
   await assert.rejects(() => syncRestoreScenario(mutant), /changed-wheel Add explains why nothing was written/);
+});
+
+// The successful sync receipt calls casino-sync's real applySnapshot after the Add queue render
+// commits, while React's scheduler is still holding that render's passive effects.
+async function receiptBeforePassiveScenario(mutate, change = {id:'restored-session', roulette:'european'}, fragment = 'ok:00') {
+  const runtime = await realReactRoot();
+  const app = await deliverApp(fragment, {runtime, mutate});
+  try {
+    const restored = {...plain(app.state()), currentSession:{...plain(app.state().currentSession), ...change}};
+    const snapshot = app.ctx.rouletteSnapshot(restored, {modifiedAt:Date.now()+1000, resetAt:0});
+    const pending = app.posted.find(p => p.data.op === 'writeState');
+    app.reply(pending, {state:{revision:1, data:snapshot}}, {ok:false, status:409});
+    await app.flush();
+    const retry = app.posted.filter(p => p.data.op === 'writeState').at(-1);
+    assert.notEqual(retry, pending);
+    assert.ok(app.review(), 'American review remains visible while the receipt is pending');
+    app.pressAdd();
+    const commits = runtime.commits;
+    runtime.step();
+    assert.equal(runtime.commits, commits+1, 'the real React queue render committed');
+    assert.equal(app.review(), null, 'Add closed the review in that commit');
+    assert.equal(app.boardActions.length, 0, 'the queue passive effect has not run');
+    assert.equal(app.recordings.length, 0);
+    app.reply(retry, {state:{revision:2, data:snapshot}});
+    await flushPromises();
+    assert.deepEqual(app.saves.at(-1).currentSession, restored.currentSession, 'the actual sync restore arrived before the passive effect');
+    assert.equal(app.boardActions.length, 0, 'restore arrival did not flush the passive effect');
+    await app.flush();
+    assert.equal(app.boardActions.length, 1, 'the stale queue attempted its atomic action');
+    assert.deepEqual(plain(app.state().currentSession.spins), [], 'receipt-before-passive: restored session must have zero spins');
+    assert.equal(app.recordings.length, 0, 'receipt-before-passive: refused action must have zero recording calls');
+    assert.equal(app.statusText(), 'Session or wheel changed, read again');
+  } finally { app.unmount(); }
+}
+
+test('real React 18: Add queue commits, European sync restore arrives before passive effects, zero spins and recordings', async () => {
+  await receiptBeforePassiveScenario();
+});
+
+const liveRefMutant = source => {
+  const guard = '!boardMatchesSession(action, session) || !legalBoardList(action.numbers, session.roulette)';
+  assert.equal(source.split(guard).length, 2, 'atomic guard mutation matches exactly once');
+  return source.replace(guard, '!action.validated')
+    .replace('  const bind = result =>', '  const live = React.useRef(session); live.current = session;\n  const bind = result =>')
+    .replace('commitBoardAdd(queue);', 'commitBoardAdd({...queue, validated:boardMatchesSession(queue, live.current) && legalBoardList(queue.numbers, live.current.roulette)});');
+};
+
+test('the real React receipt-before-passive regression kills the live.current validation mutant', async () => {
+  await assert.rejects(() => receiptBeforePassiveScenario(liveRefMutant), /receipt-before-passive: restored session must have zero spins/);
+});
+
+test('real React 18 atomic Add checks session id and wheel independently even for legal numbers', async () => {
+  await receiptBeforePassiveScenario(undefined, {id:'another-session'}, 'ok:17');
+  await receiptBeforePassiveScenario(undefined, {roulette:'european'}, 'ok:17');
+});
+
+test('real React 18 records accepted batches after commit, once, including development Strict Mode', async () => {
+  for (const development of [false, true]) {
+    const runtime = await realReactRoot({strict:true, development});
+    const app = await deliverApp('ok:16,0,00', {runtime});
+    try {
+      assert.equal(app.recordings.length, 0);
+      app.pressAdd();
+      runtime.step();
+      assert.equal(app.recordings.length, 0, 'the queue commit cannot record');
+      await app.flush();
+      assert.deepEqual(plain(app.state().currentSession.spins), ['00','0','16']);
+      assert.deepEqual(app.recordings.map(spin => spin.segment), ['00','0','16']);
+      assert.ok(app.recordingStates.every(state => JSON.stringify(state.currentSession.spins) === '["00","0","16"]'), 'each recording observes the accepted state already committed');
+      assert.ok(app.saves.every(state => !('decision' in state) && !('appState' in state)), 'decision receipts never enter persisted app state');
+      app.restore({name:'After receipt'}); await app.flush();
+      assert.equal(app.recordings.length, 3, 'a later render cannot record the accepted receipt again');
+    } finally { app.unmount(); }
+  }
 });

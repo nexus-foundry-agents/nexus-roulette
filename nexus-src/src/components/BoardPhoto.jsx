@@ -1,8 +1,8 @@
 // -- Board photo reader (the Roulette side of F3.2) --
 // The photo page is a separate service. Roulette sends the user there in this tab and reads back what it returns, which
 // arrives in location.hash as #readboard=... That return is untrusted input. It is parsed strictly and removed from the
-// URL at once. Nothing reaches the session until the user presses Add, and Add enters the numbers through the live tap
-// path (App.jsx). The URL, the parse and the add order are pure: anything they read from the browser is passed in.
+// URL at once. Nothing reaches the session until the user presses Add. Its atomic action uses the shared live settlement
+// path. The URL, the parse and the add order are pure: anything they read from the browser is passed in.
 
 const BOARD_PHOTO_URLS = {
   american: "https://nexusfoundry.app/roulette/read-board?wheel=american",
