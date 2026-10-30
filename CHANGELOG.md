@@ -1,11 +1,15 @@
 # Changelog
 
-Last Updated: 2026-10-29
+Last Updated: 2026-10-30
 
 Notable code and documentation changes are recorded here. Release versions are assigned only when
 `develop` is promoted to `main`; feature-branch work remains under Unreleased.
 
 ## [Unreleased]
+
+### Changed
+
+- The photo reader's "busy" line now reads "Reader busy or warming up, retry in 30 s". The PC loads its reading model in the background on a cold read and answers busy straight away, so this line also covers the warm-up.
 
 ### Added
 

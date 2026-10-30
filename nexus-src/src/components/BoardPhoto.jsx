@@ -16,7 +16,7 @@ const BOARD_STATUS_HEIGHT = 16; // the status slot's reserved height (shared rul
 const BOARD_STATUS_LINES = {
   changed: "Session or wheel changed, read again",
   offline: "PC offline, photo reading unavailable",
-  busy: "Photo reading busy, try again",
+  busy: "Reader busy or warming up, retry in 30 s",
   timeout: "Photo reading timed out, try again",
   unreadable: "Could not read numbers from that photo",
   unavailable: "Photo reading unavailable right now",
