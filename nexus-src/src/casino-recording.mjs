@@ -13,6 +13,9 @@ export const CASINO_BRIDGE_OPERATIONS = [
   'deleteSession', 'readState', 'writeState',
 ];
 
+// Shell UI requests are separate from the mirrored recording/HTTP contract.
+export const CASINO_UI_OPERATIONS = ['openReadBoard', 'readBoardResult'];
+
 const casinoBridge = {
   installed: false,
   ready: false,
@@ -76,7 +79,7 @@ function askCasino(op, payload) {
   if(!casinoBridge.ready || window.parent === window) {
     return Promise.resolve({ok:false,status:0,error:'not-framed'});
   }
-  if(CASINO_BRIDGE_OPERATIONS.indexOf(op) < 0) {
+  if(CASINO_BRIDGE_OPERATIONS.indexOf(op) < 0 && CASINO_UI_OPERATIONS.indexOf(op) < 0) {
     return Promise.resolve({ok:false,status:400,error:'unknown operation'});
   }
   const id = 'roulette-'+(++casinoBridge.counter)+'-'+op;
@@ -88,6 +91,18 @@ function askCasino(op, payload) {
     casinoBridge.pending.set(id, function(result){ clearTimeout(timer); resolve(result); });
     window.parent.postMessage({kind:CASINO_BRIDGE_REQUEST,id,op,payload:payload||{}},CASINO_SHELL_ORIGIN);
   });
+}
+
+// Do not wait for hello here: the shell must receive this request during the tap's activation.
+export function openCasinoReadBoard(wheel) {
+  if(wheel !== 'american' && wheel !== 'european') {
+    return Promise.resolve({ok:false,status:400,error:'invalid wheel'});
+  }
+  return askCasino('openReadBoard',{wheel});
+}
+
+export function takeCasinoReadBoard() {
+  return askCasino('readBoardResult');
 }
 
 function casinoSession(body) {

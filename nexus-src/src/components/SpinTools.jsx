@@ -1,4 +1,4 @@
-// -- Live-mode spin tools: the Clear numbers row with its inline Undo, and the recent-numbers strip --
+// -- Live-mode spin tools: the Read board photo button and the Clear numbers row with its inline Undo, and the recent-numbers strip --
 // Every slot here holds its height whether or not it has anything in it, so clearing the numbers changes
 // what is shown inside a slot and moves nothing below it (shared rule 82). App.jsx owns the state (confirm
 // open, undo offered, the snapshot) and passes it in. A long-press on a recent number asks App to open the
@@ -20,16 +20,20 @@ const LONG_PRESS_SLOP_PX = 8;
 // App provides the function that opens the picker for a spin index. Outside App it is null and a press does nothing.
 const SpinCorrectionContext = React.createContext(null);
 
-function SpinTools({spinCount, confirmOpen, undoVisible, onAsk, onCancel, onConfirm, onUndo}) {
+function SpinTools({spinCount, confirmOpen, undoVisible, onAsk, onCancel, onConfirm, onUndo, onReadPhoto}) {
   const hasSpins = spinCount > 0;
   const noun = spinCount === 1 ? "spin" : "spins";
   const confirmBody = `Removes the ${spinCount} ${noun} from this session. Each track's bets and progression level restart at zero. Bankroll, buy-ins, cash-outs and track profit and loss are not changed. Undo stays available until the next spin, or for 15 seconds.`;
-  // Clear numbers and the undo notice share one grid cell, so the cell is as large as the larger of the two.
-  // Only the one that applies is visible; the other keeps its place.
-  const cell = (shown) => ({gridRow:1, gridColumn:1, justifySelf:"end", alignSelf:"center", visibility:shown?"visible":"hidden"});
+  // Clear numbers and the undo notice share grid column 2, so the column is as wide as the larger of the two. Only the
+  // one that applies is visible; the other keeps its place. Read board photo has column 1 to itself and is always shown.
+  const cell = (shown) => ({gridRow:1, gridColumn:2, justifySelf:"end", alignSelf:"center", visibility:shown?"visible":"hidden"});
   return (
     <>
-      <div style={{display:"grid",alignItems:"center",justifyItems:"end",minHeight:SPIN_TOOLS_ROW_HEIGHT,width:"100%",boxSizing:"border-box"}}>
+      <div style={{display:"grid",gridTemplateColumns:"auto auto",justifyContent:"space-between",alignItems:"center",justifyItems:"end",minHeight:SPIN_TOOLS_ROW_HEIGHT,width:"100%",boxSizing:"border-box"}}>
+        <button type="button" onClick={onReadPhoto}
+          style={{gridRow:1,gridColumn:1,justifySelf:"start",alignSelf:"center",padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+          Read board photo
+        </button>
         <button type="button" disabled={!hasSpins} aria-hidden={undoVisible} onClick={onAsk}
           style={{...cell(!undoVisible),padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:hasSpins?"#94a3b8":"#374151",fontSize:11,fontWeight:700,cursor:hasSpins?"pointer":"not-allowed"}}>
           Clear numbers
@@ -122,28 +126,26 @@ function RecentNumbersStrip({spins, trackOverlays}) {
   );
 }
 
-// The number picker for one recent spin. Choosing a number corrects that spin at once: a single selection acts on
-// selection, with no confirm step. The numbers are the wheel's own (0, 00 on an American wheel, then 1-36). When
-// blockedReason is set the session cannot be corrected, so every number is disabled and the reason is shown.
-// The shared Modal draws it over the page and dismisses it, so opening it moves nothing.
-function SpinNumberPicker({spinIndex, spinCount, currentValue, roulette, blockedReason, onChoose, onClose}) {
-  const spinNo = spinIndex + 1;
+// The number picker: the shared Modal, listing the wheel's own numbers (0, 00 on an American wheel, then 1-36). A choice
+// acts at once: a single selection acts on selection, with no confirm step. When blocked is set every number is disabled
+// and the note says why. The caller supplies the title, the note and the label each button's aria-label is built from.
+// The list and its look are this one component's, whichever surface opens it (the recent-numbers correction and the
+// board photo review). The shared Modal draws it over the page and dismisses it, so opening it moves nothing.
+function NumberPicker({title, note, blocked, label, currentValue, roulette, onChoose, onClose}) {
   const numbers = getWheelNumbers(roulette);
   return (
     <Modal onClose={onClose}>
-      <div style={{fontSize:17,fontWeight:800,color:"#e2e8f0",marginBottom:6}}>Correct spin {spinNo} of {spinCount}</div>
-      <div style={{fontSize:12,color:blockedReason?"#fbbf24":"#94a3b8",lineHeight:1.5,marginBottom:12}}>
-        {blockedReason || `This spin is recorded as ${currentValue}. Choosing a number replaces it and recalculates the session from the corrected spins.`}
-      </div>
+      <div style={{fontSize:17,fontWeight:800,color:"#e2e8f0",marginBottom:6}}>{title}</div>
+      <div style={{fontSize:12,color:blocked?"#fbbf24":"#94a3b8",lineHeight:1.5,marginBottom:12}}>{note}</div>
       <div role="group" aria-label="Wheel numbers" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(42px,1fr))",gap:6,marginBottom:14}}>
         {numbers.map(n => {
           const isCurrent = n===currentValue;
           const isZ = n==="0"||n==="00";
           const isRed = !isZ && RED.has(+n);
           return (
-            <button key={n} type="button" disabled={!!blockedReason} aria-pressed={isCurrent}
-              aria-label={`Set spin ${spinNo} to ${n}`} onClick={()=>onChoose(n)}
-              style={{height:42,borderRadius:8,border:isCurrent?"2px solid #fbbf24":"1px solid #2d4057",background:isZ?"#166534":isRed?"#7f1d1d":"#0d1117",color:isZ?"#bbf7d0":isRed?"#fecaca":"#f1f5f9",fontSize:14,fontWeight:800,cursor:blockedReason?"not-allowed":"pointer",opacity:blockedReason?0.4:1}}>
+            <button key={n} type="button" disabled={blocked} aria-pressed={isCurrent}
+              aria-label={`Set ${label} to ${n}`} onClick={()=>onChoose(n)}
+              style={{height:42,borderRadius:8,border:isCurrent?"2px solid #fbbf24":"1px solid #2d4057",background:isZ?"#166534":isRed?"#7f1d1d":"#0d1117",color:isZ?"#bbf7d0":isRed?"#fecaca":"#f1f5f9",fontSize:14,fontWeight:800,cursor:blocked?"not-allowed":"pointer",opacity:blocked?0.4:1}}>
               {n}
             </button>
           );
@@ -151,5 +153,17 @@ function SpinNumberPicker({spinIndex, spinCount, currentValue, roulette, blocked
       </div>
       <button type="button" onClick={onClose} style={{width:"100%",padding:"14px 0",borderRadius:12,border:"1px solid #2d4057",background:"#0f1923",color:"#94a3b8",fontSize:15,fontWeight:800,cursor:"pointer"}}>Cancel</button>
     </Modal>
+  );
+}
+
+// The number picker for one recent spin (the long-press correction). Choosing a number corrects that spin at once. When
+// blockedReason is set the session cannot be corrected, so every number is disabled and the reason is shown.
+function SpinNumberPicker({spinIndex, spinCount, currentValue, roulette, blockedReason, onChoose, onClose}) {
+  const spinNo = spinIndex + 1;
+  return (
+    <NumberPicker title={`Correct spin ${spinNo} of ${spinCount}`}
+      note={blockedReason || `This spin is recorded as ${currentValue}. Choosing a number replaces it and recalculates the session from the corrected spins.`}
+      blocked={!!blockedReason} label={`spin ${spinNo}`}
+      currentValue={currentValue} roulette={roulette} onChoose={onChoose} onClose={onClose}/>
   );
 }

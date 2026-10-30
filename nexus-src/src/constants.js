@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.49.0";
+const APP_VERSION = "0.50.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,10 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.50.0", date:"Oct 30, 2026", title:"Read the Board From a Photo", changes:[
+    "Read board photo: snap the table's recent-numbers board and the numbers come back for you to check; nothing is added until you press Add",
+    "Works standalone and inside Nexus Casino; the reader runs on your own PC, and the first read after a while can take about a minute to warm up",
+  ]},
   { v:"0.49.0", date:"Oct 29, 2026", title:"Fix a Wrong Number", changes:[
     "Long-press any recent number to correct it; every tracker, bet and your bankroll are recalculated as if the right number had been entered",
   ]},

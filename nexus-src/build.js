@@ -39,6 +39,10 @@ const FILES = [
   'components/modals.jsx',
   // Live-mode spin tools (clear numbers with inline undo) and the recent-numbers strip — depends on ui (Modal) and constants
   'components/SpinTools.jsx',
+  // Board photo reader (F3.2) — the photo button's destination, the return-hash parse, the status line and the review.
+  // Depends on ui (Modal), SpinTools (NumberPicker) and constants (getWheelNumbers, RED).
+  'components/BoardPhoto.jsx',
+  'board-return.mjs',
   // Sim UI — depends on simulation + ui + engine
   'components/SimModePage.jsx',
   // Secondary pages split from App.jsx before the Casino bridge was added.
