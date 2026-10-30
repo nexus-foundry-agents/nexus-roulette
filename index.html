@@ -1009,11 +1009,11 @@ exports.useCasinoRecording = useCasinoRecording;
 exports.writeRouletteStorage = writeRouletteStorage;
 exports.zeroCellBet = zeroCellBet;
 var _react = require("react");
-function _toArray(r) { return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest(); }
 function _regenerator() { /*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/babel/babel/blob/main/packages/babel-helpers/LICENSE */ var e, t, r = "function" == typeof Symbol ? Symbol : {}, n = r.iterator || "@@iterator", o = r.toStringTag || "@@toStringTag"; function i(r, n, o, i) { var c = n && n.prototype instanceof Generator ? n : Generator, u = Object.create(c.prototype); return _regeneratorDefine2(u, "_invoke", function (r, n, o) { var i, c, u, f = 0, p = o || [], y = !1, G = { p: 0, n: 0, v: e, a: d, f: d.bind(e, 4), d: function d(t, r) { return i = t, c = 0, u = e, G.n = r, a; } }; function d(r, n) { for (c = r, u = n, t = 0; !y && f && !o && t < p.length; t++) { var o, i = p[t], d = G.p, l = i[2]; r > 3 ? (o = l === n) && (u = i[(c = i[4]) ? 5 : (c = 3, 3)], i[4] = i[5] = e) : i[0] <= d && ((o = r < 2 && d < i[1]) ? (c = 0, G.v = n, G.n = i[1]) : d < l && (o = r < 3 || i[0] > n || n > l) && (i[4] = r, i[5] = n, G.n = l, c = 0)); } if (o || r > 1) return a; throw y = !0, n; } return function (o, p, l) { if (f > 1) throw TypeError("Generator is already running"); for (y && 1 === p && d(p, l), c = p, u = l; (t = c < 2 ? e : u) || !y;) { i || (c ? c < 3 ? (c > 1 && (G.n = -1), d(c, u)) : G.n = u : G.v = u); try { if (f = 2, i) { if (c || (o = "next"), t = i[o]) { if (!(t = t.call(i, u))) throw TypeError("iterator result is not an object"); if (!t.done) return t; u = t.value, c < 2 && (c = 0); } else 1 === c && (t = i.return) && t.call(i), c < 2 && (u = TypeError("The iterator does not provide a '" + o + "' method"), c = 1); i = e; } else if ((t = (y = G.n < 0) ? u : r.call(n, G)) !== a) break; } catch (t) { i = e, c = 1, u = t; } finally { f = 1; } } return { value: t, done: y }; }; }(r, o, i), !0), u; } var a = {}; function Generator() {} function GeneratorFunction() {} function GeneratorFunctionPrototype() {} t = Object.getPrototypeOf; var c = [][n] ? t(t([][n]())) : (_regeneratorDefine2(t = {}, n, function () { return this; }), t), u = GeneratorFunctionPrototype.prototype = Generator.prototype = Object.create(c); function f(e) { return Object.setPrototypeOf ? Object.setPrototypeOf(e, GeneratorFunctionPrototype) : (e.__proto__ = GeneratorFunctionPrototype, _regeneratorDefine2(e, o, "GeneratorFunction")), e.prototype = Object.create(u), e; } return GeneratorFunction.prototype = GeneratorFunctionPrototype, _regeneratorDefine2(u, "constructor", GeneratorFunctionPrototype), _regeneratorDefine2(GeneratorFunctionPrototype, "constructor", GeneratorFunction), GeneratorFunction.displayName = "GeneratorFunction", _regeneratorDefine2(GeneratorFunctionPrototype, o, "GeneratorFunction"), _regeneratorDefine2(u), _regeneratorDefine2(u, o, "Generator"), _regeneratorDefine2(u, n, function () { return this; }), _regeneratorDefine2(u, "toString", function () { return "[object Generator]"; }), (_regenerator = function _regenerator() { return { w: i, m: f }; })(); }
 function _regeneratorDefine2(e, r, n, t) { var i = Object.defineProperty; try { i({}, "", {}); } catch (e) { i = 0; } _regeneratorDefine2 = function _regeneratorDefine(e, r, n, t) { function o(r, n) { _regeneratorDefine2(e, r, function (e) { return this._invoke(r, n, e); }); } r ? i ? i(e, r, { value: n, enumerable: !t, configurable: !t, writable: !t }) : e[r] = n : (o("next", 0), o("throw", 1), o("return", 2)); }, _regeneratorDefine2(e, r, n, t); }
 function asyncGeneratorStep(n, t, e, r, o, a, c) { try { var i = n[a](c), u = i.value; } catch (n) { return void e(n); } i.done ? t(u) : Promise.resolve(u).then(r, o); }
 function _asyncToGenerator(n) { return function () { var t = this, e = arguments; return new Promise(function (r, o) { var a = n.apply(t, e); function _next(n) { asyncGeneratorStep(a, r, o, _next, _throw, "next", n); } function _throw(n) { asyncGeneratorStep(a, r, o, _next, _throw, "throw", n); } _next(void 0); }); }; }
+function _toArray(r) { return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest(); }
 function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
 function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
 function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t.return && (u = t.return(), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
@@ -7584,6 +7584,7 @@ var BOARD_STATUS_HEIGHT = 16; // the status slot's reserved height (shared rule 
 
 // One short plain line per status. "canceled" is a legal return that shows nothing.
 var BOARD_STATUS_LINES = {
+  changed: "Session or wheel changed, read again",
   offline: "PC offline, photo reading unavailable",
   busy: "Photo reading busy, try again",
   timeout: "Photo reading timed out, try again",
@@ -7665,12 +7666,16 @@ function takeBoardReturn(loc, hist, wheel) {
 }
 
 // Pull once after hello, including when hello preceded this effect. Keep the request across effect restarts so a
-// consumed shell result cannot be lost to Strict Mode cleanup. The active effect validates for its current live wheel.
-function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
+// consumed shell result cannot be lost to Strict Mode cleanup. Once account hydration finishes, an in-flight reply
+// belongs to that session/wheel; changing either discards it even before it resolves.
+function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus, sessionId) {
   var pull = React.useRef({
     request: null,
-    consumed: false
+    consumed: false,
+    scope: null
   });
+  var slot = pull.current;
+  if (slot.scope && (slot.scope.id !== sessionId || slot.scope.wheel !== wheel)) slot.consumed = true;
   React.useEffect(function () {
     if (window.parent === window) return;
     installCasinoBridge();
@@ -7678,6 +7683,10 @@ function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
     var ready = function ready() {
       var slot = pull.current;
       if (!casinoBridge.ready || slot.consumed) return;
+      if (!slot.scope && syncStatus !== "checking") slot.scope = {
+        id: sessionId,
+        wheel: wheel
+      };
       if (!slot.request) slot.request = takeCasinoReadBoard();
       slot.request.then(function (reply) {
         // The account may restore a European wheel after the shell result arrives.
@@ -7696,7 +7705,7 @@ function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
       active = false;
       casinoBridge.listeners.delete(ready);
     };
-  }, [wheel, setAppMode, setBoardReturn, syncStatus]);
+  }, [wheel, sessionId, setAppMode, setBoardReturn, syncStatus]);
 }
 
 // The board lists the most recent number first. Add enters the numbers oldest first, so the last one entered is the most recent.
@@ -7842,6 +7851,107 @@ function BoardPhotoReview(_ref41) {
       return setPicking(null);
     }
   }));
+}
+
+// ===== board-return.mjs =====
+// Bind photo input and the Add queue to the live session, including account-sync replacements.
+function boardMatchesSession(bound, session) {
+  return !!bound && bound.sessionId === session.id && bound.wheel === session.roulette;
+}
+function legalBoardList(numbers, wheel) {
+  return Array.isArray(numbers) && numbers.length > 0 && numbers.length <= BOARD_MAX_NUMBERS && numbers.every(function (number) {
+    return getWheelNumbers(wheel).includes(number);
+  });
+}
+function useBoardPhotoReturn(session, appMode, setAppMode, syncStatus, tapNumber) {
+  var live = React.useRef(session);
+  live.current = session;
+  var bind = function bind(result) {
+    return result && {
+      result: result,
+      sessionId: session.id,
+      wheel: session.roulette
+    };
+  };
+  var _React$useState5 = React.useState(function () {
+      return bind(takeBoardReturn(window.location, window.history, session.roulette));
+    }),
+    _React$useState6 = _slicedToArray(_React$useState5, 2),
+    review = _React$useState6[0],
+    setReview = _React$useState6[1];
+  var _React$useState7 = React.useState(null),
+    _React$useState8 = _slicedToArray(_React$useState7, 2),
+    queue = _React$useState8[0],
+    setQueue = _React$useState8[1];
+  var scope = React.useRef({
+    id: session.id,
+    wheel: session.roulette
+  });
+  var setBoardReturn = React.useCallback(function (result) {
+    return setReview(bind(result));
+  }, [session.id, session.roulette]);
+  var setBoardAdd = function setBoardAdd(numbers) {
+    return setQueue({
+      numbers: numbers,
+      sessionId: session.id,
+      wheel: session.roulette
+    });
+  };
+  var boardReturn = boardMatchesSession(review, session) ? review.result : null;
+  useCasinoBoardReturn(session.roulette, setAppMode, setBoardReturn, syncStatus, session.id);
+  React.useEffect(function () {
+    if (scope.current.id !== session.id || scope.current.wheel !== session.roulette) {
+      if (review || queue) reject("changed");
+      setQueue(null);
+      scope.current = {
+        id: session.id,
+        wheel: session.roulette
+      };
+    }
+  }, [session.id, session.roulette]);
+  React.useEffect(function () {
+    if (!queue) return;
+    if (appMode !== "live" || !boardMatchesSession(queue, live.current) || !legalBoardList(queue.numbers, live.current.roulette)) {
+      setQueue(null);
+      return;
+    }
+    var _queue$numbers = _toArray(queue.numbers),
+      val = _queue$numbers[0],
+      rest = _arrayLikeToArray(_queue$numbers).slice(1);
+    tapNumber(val, true);
+    setQueue(rest.length ? _objectSpread(_objectSpread({}, queue), {}, {
+      numbers: rest
+    }) : null);
+  }, [queue, appMode, session.id, session.roulette]);
+  function reject(status) {
+    setReview({
+      result: {
+        kind: "status",
+        status: status
+      },
+      sessionId: live.current.id,
+      wheel: live.current.roulette
+    });
+  }
+  function addBoardNumbers(listBoardOrder) {
+    if (appMode !== "live" || !boardMatchesSession(review, live.current)) {
+      reject("changed");
+      setQueue(null);
+      return;
+    }
+    if (!legalBoardList(listBoardOrder, live.current.roulette)) {
+      reject("unreadable");
+      return;
+    }
+    setReview(null);
+    setBoardAdd(boardAddOrder(listBoardOrder));
+  }
+  return {
+    boardReturn: boardReturn,
+    setBoardReturn: setBoardReturn,
+    setBoardAdd: setBoardAdd,
+    addBoardNumbers: addBoardNumbers
+  };
 }
 
 // ===== components/SimModePage.jsx =====
@@ -14270,33 +14380,11 @@ function App() {
     _useState142 = _slicedToArray(_useState141, 2),
     spinCorrection = _useState142[0],
     setSpinCorrection = _useState142[1]; // {index} while the number picker for a recent spin is open
-  // A board photo read returns in location.hash. It is taken once, here, and removed from the URL at once. A numbers
-  // return waits as a review (live mode only) and a status shows under the spin tools. Nothing is added until Add.
-  var _useState143 = (0, _react.useState)(function () {
-      return takeBoardReturn(window.location, window.history, appState.currentSession.roulette);
-    }),
-    _useState144 = _slicedToArray(_useState143, 2),
-    boardReturn = _useState144[0],
-    setBoardReturn = _useState144[1];
-  useCasinoBoardReturn(appState.currentSession.roulette, setAppMode, setBoardReturn, casinoSync.status);
-  var _useState145 = (0, _react.useState)([]),
-    _useState146 = _slicedToArray(_useState145, 2),
-    boardAdd = _useState146[0],
-    setBoardAdd = _useState146[1]; // numbers still to enter, oldest first; one is entered per render
-  // Add enters the read numbers one tap at a time through tapNumber, the path a live tap takes. Each step is its own
-  // render, so each tap settles on the session the one before it left, as a run of taps does. A mode change mid-run drops the rest.
-  (0, _react.useEffect)(function () {
-    if (boardAdd.length === 0) return;
-    if (appMode !== "live") {
-      setBoardAdd([]);
-      return;
-    }
-    var _boardAdd = _toArray(boardAdd),
-      val = _boardAdd[0],
-      rest = _arrayLikeToArray(_boardAdd).slice(1);
-    tapNumber(val, true);
-    setBoardAdd(rest);
-  }, [boardAdd]);
+  var _useBoardPhotoReturn = useBoardPhotoReturn(appState.currentSession, appMode, setAppMode, casinoSync.status, tapNumber),
+    boardReturn = _useBoardPhotoReturn.boardReturn,
+    setBoardReturn = _useBoardPhotoReturn.setBoardReturn,
+    setBoardAdd = _useBoardPhotoReturn.setBoardAdd,
+    addBoardNumbers = _useBoardPhotoReturn.addBoardNumbers;
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(function () {
@@ -14335,19 +14423,19 @@ function App() {
       return window.removeEventListener('nexus-account-scope-ready', loadScopedUi);
     };
   }, []);
+  var _useState143 = (0, _react.useState)(null),
+    _useState144 = _slicedToArray(_useState143, 2),
+    liveBetResults = _useState144[0],
+    setLiveBetResults = _useState144[1];
+  var _useState145 = (0, _react.useState)([]),
+    _useState146 = _slicedToArray(_useState145, 2),
+    liveUndoStack = _useState146[0],
+    setLiveUndoStack = _useState146[1];
+  var liveClearTimerRef = React.useRef(null);
   var _useState147 = (0, _react.useState)(null),
     _useState148 = _slicedToArray(_useState147, 2),
-    liveBetResults = _useState148[0],
-    setLiveBetResults = _useState148[1];
-  var _useState149 = (0, _react.useState)([]),
-    _useState150 = _slicedToArray(_useState149, 2),
-    liveUndoStack = _useState150[0],
-    setLiveUndoStack = _useState150[1];
-  var liveClearTimerRef = React.useRef(null);
-  var _useState151 = (0, _react.useState)(null),
-    _useState152 = _slicedToArray(_useState151, 2),
-    updateAvailable = _useState152[0],
-    setUpdateAvailable = _useState152[1]; // {version, notes}
+    updateAvailable = _useState148[0],
+    setUpdateAvailable = _useState148[1]; // {version, notes}
 
   // Check for app updates
   (0, _react.useEffect)(function () {
@@ -14367,46 +14455,46 @@ function App() {
       return clearInterval(iv);
     };
   }, []);
+  var _useState149 = (0, _react.useState)(false),
+    _useState150 = _slicedToArray(_useState149, 2),
+    buyInOpen = _useState150[0],
+    setBuyInOpen = _useState150[1];
+  var _useState151 = (0, _react.useState)(false),
+    _useState152 = _slicedToArray(_useState151, 2),
+    currencyOpen = _useState152[0],
+    setCurrencyOpen = _useState152[1];
   var _useState153 = (0, _react.useState)(false),
     _useState154 = _slicedToArray(_useState153, 2),
-    buyInOpen = _useState154[0],
-    setBuyInOpen = _useState154[1];
+    changelogOpen = _useState154[0],
+    setChangelogOpen = _useState154[1];
   var _useState155 = (0, _react.useState)(false),
     _useState156 = _slicedToArray(_useState155, 2),
-    currencyOpen = _useState156[0],
-    setCurrencyOpen = _useState156[1];
+    editBankroll = _useState156[0],
+    setEditBankroll = _useState156[1];
   var _useState157 = (0, _react.useState)(false),
     _useState158 = _slicedToArray(_useState157, 2),
-    changelogOpen = _useState158[0],
-    setChangelogOpen = _useState158[1];
+    cashOutOpen = _useState158[0],
+    setCashOutOpen = _useState158[1];
   var _useState159 = (0, _react.useState)(false),
     _useState160 = _slicedToArray(_useState159, 2),
-    editBankroll = _useState160[0],
-    setEditBankroll = _useState160[1];
+    hardResetOpen = _useState160[0],
+    setHardResetOpen = _useState160[1];
   var _useState161 = (0, _react.useState)(false),
     _useState162 = _slicedToArray(_useState161, 2),
-    cashOutOpen = _useState162[0],
-    setCashOutOpen = _useState162[1];
-  var _useState163 = (0, _react.useState)(false),
+    feedbackOpen = _useState162[0],
+    setFeedbackOpen = _useState162[1];
+  var _useState163 = (0, _react.useState)(""),
     _useState164 = _slicedToArray(_useState163, 2),
-    hardResetOpen = _useState164[0],
-    setHardResetOpen = _useState164[1];
-  var _useState165 = (0, _react.useState)(false),
+    feedbackText = _useState164[0],
+    setFeedbackText = _useState164[1];
+  var _useState165 = (0, _react.useState)("fibonacci"),
     _useState166 = _slicedToArray(_useState165, 2),
-    feedbackOpen = _useState166[0],
-    setFeedbackOpen = _useState166[1];
-  var _useState167 = (0, _react.useState)(""),
+    pendingTrackType = _useState166[0],
+    setPendingTrackType = _useState166[1];
+  var _useState167 = (0, _react.useState)(defaultFibCfg()),
     _useState168 = _slicedToArray(_useState167, 2),
-    feedbackText = _useState168[0],
-    setFeedbackText = _useState168[1];
-  var _useState169 = (0, _react.useState)("fibonacci"),
-    _useState170 = _slicedToArray(_useState169, 2),
-    pendingTrackType = _useState170[0],
-    setPendingTrackType = _useState170[1];
-  var _useState171 = (0, _react.useState)(defaultFibCfg()),
-    _useState172 = _slicedToArray(_useState171, 2),
-    pendingTrackCfg = _useState172[0],
-    setPendingTrackCfg = _useState172[1];
+    pendingTrackCfg = _useState168[0],
+    setPendingTrackCfg = _useState168[1];
   var sessKey = appMode === "game" ? "gameSession" : "currentSession";
   var sess = appState[sessKey] || appState.currentSession;
   var livePauseOffset = livePausedTotal + (livePausedAt ? Date.now() - livePausedAt : 0);
@@ -14419,10 +14507,10 @@ function App() {
   }, [appState]);
 
   // Storage failures surface as a banner, never a blocking browser dialog
-  var _useState173 = (0, _react.useState)(null),
-    _useState174 = _slicedToArray(_useState173, 2),
-    saveError = _useState174[0],
-    setSaveError = _useState174[1];
+  var _useState169 = (0, _react.useState)(null),
+    _useState170 = _slicedToArray(_useState169, 2),
+    saveError = _useState170[0],
+    setSaveError = _useState170[1];
   (0, _react.useEffect)(function () {
     function onSaveError(e) {
       setSaveError(e && e.detail || "Unknown storage error");
@@ -14717,11 +14805,6 @@ function App() {
     setPrevSessState(snapshot.prevSessState);
     setLastSpinDelta(snapshot.lastSpinDelta);
     setClearUndo(null);
-  }
-  // Add on the board photo review: leave the review and queue the numbers, which the effect above enters oldest first.
-  function addBoardNumbers(listBoardOrder) {
-    setBoardReturn(null);
-    setBoardAdd(boardAddOrder(listBoardOrder));
   }
   // Long-press a recent number to correct it. spin-apply.js replays the session with the corrected spin; a session
   // whose record cannot be replayed is refused and nothing changes. The picker reads the same refusal to show it.
@@ -16109,10 +16192,10 @@ function App() {
   // -- Bankroll Edit --
   function BankrollEdit(_ref98) {
     var onClose = _ref98.onClose;
-    var _useState175 = (0, _react.useState)(sess.bankrollCurrent),
-      _useState176 = _slicedToArray(_useState175, 2),
-      val = _useState176[0],
-      setVal = _useState176[1];
+    var _useState171 = (0, _react.useState)(sess.bankrollCurrent),
+      _useState172 = _slicedToArray(_useState171, 2),
+      val = _useState172[0],
+      setVal = _useState172[1];
     function save() {
       updSess(function (s) {
         s.bankrollCurrent = val;

@@ -55,7 +55,10 @@ Agent-active time per worker run (Haiku 5.5, xhigh; Opus supervisor):
 | F3.1d PC frame rule | 1 (Codex Sol 6.1 high) | 20:12 | 20:17 | about 5 min | accepted (709b72a8) |
 | F3.1c Pillow pin | 1 (Codex Sol 6.1 high) | 20:12 | 20:17 | about 5 min | accepted with a seat fix: manifest line reverted (709b72a8) |
 | F3.3b Casino shell | 1 (Codex Sol 6.1 high) | 20:30 | 20:34 | about 8 min | accepted (ec568b9) |
-| F3.3c Roulette framed branch | 1 (Codex Sol 6.1 high) | 20:36 | running | | |
+| F3.3c Roulette framed branch | 1 (Codex Sol 6.1 high) | 20:36 | 20:45 | about 8 min | accepted (d71ef04) |
+| F3.3a NF return allowlist | 1 (Codex Sol 6.1 high) | 20:47 | 20:52 | about 6 min | accepted (71f344d1) |
+| F3.3b review round 2 | 1 (Codex Sol 6.1 high) | 20:55 | running | | |
+| F3.3c review round 2 | 1 (Codex Sol 6.1 high) | 20:55 | running | | |
 | F3.1 review round 4 | 1 (Codex Sol 6.1 high) | 20:34 | 20:38 | about 4 min | accepted (fc010d6b) |
 | F3.1e PC frame set | 1 (Codex Sol 6.1 high) | 20:34 | 20:38 | about 4 min | accepted (b611d096) |
 | F3.1 review round 3 | 1 (Codex Sol 6.1 high) | 20:05 | 20:09 | about 12 min | accepted (423010a1) |

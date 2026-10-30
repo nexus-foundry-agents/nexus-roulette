@@ -62,20 +62,8 @@ export default function App() {
   const [clearOpen, setClearOpen] = useState(false);
   const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
   const [spinCorrection, setSpinCorrection] = useState(null); // {index} while the number picker for a recent spin is open
-  // A board photo read returns in location.hash. It is taken once, here, and removed from the URL at once. A numbers
-  // return waits as a review (live mode only) and a status shows under the spin tools. Nothing is added until Add.
-  const [boardReturn, setBoardReturn] = useState(() => takeBoardReturn(window.location, window.history, appState.currentSession.roulette));
-  useCasinoBoardReturn(appState.currentSession.roulette, setAppMode, setBoardReturn, casinoSync.status);
-  const [boardAdd, setBoardAdd] = useState([]); // numbers still to enter, oldest first; one is entered per render
-  // Add enters the read numbers one tap at a time through tapNumber, the path a live tap takes. Each step is its own
-  // render, so each tap settles on the session the one before it left, as a run of taps does. A mode change mid-run drops the rest.
-  useEffect(() => {
-    if(boardAdd.length===0) return;
-    if(appMode!=="live") { setBoardAdd([]); return; }
-    const [val, ...rest] = boardAdd;
-    tapNumber(val, true);
-    setBoardAdd(rest);
-  }, [boardAdd]);
+  const {boardReturn, setBoardReturn, setBoardAdd, addBoardNumbers} = useBoardPhotoReturn(
+    appState.currentSession, appMode, setAppMode, casinoSync.status, tapNumber);
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
@@ -321,11 +309,6 @@ export default function App() {
     setPrevSessState(snapshot.prevSessState);
     setLastSpinDelta(snapshot.lastSpinDelta);
     setClearUndo(null);
-  }
-  // Add on the board photo review: leave the review and queue the numbers, which the effect above enters oldest first.
-  function addBoardNumbers(listBoardOrder) {
-    setBoardReturn(null);
-    setBoardAdd(boardAddOrder(listBoardOrder));
   }
   // Long-press a recent number to correct it. spin-apply.js replays the session with the corrected spin; a session
   // whose record cannot be replayed is refused and nothing changes. The picker reads the same refusal to show it.

@@ -21,24 +21,31 @@ const SLICE = [
 
 // Loads source files the way build.js does: the same concatenation and transforms, in one shared global scope.
 // Nothing is copied from source; the functions under test are the ones the bundle runs.
-async function loadSlice({ framed = false } = {}) {
-  const sources = await Promise.all(SLICE.map((f) => readFile(new URL(f, SRC), 'utf8')));
-  const combined = SLICE.map((f, i) => `\n// ===== ${f} =====\n${sources[i]}`).join('\n');
-  const { code } = transformSync(combined, {
-    babelrc: false,
-    configFile: false,
-    filename: 'app.jsx',
-    presets: [
-      [presetReact, { runtime: 'classic' }],
-      [presetEnv, { targets: { ie: 11 }, modules: 'commonjs', useBuiltIns: false }],
-    ],
-  });
+const compiledSlices = new Map();
+async function loadSlice({ framed = false, app = false, mutate = (source) => source, react = React } = {}) {
+  const build = app && await readFile(new URL("../nexus-src/build.js", import.meta.url), "utf8");
+  const files = app ? [...build.match(/const FILES = \[([\s\S]*?)\];/)[1].matchAll(/^\s*\x27([^\x27]+)\x27/gm)].map(m => m[1]) : SLICE;
+  const sources = await Promise.all(files.map((f) => readFile(new URL(f, SRC), 'utf8')));
+  const combined = mutate(files.map((f, i) => `\n// ===== ${f} =====\n${sources[i]}`).join('\n'));
+  let code = compiledSlices.get(combined);
+  if (!code) {
+    ({ code } = transformSync(combined, {
+      babelrc: false,
+      configFile: false,
+      filename: 'app.jsx',
+      presets: [
+        [presetReact, { runtime: 'classic' }],
+        [presetEnv, { targets: { ie: 11 }, modules: 'commonjs', useBuiltIns: false }],
+      ],
+    }));
+    compiledSlices.set(combined, code);
+  }
   const store = {};
   const messages = new Set();
   const posted = [];
   const sandbox = {
     console: { log() {}, warn() {}, error() {} },
-    React,
+    React: react,
     setTimeout, clearTimeout,
     addEventListener(name, listener) { if (name === 'message') messages.add(listener); },
     removeEventListener(name, listener) { if (name === 'message') messages.delete(listener); },
@@ -48,7 +55,7 @@ async function loadSlice({ framed = false } = {}) {
       removeItem: (key) => { delete store[key]; },
     },
     require: (name) => {
-      if (name === 'react') return React;
+      if (name === 'react') return react;
       throw new Error(`unexpected module in test slice: ${name}`);
     },
   };
@@ -262,7 +269,7 @@ test('the status slot is reserved whether or not it has a line, and each line is
   assert.equal(textOf(status({ kind: 'status', status: 'canceled' })), '', 'canceled shows nothing');
   assert.equal(textOf(status({ kind: 'numbers', numbers: ['5'] })), '', 'a numbers return is not a status line');
   assert.equal(textOf(status({ kind: 'status', status: 'offline' })), 'PC offline, photo reading unavailable');
-  for (const s of ['offline', 'busy', 'timeout', 'unreadable', 'unavailable', 'limit', 'exif', 'toolarge', 'refused']) {
+  for (const s of ['changed', 'offline', 'busy', 'timeout', 'unreadable', 'unavailable', 'limit', 'exif', 'toolarge', 'refused']) {
     const line = textOf(status({ kind: 'status', status: s }));
     assert.ok(line.length > 0 && line.length <= 40, `${s}: one short line (${line.length} characters)`);
   }
@@ -289,16 +296,10 @@ test('the review corrects a number with the same picker the recent-numbers strip
   assert.match(tools, /<NumberPicker title=\{`Correct spin/, 'the spin correction mounts the same component');
 });
 
-test('nothing settles a spin on read: the reader only parses, and App enters numbers only through its Add queue', async () => {
+test('the photo reader contains no spin settlement or native dialog path', async () => {
   const photo = await readFile(new URL('components/BoardPhoto.jsx', SRC), 'utf8');
   assert.doesNotMatch(photo, /tapNumber|applySpin|updSess|updApp|ghostSpin|correctSpin|setAppState/);
   assert.doesNotMatch(photo, /\b(confirm|alert|prompt)\s*\(/);
-  assert.doesNotMatch(photo, /position:\s*"fixed"/);
-  const app = await readFile(new URL('App.jsx', SRC), 'utf8');
-  assert.equal(app.split('takeBoardReturn(window.location, window.history,').length - 1, 1, 'the return is taken once, in the state initializer');
-  assert.equal(app.split('tapNumber(val, true);').length - 1, 1, 'the only board entry path is the queue effect');
-  assert.match(app, /setBoardAdd\(boardAddOrder\(listBoardOrder\)\);/);
-  assert.match(app, /if\(appMode!=="live"\) \{ setBoardAdd\(\[\]\); return; \}/, 'the queue entry is live only');
 });
 
 test('the review is live-only, the status sits under the spin tools, and a spin entered by hand ends a status', async () => {
@@ -452,7 +453,7 @@ test('standalone never pulls a Casino result, and App only wires the return hook
   assert.equal(posted.length, 0); assert.deepEqual(changes, []);
   if (cleanup) cleanup();
   const app = await readFile(new URL('App.jsx', SRC), 'utf8');
-  assert.match(app, /useCasinoBoardReturn\(appState\.currentSession\.roulette, setAppMode, setBoardReturn, casinoSync\.status\)/);
+  assert.match(app, /useBoardPhotoReturn\(/);
   assert.ok(app.split('\n').length - 1 < 900);
 });
 
@@ -467,4 +468,290 @@ test('a pulled result waits for account hydration and validates against the rest
   assert.equal(posted.length, 1, 'hydration never consumes the shell result twice');
   assert.deepEqual(changes, [['mode', 'live'], ['review', { kind: 'status', status: 'unreadable' }]]);
   finalCleanup();
+});
+
+// Execute the actual App and all of its effects. The hook runner models batched render/effect turns;
+// only browser timers, storage and the recording transport are replaced. Account sync is real.
+async function mountApp({framed = true, hash = '', wheel = 'american', mutate} = {}) {
+  const hooks = [];
+  const effects = [];
+  const timers = new Map();
+  const recordings = [];
+  const spinWrites = [];
+  const saves = [];
+  let cursor = 0, dirty = true, tree;
+  const changed = (before, after) => !before || !after || after.some((value, i) => !Object.is(value, before[i]));
+  const react = {...React,
+    useState(initial) {
+      const i = cursor++;
+      if (!hooks[i]) hooks[i] = {value: typeof initial === 'function' ? initial() : initial};
+      const slot = hooks[i];
+      if (!slot.set) slot.set = value => {
+        const next = typeof value === 'function' ? value(slot.value) : value;
+        if (!Object.is(next, slot.value)) {
+          if (i === 0 && JSON.stringify(next.currentSession.spins) !== JSON.stringify(slot.value.currentSession.spins)) spinWrites.push(plain(next.currentSession.spins));
+          slot.value = next;
+          dirty = true;
+        }
+      };
+      return [slot.value, slot.set];
+    },
+    useRef(initial) { const i = cursor++; return hooks[i] || (hooks[i] = {current: initial}); },
+    useMemo(run, deps) {
+      const i = cursor++;
+      if (!hooks[i] || changed(hooks[i].deps, deps)) hooks[i] = {value: run(), deps};
+      return hooks[i].value;
+    },
+    useCallback(run, deps) { return react.useMemo(() => run, deps); },
+    useEffect(run, deps) {
+      const i = cursor++;
+      if (!hooks[i] || changed(hooks[i].deps, deps)) {
+        const previous = hooks[i];
+        hooks[i] = {deps, cleanup: previous && previous.cleanup};
+        effects.push(() => { if (hooks[i].cleanup) hooks[i].cleanup(); hooks[i].cleanup = run(); });
+      }
+    },
+  };
+  const bridge = await loadSlice({framed, app: true, mutate, react});
+  const {ctx} = bridge;
+  const initial = plain(ctx.loadApp());
+  initial.settings.onboarded = true;
+  initial.settings.vibration = false;
+  initial.currentSession = plain(ctx.newSession(wheel, 500));
+  initial.currentSession.id = 'photo-session';
+  ctx.loadApp = () => plain(initial);
+  ctx.saveApp = state => { saves.push(plain(state)); return true; };
+  ctx.useCasinoRecording = mode => ({record: spin => recordings.push({mode, ...plain(spin)})});
+  ctx.navigator = {};
+  ctx.document = {addEventListener() {}, removeEventListener() {}};
+  ctx.location = {hash, pathname: '/roulette/', search: ''};
+  ctx.history = {state: null, replaceState() { ctx.location.hash = ''; }};
+  ctx.URLSearchParams = URLSearchParams;
+  ctx.CustomEvent = class { constructor(type) { this.type = type; } };
+  ctx.dispatchEvent = () => {};
+  ctx.fetch = async () => ({json: async () => ({})});
+  ctx.setInterval = () => 1;
+  ctx.clearInterval = () => {};
+  let timerId = 0;
+  ctx.setTimeout = (run, delay) => { const id = ++timerId; timers.set(id, {run, delay}); return id; };
+  ctx.clearTimeout = id => timers.delete(id);
+  function render() {
+    cursor = 0; dirty = false;
+    tree = ctx.module.exports.default();
+  }
+  function runEffects() { for (const effect of effects.splice(0)) effect(); }
+  async function flush() {
+    for (let i = 0; i < 100; i++) {
+      if (dirty) render();
+      runEffects();
+      await flushPromises();
+      if (!dirty && effects.length === 0) return;
+    }
+    assert.fail('App did not settle');
+  }
+  function find(type, node) {
+    if (!node || typeof node !== 'object') return null;
+    if (Array.isArray(node)) { for (const child of node) { const found = find(type, child); if (found) return found; } return null; }
+    if (node.type === type || (typeof type === 'string' && typeof node.type === 'function' && node.type.name === type)) return node;
+    return find(type, node.props && node.props.children);
+  }
+  function live() {
+    const walk = node => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (node.type === 'button' && String(node.props.children).includes('Live')) node.props.onClick();
+      else walk(node.props && node.props.children);
+    };
+    walk(tree);
+  }
+  const state = () => hooks[0].value;
+  const restore = session => hooks[0].set({...state(), currentSession: {...state().currentSession, ...session}});
+  const review = () => find(ctx.BoardPhotoReview, tree);
+  const statusText = () => {
+    const tracker = find('TrackerPage', tree);
+    assert.ok(tracker, 'live tracker is mounted');
+    const status = find(ctx.BoardPhotoStatus, tracker.type(tracker.props));
+    assert.ok(status, 'tracker mounts the photo status');
+    return textOf(ReactDOMServer.renderToStaticMarkup(React.createElement(ctx.BoardPhotoStatus, status.props)));
+  };
+  async function hydrate() {
+    await flush(); bridge.hello(); await flush();
+    const request = bridge.posted.find(p => p.data.op === 'readState');
+    assert.ok(request, 'the actual sync hook reads the account');
+    bridge.reply(request, {scope: 'a'.repeat(32), state: null});
+    await flush();
+    assert.ok(bridge.posted.some(p => p.data.op === 'writeState'), 'account sync is now syncing');
+  }
+  return {...bridge, flush, render, runEffects, state, restore, review, statusText, live, hydrate, recordings, spinWrites, saves, timers,
+    pressAdd(numbers) { const element = review(); assert.ok(element, 'review is visible'); element.props.onAdd(numbers || element.props.numbers); },
+    unmount() { for (const slot of hooks) if (slot && slot.cleanup) slot.cleanup(); },
+  };
+}
+
+async function deliverApp(fragment, options) {
+  const app = await mountApp(options);
+  await app.hydrate();
+  const request = app.posted.find(p => p.data.op === 'readBoardResult');
+  assert.ok(request);
+  app.reply(request, {fragment});
+  await app.flush();
+  return app;
+}
+
+async function explicitAddScenario(mutate) {
+  const app = await deliverApp('ok:16,0,00', {mutate});
+  try {
+    assert.deepEqual(plain(app.state().currentSession.spins), [], 'delivery writes no spins');
+    assert.equal(app.spinWrites.length, 0, 'delivery and effects must write zero spins');
+    assert.equal(app.recordings.length, 0, 'delivery must record zero spins');
+    assert.ok(app.saves.every(state => state.currentSession.spins.length === 0), 'no saved snapshot contains an automatic spin');
+    app.pressAdd();
+    await app.flush();
+    assert.deepEqual(plain(app.state().currentSession.spins), ['00', '0', '16']);
+    assert.equal(app.spinWrites.length, 3);
+    assert.deepEqual(app.recordings.map(spin => spin.segment), ['00', '0', '16']);
+    assert.deepEqual(app.saves.at(-1).currentSession.spins, ['00', '0', '16']);
+  } finally { app.unmount(); }
+}
+
+test('App delivery and flushed effects write zero spins; Add writes and records each spin oldest first', async () => {
+  await explicitAddScenario();
+});
+
+const autoRecordMutant = source => {
+  const anchor = '  // Save UI state when page is hidden';
+  assert.ok(source.includes(anchor));
+  return source.replace(anchor, `  React.useEffect(() => {
+    if(boardReturn && boardReturn.kind === "numbers") setBoardAdd(boardAddOrder(boardReturn.numbers));
+  }, [boardReturn]);
+` + anchor);
+};
+
+test('the App no-auto-recording test kills the review auto-enqueue effect mutant', async () => {
+  await assert.rejects(() => explicitAddScenario(autoRecordMutant), /delivery writes no spins/);
+});
+
+async function syncRestoreScenario(mutate) {
+  const app = await deliverApp('ok:00', {mutate});
+  try {
+    const staleAdd = app.review().props.onAdd;
+    const restored = {...plain(app.state()), currentSession: {...plain(app.state().currentSession), roulette: 'european'}};
+    const pendingWrite = app.posted.find(p => p.data.op === 'writeState');
+    const snapshot = app.ctx.rouletteSnapshot(restored, {modifiedAt: Date.now() + 1000, resetAt: 0});
+    // Conflict, retry and successful receipt exercise casino-sync's actual applySnapshot path.
+    app.reply(pendingWrite, {state: {revision: 1, data: snapshot}}, {ok: false, status: 409});
+    await app.flush();
+    const retry = app.posted.filter(p => p.data.op === 'writeState').at(-1);
+    assert.notEqual(retry, pendingWrite);
+    app.reply(retry, {state: {revision: 2, data: snapshot}});
+    await app.flush();
+    assert.equal(app.state().currentSession.roulette, 'european');
+    staleAdd(['00']);
+    await app.flush();
+    assert.deepEqual(plain(app.state().currentSession.spins), [], 'sync restored European session must get no 00');
+    assert.equal(app.recordings.length, 0);
+    assert.equal(app.review(), null, 'the review is dropped');
+    assert.equal(app.statusText(), 'Session or wheel changed, read again', 'changed-wheel Add explains why nothing was written');
+  } finally { app.unmount(); }
+}
+
+test('App: ok:00 while syncing American, then conflict restore to European, then Add adds nothing', async () => {
+  await syncRestoreScenario();
+});
+
+// Remove every session comparison and the invalidation effect, keeping the rest of the real flow.
+// The first mutant recreates M2 including its absent Add/queue revalidation; the others isolate each binding field.
+const unboundMutant = source => source
+  .replace('bound.sessionId === session.id && bound.wheel === session.roulette', 'true')
+  .replace('scope.current.id !== session.id || scope.current.wheel !== session.roulette', 'false')
+  .replaceAll('!legalBoardList(listBoardOrder, live.current.roulette)', 'false')
+  .replaceAll('!legalBoardList(queue.numbers, live.current.roulette)', 'false');
+
+test('the sync-restore reproduction kills the stale unvalidated Add mutant', async () => {
+  await assert.rejects(() => syncRestoreScenario(unboundMutant), /sync restored European session must get no 00/);
+});
+
+async function changedScopeScenario(field, mutate) {
+  const app = await deliverApp('ok:17', {mutate});
+  try {
+    assert.ok(app.review());
+    app.restore(field === 'wheel' ? {roulette: 'european'} : {id: 'other-session'});
+    await app.flush();
+    assert.equal(app.review(), null, field + ' change drops a review even for a number legal on both wheels');
+    assert.equal(app.spinWrites.length, 0);
+    assert.equal(app.recordings.length, 0);
+    // Returning to the previous identity must not resurrect a discarded review.
+    app.restore(field === 'wheel' ? {roulette: 'american'} : {id: 'photo-session'});
+    await app.flush();
+    assert.equal(app.review(), null);
+  } finally { app.unmount(); }
+}
+
+for (const field of ['wheel', 'session']) {
+  test('App: a ' + field + ' change drops the review permanently', async () => { await changedScopeScenario(field); });
+  test('the ' + field + ' invalidation test kills its binding mutant', async () => {
+    const mutant = source => field === 'wheel'
+      ? source.replace(' && bound.wheel === session.roulette', '').replace(' || scope.current.wheel !== session.roulette', '')
+      : source.replace('bound.sessionId === session.id && ', '').replace('scope.current.id !== session.id || ', '');
+    await assert.rejects(() => changedScopeScenario(field, mutant), new RegExp(field + ' change drops a review'));
+  });
+}
+
+test('Add revalidates the whole edited list and refuses it without partial writes', async () => {
+  for (const numbers of [['17', '37', '4'], ['17', '00', '4'], Array(41).fill('5')]) {
+    const app = await mountApp({framed: false, wheel: 'european', hash: '#readboard=ok:17,4'});
+    try {
+      await app.flush(); app.live(); await app.flush();
+      app.pressAdd(numbers); await app.flush();
+      assert.deepEqual(plain(app.state().currentSession.spins), []);
+      assert.equal(app.recordings.length, 0);
+    } finally { app.unmount(); }
+  }
+});
+
+test('standalone hash review is bound to both the session and wheel', async () => {
+  for (const change of [{roulette: 'european'}, {id: 'other-session'}]) {
+    const app = await mountApp({framed: false, hash: '#readboard=ok:00'});
+    try {
+      await app.flush(); app.live(); await app.flush();
+      assert.equal(app.ctx.location.hash, '');
+      const staleAdd = app.review().props.onAdd;
+      app.restore(change); await app.flush(); staleAdd(['00']); await app.flush();
+      assert.equal(app.review(), null);
+      assert.equal(app.spinWrites.length, 0);
+      assert.equal(app.recordings.length, 0);
+    } finally { app.unmount(); }
+  }
+});
+
+test('pending framed replies are discarded when their session or wheel changes', async () => {
+  for (const change of [{roulette: 'european'}, {id: 'other-session'}]) {
+    const app = await mountApp();
+    try {
+      await app.hydrate();
+      const request = app.posted.find(p => p.data.op === 'readBoardResult');
+      app.restore(change); await app.flush();
+      app.reply(request, {fragment: 'ok:17'}); await app.flush();
+      assert.equal(app.review(), null);
+      assert.equal(app.recordings.length, 0);
+    } finally { app.unmount(); }
+  }
+});
+
+test('session or wheel changes drop the remaining Add queue before another spin writes', async () => {
+  for (const change of [{roulette: 'european'}, {id: 'other-session'}]) {
+    const app = await deliverApp('ok:17,4,0');
+    try {
+      app.pressAdd(); app.render(); app.runEffects(); // exactly the first queued tap
+      assert.deepEqual(plain(app.state().currentSession.spins), ['0']);
+      app.restore(change); await app.flush();
+      assert.deepEqual(plain(app.state().currentSession.spins), ['0']);
+      assert.deepEqual(app.recordings.map(spin => spin.segment), ['0']);
+    } finally { app.unmount(); }
+  }
+});
+
+test('the changed-wheel Add test kills a silent refusal mutant', async () => {
+  const mutant = source => source.replace('changed: "Session or wheel changed, read again"', 'changed: ""');
+  await assert.rejects(() => syncRestoreScenario(mutant), /changed-wheel Add explains why nothing was written/);
 });

@@ -14,6 +14,7 @@ const BOARD_STATUS_HEIGHT = 16; // the status slot's reserved height (shared rul
 
 // One short plain line per status. "canceled" is a legal return that shows nothing.
 const BOARD_STATUS_LINES = {
+  changed: "Session or wheel changed, read again",
   offline: "PC offline, photo reading unavailable",
   busy: "Photo reading busy, try again",
   timeout: "Photo reading timed out, try again",
@@ -80,9 +81,12 @@ function takeBoardReturn(loc, hist, wheel) {
 }
 
 // Pull once after hello, including when hello preceded this effect. Keep the request across effect restarts so a
-// consumed shell result cannot be lost to Strict Mode cleanup. The active effect validates for its current live wheel.
-function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
-  const pull = React.useRef({request:null,consumed:false});
+// consumed shell result cannot be lost to Strict Mode cleanup. Once account hydration finishes, an in-flight reply
+// belongs to that session/wheel; changing either discards it even before it resolves.
+function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus, sessionId) {
+  const pull = React.useRef({request:null,consumed:false,scope:null});
+  const slot = pull.current;
+  if(slot.scope && (slot.scope.id !== sessionId || slot.scope.wheel !== wheel)) slot.consumed = true;
   React.useEffect(function() {
     if(window.parent === window) return;
     installCasinoBridge();
@@ -90,6 +94,7 @@ function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
     const ready = function() {
       const slot = pull.current;
       if(!casinoBridge.ready || slot.consumed) return;
+      if(!slot.scope && syncStatus !== "checking") slot.scope = {id:sessionId,wheel};
       if(!slot.request) slot.request = takeCasinoReadBoard();
       slot.request.then(function(reply) {
         // The account may restore a European wheel after the shell result arrives.
@@ -105,7 +110,7 @@ function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus) {
     casinoBridge.listeners.add(ready);
     ready();
     return function() { active = false; casinoBridge.listeners.delete(ready); };
-  }, [wheel, setAppMode, setBoardReturn, syncStatus]);
+  }, [wheel, sessionId, setAppMode, setBoardReturn, syncStatus]);
 }
 
 // The board lists the most recent number first. Add enters the numbers oldest first, so the last one entered is the most recent.
