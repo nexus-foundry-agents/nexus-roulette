@@ -1,6 +1,6 @@
 // -- Main App Component --
 export default function App() {
-  const [appState, setAppState] = useState(loadApp);
+  const [appState, setAppState, boardDecision, commitBoardAdd] = useBoardPhotoState(loadApp);
   const casinoSync = useCasinoAccountSync(appState,setAppState);
   const [initialUiState] = useState(loadRouletteUiState);
   const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
@@ -62,6 +62,9 @@ export default function App() {
   const [clearOpen, setClearOpen] = useState(false);
   const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
   const [spinCorrection, setSpinCorrection] = useState(null); // {index} while the number picker for a recent spin is open
+  const {boardReturn, setBoardReturn, setBoardAdd, addBoardNumbers} = useBoardPhotoReturn(
+    appState.currentSession, appMode, setAppMode, casinoSync.status, boardDecision, commitBoardAdd,
+    {setPrevSessState, setResult, setLastSpinDelta, setFlashNum, liveRecording, vibration:(appState.settings||{}).vibration});
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
@@ -218,6 +221,7 @@ export default function App() {
   const pnlColor = pnlVal>0?"#4ade80":pnlVal<0?"#f87171":"#e2e8f0";
 
   function tapNumber(val, fromTracker, deferCasinoRecord) {
+    if(boardReturn&&boardReturn.kind==="status") setBoardReturn(null); // a spin entered by hand ends a photo status
     if(fromTracker) {
       setPrevSessState(JSON.parse(JSON.stringify(sess)));
       // Auto-start session clock on first tracked spin
@@ -502,7 +506,8 @@ export default function App() {
             <button onClick={()=>{if(window.confirm("End session and save?"))endSession();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
           )}
         </div>
-        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers}/>
+        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)}/>
+        <BoardPhotoStatus result={boardReturn}/>
         <SpinCorrectionContext.Provider value={openSpinCorrection}>
           <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
         </SpinCorrectionContext.Provider>
@@ -837,6 +842,7 @@ export default function App() {
         )}
 
       {/* Modals */}
+      {appMode==="live" && boardReturn && boardReturn.kind==="numbers" && <BoardPhotoReview numbers={boardReturn.numbers} roulette={sess.roulette} onAdd={addBoardNumbers} onCancel={()=>setBoardReturn(null)}/>}
       {result && <ResultFlash result={result} cur={cur} onDismiss={()=>setResult(null)}/>}
       {buyInOpen && <BuyInModal defaultAmount={settings.defaultBuyIn||100} currency={currency} currentBankroll={sess.bankrollCurrent} onBuyIn={doBuyIn} onClose={()=>setBuyInOpen(false)}/>}
       {cashOutOpen && <CashOutModal maxAmount={sess.bankrollCurrent} currency={currency} currentBankroll={sess.bankrollCurrent} onCashOut={doCashOut} onClose={()=>setCashOutOpen(false)}/>}

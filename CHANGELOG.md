@@ -1,15 +1,21 @@
 # Changelog
 
-Last Updated: 2026-10-29
+Last Updated: 2026-10-30
 
 Notable code and documentation changes are recorded here. Release versions are assigned only when
 `develop` is promoted to `main`; feature-branch work remains under Unreleased.
 
 ## [Unreleased]
 
-### Planned (not yet built)
+### Changed
 
-- Read recent numbers from a photo of the table's history board, always through a review screen before anything is added.
+- The photo reader's "busy" line now reads "Reader busy or warming up, try in 1 min". A cold load can take about a minute. The PC loads its reading model in the background on a cold read and answers busy straight away, so this line also covers the warm-up.
+
+### Added
+
+- Inside Nexus Casino, "Read board photo" asks the Casino shell to open the photo reader instead of trying to leave the frame. It works only from a real tap. When you come back, Roulette asks the shell for the result once, switches to live mode, checks every number again (0-36, and 00 only on an American wheel), and shows the same review screen. Nothing is added until you press Add.
+- A board-photo review is tied to the session and wheel it was read for. If the session or its wheel changes before you press Add (for example a Casino sync restores a different session), the review is dropped. The whole list is checked again when you press Add, so a 00 can never be added to a European session.
+- "Read board photo" in live mode opens the photo reader on the Nexus Foundry app. The numbers it reads come back only as an untrusted list in the address fragment, which is cleared at once and validated (0-36, 00 only on American wheels, at most 40). They open a review screen, most recent first, where each can be corrected with the same picker as long-press. Nothing is added until Add, which enters them oldest first exactly as taps would. A plain line explains when reading is unavailable (for example, the PC is offline).
 
 ## [0.49.0] - 2026-10-29
 
