@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-10-31
+
 ### Changed
 
 - Every Edit Config save that changes anything parks the track it came from and starts a new active track with the saved config. This holds for every track type and every field, the base included. It reverses the in-place edits of The Solution (0.56.0) and of a base-only change to a Progression Bet or Custom Bet (0.58.0). The parked track keeps its full record: P&L, spins, levels and history. The new track starts a fresh record: P&L 0, no bets, no wins. A save that changes nothing does nothing.

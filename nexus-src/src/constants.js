@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.63.0";
+const APP_VERSION = "0.64.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,11 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.64.0", date:"Oct 31, 2026", title:"Edits Start a New Track", changes:[
+    "Editing a track (base bet or anything else) now parks it and starts a new track with a fresh record; The Solution keeps chasing its numbers in the new track",
+    "Fixing a number from before your last edit is refused with a reason, so a parked track's record is never left wrong",
+    "The recent numbers strip and typed amounts no longer jump back or clear when something else on screen changes"
+  ]},
   { v:"0.63.0", date:"Oct 31, 2026", title:"Real vs Simulated, and Every Number in Game Mode", changes:[
     "Stats > Real vs simulated: for each casino, machine or table, and dealer, see the spins you logged, hits per number next to the simulated wheel, and the longest streaks",
     "Game mode's recent numbers now reach every number, 40 at a time, like the Live strip",
