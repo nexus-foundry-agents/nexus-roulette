@@ -32,6 +32,13 @@ function exportSessionsJSON(saved) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
+// The import parks every active track of the session it loads, and each parked track gets its park point at the session's
+// spin count (migrateParkPoints, session.js). A park point the track already has is kept.
+function parkImportedSession(loaded) {
+  (loaded.tracks||[]).forEach(function(tr){ if(tr.state==="active") tr.state="parked"; });
+  return migrateParkPoints(loaded);
+}
+
 function pickSessionsFile(updApp, setTab) {
     const input = document.createElement("input");
     input.type = "file";
@@ -64,8 +71,8 @@ function pickSessionsFile(updApp, setTab) {
               if(loaded.sessionStartedAt) {
                 loaded.sessionEndedAt = loaded.modified || Date.now();
               }
-              // Park all tracks
-              (loaded.tracks||[]).forEach(function(tr){ if(tr.state==="active") tr.state="parked"; });
+              // Park all tracks, each with its park point at this session's spin count
+              parkImportedSession(loaded);
               s.currentSession = loaded;
             }
           });

@@ -357,7 +357,7 @@ export default function App() {
       // held bets and chase move to the new track with their levels; the parked track keeps none, so resuming it cannot double them.
       const mergedCfg=sol?{...t.config,...edited}:{...t.config,...edited,activeBets:[]};
       if(sol) t.config={...t.config,activeBets:[],chaseNumber:null};
-      t.state="parked";
+      t.state="parked"; t.parkedAtSpin=s.spins.length;
       const nt=newTrack(t.type,s.tracks.length%TRACK_COLORS.length,mergedCfg,pickTrackColor(t.type,mergedCfg,s.tracks));
       nt.state = "active";
       nt.createdAtSpin = s.spins.length; nt.startedByEdit = true;
@@ -834,7 +834,7 @@ export default function App() {
       {cashOutOpen && <CashOutModal maxAmount={sess.bankrollCurrent} currency={currency} currentBankroll={sess.bankrollCurrent} onCashOut={doCashOut} onClose={()=>setCashOutOpen(false)}/>}
       {currencyOpen && <CurrencyModal current={currency} bankroll={sess.bankrollCurrent} onSave={changeCurrency} onClose={()=>setCurrencyOpen(false)}/>}
       {changelogOpen && <ChangelogModal onClose={()=>setChangelogOpen(false)}/>}
-      {editBankroll && <BankrollEdit initial={sess.bankrollCurrent} currency={currency} onSave={v=>updSess(s=>{s.bankrollCurrent=v;})} onClose={()=>setEditBankroll(false)}/>}
+      {editBankroll && <BankrollEdit initial={sess.bankrollCurrent} currency={currency} onSave={v=>updSess(s=>{if(v!==s.bankrollCurrent)s.bankrollEdits=(s.bankrollEdits||[]).concat([{at:Date.now(),from:s.bankrollCurrent,to:v}]);s.bankrollCurrent=v;})} onClose={()=>setEditBankroll(false)}/>}
       {hardResetOpen && <HardResetModal onClose={()=>setHardResetOpen(false)} onExport={exportJSON}/>}
       {venueSheets.sheets}
 

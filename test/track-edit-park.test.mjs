@@ -156,6 +156,8 @@ async function mountApp() {
   initial.settings.vibration = false;
   initial.currentSession = plain(ctx.newSession('american', 500));
   initial.currentSession.id = 'edit-session';
+  // The bundle's own loadApp, kept so reload() can run the real load migrations (session.js) on what the app holds.
+  const realLoadApp = ctx.loadApp;
   ctx.loadApp = () => plain(initial);
   ctx.saveApp = () => true;
   ctx.useCasinoRecording = () => ({ record() {}, start() {}, stop() {} });
@@ -269,6 +271,36 @@ async function mountApp() {
   const state = () => hooks[0].value.appState;
   return {
     ctx, flush, live, openEdit, save, parkButton, openPicker, state, tapGrid, undoButton, undoNote, undo,
+    // A press of a root-page control (the header's Buy In, Cash Out and Bank buttons), found by a predicate on its node.
+    async press(match) {
+      const button = collect(tree, (n) => n.type === 'button' && match(n))[0];
+      assert.ok(button, 'the control is showing');
+      button.props.onClick();
+      await flush();
+    },
+    // The component a root-page modal draws while it is open (BuyInModal, CashOutModal, BankrollEdit), or null.
+    modal(name) { return collect(tree, (n) => n.type && n.type.name === name)[0] || null; },
+    // The long-press ghost spin the Progression grid makes: FibGrid's onGhost, which ghostSpin handles.
+    async ghost(value) {
+      const grid = collect(trackerTree(), (n) => n.type && n.type.name === 'FibGrid')[0];
+      assert.ok(grid, 'the Progression grid is showing');
+      grid.props.onGhost(value);
+      await flush();
+    },
+    // Saves what the app holds, then loads it again through the real loadApp, so the load migrations run on it as on a reload.
+    async reload() {
+      ctx.localStorage.setItem(vm.runInContext('STORAGE_KEY', ctx), JSON.stringify(state()));
+      hooks[0].value = { ...hooks[0].value, appState: plain(realLoadApp()) };
+      dirty = true;
+      await flush();
+    },
+    // Clear numbers, as the spin tools' confirm does.
+    async clear() {
+      const tools = collect(trackerTree(), (n) => n.type && n.type.name === 'SpinTools')[0];
+      assert.ok(tools, 'the spin tools are showing');
+      tools.props.onConfirm();
+      await flush();
+    },
     // Copied into this realm: the App's state is made inside the sandbox, and deepStrictEqual compares prototypes.
     tracks: () => plain(state().currentSession.tracks),
     restoreSession(over) {
@@ -289,6 +321,9 @@ const EDIT_REASON = 'This spin was played before you edited a track. Corrections
 // The refusal for a spin played before a Park button press, and the Undo refusal the Tracker page draws (spin-apply.js).
 const PARK_REASON = 'This spin was played before a track was parked. Corrections can only change spins after the last park.';
 const UNDO_REASON = 'Undo is off: a track was edited or parked after the spin it would reverse, and Undo would drop that change.';
+// The Undo refusals for money moved after the spin, and for a spin recorded after it (UNDO_MONEY_REASON, UNDO_SPIN_REASON in spin-apply.js).
+const MONEY_REASON = 'Undo is off after a buy-in, cash-out or bankroll change. Fix the number instead.';
+const SPIN_REASON = 'Undo is off after a ghost spin or an untracked spin. Fix the number instead.';
 
 // Settles spins on the app's current session the way a tap does, and writes the result back as that session.
 async function settle(app, values) {
@@ -317,7 +352,7 @@ test('a base-only Progression edit parks the track: its record stays as it was, 
 
   assert.equal(app.tracks().length, 2, 'the edit adds one track');
   const [parked, fresh] = app.tracks();
-  assert.deepEqual(parked, { ...before, state: 'parked' }, 'the parked track keeps its whole record and config');
+  assert.deepEqual(parked, { ...before, state: 'parked', parkedAtSpin: SPINS.length }, 'the parked track keeps its whole record and config, and the park point of the edit');
   assert.notEqual(fresh.id, parked.id, 'the new track is a new track');
   assert.equal(fresh.state, 'active');
   assert.equal(fresh.config.unit, 2, 'the new track has the new base');
@@ -344,7 +379,7 @@ test('a Custom Bet base-only edit parks the track the same way: the parked recor
   await app.save(panel, { ...plain(panel.props.track.config), unit: 0.5 });
 
   const [parked, fresh] = app.tracks();
-  assert.deepEqual(parked, { ...before, state: 'parked' }, 'the parked track keeps its whole record and config');
+  assert.deepEqual(parked, { ...before, state: 'parked', parkedAtSpin: SPINS.length }, 'the parked track keeps its whole record and config, and the park point of the edit');
   assert.equal(fresh.state, 'active');
   assert.equal(fresh.config.unit, 0.5);
   assert.deepEqual(fresh.config.positions, before.config.positions, 'the spots carry over');
@@ -360,7 +395,7 @@ test('an edit that changes a field other than the base parks the track the same 
   await app.save(panel, { ...plain(panel.props.track.config), roi: 20 });
 
   const [parked, fresh] = app.tracks();
-  assert.deepEqual(parked, { ...before, state: 'parked' });
+  assert.deepEqual(parked, { ...before, state: 'parked', parkedAtSpin: SPINS.length });
   assert.equal(fresh.config.roi, 20);
   assert.equal(fresh.config.unit, 1, 'the base is unchanged');
   assert.equal(fresh.pnl, 0);
@@ -723,4 +758,231 @@ test('Undo of a spin keeps an edit made before that spin: the boundary is strict
   assert.equal(app.state().currentSession.spins.length, 0, 'Undo reverts the spin');
   assert.equal(app.tracks().length, 2, 'and keeps the edit');
   assert.equal(app.tracks()[1].startedByEdit, true, 'the new track is still the edit');
+});
+
+// UNDO-MONEY: Undo last spin restores the session from before the spin, so money that moved after the spin would go with it,
+// as would a spin recorded after the tracked one. Undo is refused for each, with its reason, and changes nothing.
+
+// The header's Buy In, Cash Out and bankroll edit, entered through the modal or the edit sheet exactly as the player does.
+async function buyIn(app, amount) {
+  await app.press((n) => n.props.children === '💰 Buy In');
+  const modal = app.modal('BuyInModal');
+  modal.props.onBuyIn(amount);
+  modal.props.onClose();
+  await app.flush();
+}
+async function cashOut(app, amount) {
+  await app.press((n) => n.props.children === '💸 Cash Out');
+  const modal = app.modal('CashOutModal');
+  modal.props.onCashOut(amount);
+  modal.props.onClose();
+  await app.flush();
+}
+async function setBankroll(app, value) {
+  await app.press((n) => Array.isArray(n.props.children) && n.props.children[0] === 'Bank: ');
+  app.modal('BankrollEdit').props.onSave(value);
+  await app.flush();
+}
+
+test('Undo after a spin and then a buy-in is refused with the money reason: the buy-in and the spin both stay', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  await buyIn(app, 100);
+  assert.equal(app.state().currentSession.buyIns.length, 1, 'the buy-in is recorded');
+  const before = plain(app.state().currentSession);
+  assert.equal(app.undoButton().props.disabled, true, 'Undo is disabled after the buy-in');
+  assert.equal(app.undoNote().props.children, MONEY_REASON, 'the money reason is drawn');
+  await app.undo();
+  assert.deepEqual(plain(app.state().currentSession), before, 'Undo changes nothing: the spin and the buy-in both stay');
+});
+
+test('Undo after a spin and then a cash-out is refused the same way', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  await cashOut(app, 40);
+  assert.equal(app.state().currentSession.cashOuts.length, 1, 'the cash-out is recorded');
+  const before = plain(app.state().currentSession);
+  assert.equal(app.undoButton().props.disabled, true, 'Undo is disabled after the cash-out');
+  assert.equal(app.undoNote().props.children, MONEY_REASON, 'the money reason is drawn');
+  await app.undo();
+  assert.deepEqual(plain(app.state().currentSession), before, 'Undo changes nothing: the spin and the cash-out both stay');
+});
+
+test('Undo after a spin and then a bankroll edit is refused the same way', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  await setBankroll(app, 650);
+  assert.equal(app.state().currentSession.bankrollCurrent, 650, 'the bankroll is edited');
+  assert.equal(app.state().currentSession.bankrollEdits.length, 1, 'the edit is recorded on the session');
+  const before = plain(app.state().currentSession);
+  assert.equal(app.undoButton().props.disabled, true, 'Undo is disabled after the edit');
+  assert.equal(app.undoNote().props.children, MONEY_REASON, 'the money reason is drawn');
+  await app.undo();
+  assert.deepEqual(plain(app.state().currentSession), before, 'Undo changes nothing: the spin and the edited bankroll both stay');
+});
+
+// The arm of the bankroll test: a save that leaves the bankroll as it was is not a money move, so it refuses nothing.
+test('a bankroll save that leaves the bankroll as it was is not a money move: Undo stays available and nothing is recorded', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  const current = app.state().currentSession.bankrollCurrent;
+  await setBankroll(app, current);
+  assert.equal(app.state().currentSession.bankrollEdits, undefined, 'no edit is recorded for an unchanged bankroll');
+  assert.equal(app.undoButton().props.disabled, false, 'Undo is available');
+  assert.equal(app.undoNote().props.children, null, 'no refusal is drawn');
+});
+
+test('Undo after a spin and then a ghost spin is refused with the spin reason: the ghost spin and the spin both stay', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  await app.ghost('9');
+  assert.equal(app.state().currentSession.spins.length, 2, 'the ghost spin is recorded after the tracked one');
+  const before = plain(app.state().currentSession);
+  assert.equal(app.undoButton().props.disabled, true, 'Undo is disabled after the ghost spin');
+  assert.equal(app.undoNote().props.children, SPIN_REASON, 'the spin reason is drawn');
+  await app.undo();
+  assert.deepEqual(plain(app.state().currentSession), before, 'Undo changes nothing: the spin and the ghost spin both stay');
+});
+
+// The arms of the money tests: a buy-in or cash-out made before the spin is part of what Undo puts back, so it refuses nothing.
+test('a buy-in or cash-out made before a spin does not block Undo of that spin, and both stay', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await buyIn(app, 100);
+  await cashOut(app, 40);
+  await app.tapGrid('7');
+  assert.equal(app.undoButton().props.disabled, false, 'Undo is available: no money moved after the spin');
+  assert.equal(app.undoNote().props.children, null, 'no refusal is drawn');
+  await app.undo();
+  assert.equal(app.state().currentSession.spins.length, 0, 'Undo reverts the spin');
+  assert.equal(app.state().currentSession.buyIns.length, 1, 'the buy-in made before it stays');
+  assert.equal(app.state().currentSession.cashOuts.length, 1, 'and so does the cash-out');
+});
+
+// Clear numbers keeps the money and its spin indices and resets the spin count. A buy-in made after the first spin carries
+// spin index 1; with the count back at zero it must not refuse Undo of a spin played after the clear.
+test('a buy-in made before Clear numbers does not block Undo of a spin played after the clear', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  await buyIn(app, 100);
+  await app.clear();
+  assert.equal(app.state().currentSession.spins.length, 0, 'Clear numbers removed the spin');
+  assert.equal(app.state().currentSession.buyIns.length, 1, 'and kept the buy-in');
+  await app.tapGrid('8');
+  assert.equal(app.undoButton().props.disabled, false, 'Undo is available: nothing moved after the spin played after the clear');
+  await app.undo();
+  assert.equal(app.state().currentSession.spins.length, 0, 'Undo reverts that spin');
+  assert.equal(app.state().currentSession.buyIns.length, 1, 'and keeps the buy-in');
+});
+
+test('undoBlockReason: nothing to undo gives no reason; a spin no track settled after the tracked spin, or a money change after it, is refused', async () => {
+  const { ctx } = await mountApp();
+  const before = plain(ctx.newSession('american', 500));
+  assert.equal(ctx.undoBlockReason(before, null), null, 'with no snapshot there is nothing to undo');
+  const tracked = plain(ctx.applySpin(before, '7', true).sess);
+  assert.equal(ctx.undoBlockReason(tracked, before), null, 'the tracked spin alone can be undone');
+  const untracked = plain(ctx.applySpin(tracked, '3', false).sess);
+  assert.equal(ctx.undoBlockReason(untracked, before), SPIN_REASON, 'a spin no track settled, recorded after the tracked one, is refused');
+  const converted = { ...tracked, bankroll: 450 };
+  assert.equal(ctx.undoBlockReason(converted, before), MONEY_REASON, 'a change to the starting bankroll, as a currency conversion makes, is money');
+});
+
+// IMPORT-AND-MIGRATION PARK POINTS: every park carries the spin count it was made at. An import parks active tracks and stamps
+// them; a load gives a parked track with no park point the session's spin count at load, once, and never moves one it has.
+test('an import parks its active tracks, and each parked track gets its park point at the imported spin count; a park point it already has is kept', async () => {
+  const ctx = await bundle(React);
+  const imported = plain(ctx.newSession('american', 500));
+  imported.spins = ['1', '2', '3', '4', '5', '6', '7'];
+  imported.tracks = [progression({ id: 'active-1' }), custom({ id: 'active-2' }), custom({ id: 'parked-1', state: 'parked', parkedAtSpin: 2 })];
+  const loaded = plain(ctx.parkImportedSession(plain(imported)));
+  assert.deepEqual(loaded.tracks.map((t) => t.state), ['parked', 'parked', 'parked'], 'the active tracks are parked');
+  assert.deepEqual(loaded.tracks.map((t) => t.parkedAtSpin), [7, 7, 2], 'the parked tracks get the imported spin count, and the existing park point is kept');
+});
+
+test('the load migration gives a parked track with no park point the spin count at load, fires once, and never moves a park point', async () => {
+  const ctx = await bundle(React);
+  const key = vm.runInContext('STORAGE_KEY', ctx);
+  const sess = plain(ctx.newSession('american', 500));
+  sess.spins = ['1', '2', '3', '4', '5', '6', '7'];
+  sess.tracks = [
+    progression({ id: 'old-park', state: 'parked' }),
+    custom({ id: 'stamped-park', state: 'parked', parkedAtSpin: 2 }),
+    progression({ id: 'live' }),
+  ];
+  const state = plain(ctx.freshAppState());
+  state.currentSession = sess;
+  ctx.localStorage.setItem(key, JSON.stringify(state));
+
+  const first = plain(ctx.loadApp()).currentSession.tracks;
+  assert.equal(first[0].parkedAtSpin, 7, 'the parked track with no park point gets the spin count at load');
+  assert.equal(first[1].parkedAtSpin, 2, 'a park point already stamped is not moved');
+  assert.equal('parkedAtSpin' in first[2], false, 'an active track gets no park point');
+
+  // The app saves what it loaded. Two more spins, then a later load: the park points stay where they were stamped.
+  const saved = plain(ctx.loadApp());
+  saved.currentSession.spins = [...saved.currentSession.spins, '8', '9'];
+  ctx.localStorage.setItem(key, JSON.stringify(saved));
+  const later = plain(ctx.loadApp()).currentSession.tracks;
+  assert.equal(later[0].parkedAtSpin, 7, 'on a later load the park point is still 7, not the 9 spins now recorded');
+  assert.equal(later[1].parkedAtSpin, 2);
+});
+
+test('the load migration covers saved sessions too: a parked track there gets that session\'s own spin count', async () => {
+  const ctx = await bundle(React);
+  const key = vm.runInContext('STORAGE_KEY', ctx);
+  const saved = plain(ctx.newSession('american', 500));
+  saved.id = 'saved-1';
+  saved.spins = ['1', '2', '3'];
+  saved.tracks = [progression({ id: 'saved-park', state: 'parked' })];
+  const state = plain(ctx.freshAppState());
+  state.savedSessions = [saved];
+  ctx.localStorage.setItem(key, JSON.stringify(state));
+  const loaded = plain(ctx.loadApp());
+  assert.equal(loaded.savedSessions[0].tracks[0].parkedAtSpin, 3, 'the saved session\'s parked track gets its own spin count');
+});
+
+// EDIT-PARK-STAMP: an Edit Config save parks the track at the spin count of the edit, as a Park button press does. A reload runs
+// the load migration, which stamps only a parked track with no park point. The edit's park point is kept, so a spin played after
+// the edit is corrected after the reload and a spin before the edit is still refused.
+test('an edit stamps its park point and a reload keeps it: a spin after the edit corrects after the reload, and a spin before it is refused', async () => {
+  const app = await mountLive([progression()]);
+  const panel = await app.openEdit('prog-1');
+  await app.save(panel, { ...plain(panel.props.track.config), unit: 2 });
+  assert.equal(app.tracks().find((t) => t.id === 'prog-1').parkedAtSpin, SPINS.length, 'the edit parks the track at its spin count');
+  await settle(app, ['7', '8']);
+  await app.reload();
+  assert.equal(app.tracks().find((t) => t.id === 'prog-1').parkedAtSpin, SPINS.length, 'the reload keeps the edit park point; the migration did not move it to the spin count at load');
+
+  const sess = app.state().currentSession;
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, SPINS.length), null, 'the first spin after the edit is not refused after the reload');
+  const accepted = app.ctx.correctSpin(sess, SPINS.length, '9', 1);
+  assert.equal(accepted.ok, true, 'a spin played after the edit is corrected after the reload');
+  assert.equal(accepted.changed, true);
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, SPINS.length - 1), EDIT_REASON, 'the last spin before the edit is still refused');
+  const refused = app.ctx.correctSpin(sess, SPINS.length - 1, '9', 1);
+  assert.equal(refused.ok, false);
+  assert.equal(refused.reason, EDIT_REASON);
+  assert.deepEqual(plain(app.state().currentSession), plain(sess), 'and the refused correction changes nothing');
+});
+
+// An unstamped parked track (an older save or an import) gets the spin count at load. That stamp is the conservative boundary
+// the brief set: it is the largest park point in the session, so every spin before the load is refused, the spins after an
+// edit included. This pins that rule, so a change to it is a visible change to this test.
+test('a parked track with no stamp gets the spin count at load, and that stamp refuses corrections to every spin before the load', async () => {
+  const app = await mountLive([progression(), freshProgression({ id: 'old-park', state: 'parked' })]);
+  const panel = await app.openEdit('prog-1');
+  await app.save(panel, { ...plain(panel.props.track.config), unit: 2 });
+  await settle(app, ['7', '8']);
+  await app.reload();
+  assert.equal(app.tracks().find((t) => t.id === 'old-park').parkedAtSpin, SPINS.length + 2, 'the unstamped park takes the spin count at load');
+  assert.equal(app.tracks().find((t) => t.id === 'prog-1').parkedAtSpin, SPINS.length, 'the edit park keeps its own point');
+  const sess = app.state().currentSession;
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, SPINS.length), PARK_REASON, 'a spin after the edit but before the load is refused for the park');
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, SPINS.length + 1), PARK_REASON, 'the last spin before the load is refused too');
 });

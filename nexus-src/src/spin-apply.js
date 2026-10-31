@@ -313,9 +313,9 @@ function lastEditSpin(sess) {
 // correction to that spin could not reach its P&L or the bankroll: the refusal is the only honest answer.
 const EDIT_BOUNDARY_REASON = "This spin was played before you edited a track. Corrections can only change spins after the last edit.";
 
-// The spin count at which the latest Park button press parked a track. parkToggle stamps it on the track it parks, and
-// clearSpins resets it to 0 with createdAtSpin, so Clear numbers removes the boundary with the spins. A track parked by an
-// edit carries no park point: lastEditSpin already covers it.
+// The spin count at which the latest park happened. parkToggle (the Park button), updateTrackConfig (an edit), an import
+// and the load migration (a park saved before park points existed) all stamp parkedAtSpin; clearSpins resets it to 0 with
+// createdAtSpin, so Clear numbers removes the boundary with the spins.
 function lastParkSpin(sess) {
   let at = 0;
   (sess.tracks || []).forEach(t => { if((t.parkedAtSpin || 0) > at) at = t.parkedAtSpin; });
@@ -334,13 +334,23 @@ function spinCorrectionBlockAt(sess, index, replayed) {
   return spinCorrectionBlock(sess, replayed);
 }
 
-// Undo last spin restores the session as it was before the last tapped spin (prevSess). A track edit or park made after
-// that spin would go with it, so Undo is refused for it. A boundary above the spin count prevSess holds was made after the
-// spin. Returns the reason, or null when Undo may run (and when there is nothing to undo).
+// Undo last spin restores the session as it was before the last tapped spin (prevSess). Anything recorded after that spin
+// would go with it, so Undo is refused for each kind, with its reason: a track edit or park (a boundary above the spin count
+// prevSess holds), money that moved (a buy-in, cash-out, bankroll edit or currency conversion), and a spin recorded after it
+// (a ghost spin, or a spin no track settled). Returns the reason, or null when Undo may run (and when there is nothing to undo).
 const UNDO_BLOCK_REASON = "Undo is off: a track was edited or parked after the spin it would reverse, and Undo would drop that change.";
+const UNDO_MONEY_REASON = "Undo is off after a buy-in, cash-out or bankroll change. Fix the number instead.";
+const UNDO_SPIN_REASON = "Undo is off after a ghost spin or an untracked spin. Fix the number instead.";
+// The money records a spin never changes, so a difference from prevSess is money that moved after the spin. Compared by
+// value, not by spin index: Clear numbers keeps the money and its spin indices and resets only the spin count.
+const MONEY_RECORD_KEYS = ["bankroll", "totalBuyIn", "totalCashOut", "buyIns", "cashOuts", "bankrollEdits"];
 function undoBlockReason(sess, prevSess) {
   if(!prevSess) return null;
-  return Math.max(lastEditSpin(sess), lastParkSpin(sess)) > prevSess.spins.length ? UNDO_BLOCK_REASON : null;
+  if(Math.max(lastEditSpin(sess), lastParkSpin(sess)) > prevSess.spins.length) return UNDO_BLOCK_REASON;
+  if(MONEY_RECORD_KEYS.some(k => !sameValue(sess[k], prevSess[k]))) return UNDO_MONEY_REASON;
+  // A tapped spin adds exactly one spin to prevSess, so any spin beyond that was recorded after it.
+  if((sess.spins || []).length > prevSess.spins.length + 1) return UNDO_SPIN_REASON;
+  return null;
 }
 
 // Replaces the spin at index with value and replays the session. Refuses (ok false) when the index or number is not
