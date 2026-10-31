@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.56.0";
+const APP_VERSION = "0.57.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,10 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.57.0", date:"Oct 31, 2026", title:"Every Number From a Board Add Shows", changes:[
+    "A board Add of more than 30 numbers now shows them all on the recent strip, so repeats like 2, 2, 2 at the start are visible",
+    "Those numbers were always saved and counted; only the strip was cutting off the oldest ones"
+  ]},
   { v:"0.56.0", date:"Oct 31, 2026", title:"The Solution Picks Your Number", changes:[
     "Your Solution entry setting (for example 90) is now saved and used everywhere; before, it went back to 120 and hid numbers like your 33",
     "Setting up a Solution track shows the 6 coldest numbers with misses and colour; tap one to chase it, and the card says Chasing 33 - 92 misses",

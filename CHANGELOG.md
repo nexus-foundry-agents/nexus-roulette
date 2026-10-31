@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-10-31
+
 ### Fixed
 
 - After a board photo's numbers are added, the recent-numbers strip on the Live page shows every number that Add entered, including a repeated number at the oldest end of the list (for example 2, 2, 2). The strip showed only its newest 30 spins, so the oldest entries of a longer list were hidden. The entries were already kept in the session, the saved state and the recording.
