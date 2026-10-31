@@ -856,7 +856,7 @@ export default function App() {
         )}
 
       {/* Modals */}
-      {appMode==="live" && boardReturn && boardReturn.kind==="numbers" && <BoardPhotoReview numbers={boardReturn.numbers} roulette={sess.roulette} onAdd={addBoardNumbers} onCancel={()=>setBoardReturn(null)}/>}
+      {appMode==="live" && boardReturn && boardReturn.kind==="numbers" && <BoardPhotoReview numbers={boardReturn.numbers} roulette={sess.roulette} reader={boardReturn.reader} onAdd={addBoardNumbers} onCancel={()=>setBoardReturn(null)}/>}
       {result && <ResultFlash result={result} cur={cur} onDismiss={()=>setResult(null)}/>}
       {buyInOpen && <BuyInModal defaultAmount={settings.defaultBuyIn||100} currency={currency} currentBankroll={sess.bankrollCurrent} onBuyIn={doBuyIn} onClose={()=>setBuyInOpen(false)}/>}
       {cashOutOpen && <CashOutModal maxAmount={sess.bankrollCurrent} currency={currency} currentBankroll={sess.bankrollCurrent} onCashOut={doCashOut} onClose={()=>setCashOutOpen(false)}/>}

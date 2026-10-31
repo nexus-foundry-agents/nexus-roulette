@@ -7,6 +7,15 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- Photo review says which reader read the numbers. A board-photo return may carry an optional reader field after the numbers: `#readboard=ok:8,31,3;by=cloud` (the hosted cloud model) or `#readboard=ok:8,31,3;by=pc` (the user's PC). The review shows "Read by the cloud model" or "Read by your PC" in a reserved line above the numbers, and that line's space is kept whether or not it has text. A return without the field, or with an unknown value, parses exactly as before and shows no line. The shape is stated in the parser comment of `nexus-src/src/components/BoardPhoto.jsx`, where the Nexus Foundry reader side must match it. The parse and the review's `reader` prop are in that file; the field is accepted on numbers returns only.
+
+### Open
+
+- The Nexus Foundry side that sends `;by=` is a separate item.
+- The visual check of the reader line at 360 and 390 px is UNVERIFIED: no browser suite was run for this change.
+
 ## [0.61.0] - 2026-10-31
 
 ### Fixed
@@ -29,10 +38,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 - The visual checks of the strip (the hidden scrollbar, the pager buttons and the scroll at 360 and 390 px) are UNVERIFIED: no browser suite was run for this change.
 - The Game-mode recent-numbers ticker in `nexus-src/src/components/GamePage.jsx` still shows only its newest 30 spins. It is outside this change's files.
-- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
 - The toggle governs the board on the Live page only. Tile gold shows regardless of the toggle, and the Game page board shows no gold until `nexus-src/src/components/GamePage.jsx` passes `coldestGold`. Wiring the toggle into the tiles needs a prop through `nexus-src/src/components/DroughtPanel.jsx`. `GamePage.jsx` and `DroughtPanel.jsx` are outside this change, so neither is edited here.
 - The visual checks for the gold board cell and the tile's coldest row at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
-- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
 
 ## [0.59.0] - 2026-10-31
 
@@ -81,7 +88,6 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 - The visual checks at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
 - Catch up is not offered for Game sessions. The board-add path writes only the Live session; a Game catch-up needs a ruling and a change to `nexus-src/src/board-return.mjs`.
-- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
 - The catch-up card's Read board photo button calls the same action as the spin tools' button, but it is a second button. One shared component needs `nexus-src/src/components/SpinTools.jsx`, outside this change.
 - A resume now stays on Stats with the sessions sheet open. The old Resume jumped to the Tracker. Where a resume should land is a ruling.
 - The base bet is exact. The track setup and Edit Config (every track type: progression, Custom Bet and The Solution) take a Custom amount from 0.01 to 10,000 with up to 2 decimals, in the session's currency. Commas separate thousands and a currency symbol at either end is ignored. A value that cannot be read, is zero or negative, has more than 2 decimals or is over 10,000 shows its reason beside the field and keeps the amount already applied; nothing is clamped or truncated. The Custom field applies on blur or Enter. The control is `nexus-src/src/components/BaseBetInput.jsx`, one component mounted by both panels in `nexus-src/src/components/TrackPanel.jsx`.
