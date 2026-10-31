@@ -72,7 +72,7 @@ function useBoardPhotoReturn(session, appMode, setAppMode, syncStatus, decision,
     handled.current = decision;
     if(!decision.accepted) { reject(); return; }
     const last = decision.spins[decision.spins.length - 1];
-    ui.setPrevSessState(last.before);
+    ui.setPrevSessState(last.before, last.val);
     // Each add is recorded by the recorder of the session it wrote, as a tapped spin is.
     const recording = recordingForMode(decision.kind, ui.gameRecording, ui.liveRecording);
     decision.spins.forEach(spin => recording.record(spin.record));

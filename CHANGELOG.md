@@ -7,6 +7,17 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- Undo last spin is refused after a track change made after the spin. Adding, closing or reactivating a track, moving a track, adding or removing a Solution bet, or any other change to a track after the spin now refuses Undo with "Undo is off after a track change. Fix the number instead." Undo used to revert those changes silently. The check is one comparison in `undoBlockReason()` (`nexus-src/src/spin-apply.js`): the session's tracks must equal the snapshot's tracks plus the tapped spin's own settlement. No action stamps the record, so an action added later is refused by the same comparison.
+- The Undo snapshot records the number the tap recorded. Undo is refused when the session's last spin is not that number, so a same-session replace of that one number is refused with the changed-session reason. The number is held beside the snapshot in `undoBind` in `nexus-src/src/App.jsx`.
+- The Undo button keeps its slot in the Add Track row. Its visibility changes and it is never removed, so the Add Track button no longer moves when Undo is offered, refused or gone. The Add Track button keeps its slot while the add panel is open. The Add Track row has the same slots whether or not Undo is available.
+
+### Tests
+
+- `test/undo-track-edits.test.mjs`: each track action made after a spin (adding, closing or reactivating a track, moving a track, adding or removing a Solution bet) refuses Undo, and the action stays in place after an Undo press. A replace of the tapped number refuses Undo. The Add Track row has the same slots with Undo offered, refused, absent and while the add panel is open.
+- `test/undo-snapshot-class.test.mjs`: a track added after the spin refuses Undo (it was allowed before). The `undoBlockReason()` assertions pass the tapped number, and a snapshot with no recorded number or another recorded number is refused.
+
 ## [0.72.0] - 2026-10-31
 
 ### Fixed

@@ -42,7 +42,7 @@ export default function App() {
   useEffect(()=>{ setSelectedLevel(null); }, [selectedTrackId]); // a change of selected track clears the level pick (the Game tab sets it too)
   const [result, setResult] = useState(null);
   const [flashNum, setFlashNum] = useState(null);
-  const [undoBind, setUndoBind] = useState(null); function setPrevSessState(snap){ setUndoBind(snap && {sessionId:snap.id, mode:appMode, sess:snap}); } // the Undo snapshot, with the session id and mode it was taken from
+  const [undoBind, setUndoBind] = useState(null); function setPrevSessState(snap,spin){ setUndoBind(snap && {sessionId:snap.id, mode:appMode, sess:snap, spin}); } // the Undo snapshot, with the session id, the mode and the tapped number it was taken from
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
   const [highlightTrackId, setHighlightTrackId] = useState(null);
@@ -230,7 +230,7 @@ export default function App() {
   function tapNumber(val, fromTracker, deferCasinoRecord) {
     if(boardReturn&&boardReturn.kind==="status") setBoardReturn(null); // a spin entered by hand ends a photo status
     if(fromTracker) {
-      setPrevSessState(JSON.parse(JSON.stringify(sess)));
+      setPrevSessState(JSON.parse(JSON.stringify(sess)),val);
       // Auto-start session clock on first tracked spin
       if(!sess.sessionStartedAt) {
         updSess(s=>{ s.sessionStartedAt=Date.now(); });
@@ -282,7 +282,8 @@ export default function App() {
   }
 
   function addTrack(type, config) { updSess(s=>{const t=newTrack(type,nextColorIdx,config,pickTrackColor(type,config,s.tracks)); t.createdAtSpin=s.spins.length; s.tracks.push(t);}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
-  const undoWhy = undoBlockReason(sess, prevSessState); // refused after a track edit or park, money, an abandon, or any other change since the spin (spin-apply.js)
+  const undoSpin = prevSessState ? undoBind.spin : undefined; // the tapped number the snapshot recorded
+  const undoWhy = undoBlockReason(sess, prevSessState, undoSpin); // refused after a track edit, park or other track change, money, an abandon, or any other change since the spin (spin-apply.js)
   function undoLastSpin() {
     if(!prevSessState || undoWhy) return;
     if(!window.confirm("Undo last tracked spin? This reverses the bankroll and progression but session time continues.")) return;
@@ -297,7 +298,7 @@ export default function App() {
     const now = Date.now();
     const snapshot = {
       spinState: snapshotSpinState(appState.currentSession),
-      prevSessState: prevSessState ? JSON.parse(JSON.stringify(prevSessState)) : null,
+      prevSessState: prevSessState ? JSON.parse(JSON.stringify(prevSessState)) : null, prevSpin: undoSpin,
       lastSpinDelta,
     };
     updApp(s => { s.currentSession = clearSpins(s.currentSession, now); });
@@ -312,7 +313,7 @@ export default function App() {
     if(appMode!=="live" || live.id!==clearUndo.sessionId || live.spins.length>0) { setClearUndo(null); return; }
     const {snapshot} = clearUndo;
     updApp(s => { s.currentSession = restoreSpinState(s.currentSession, snapshot.spinState, Date.now()); });
-    setPrevSessState(snapshot.prevSessState);
+    setPrevSessState(snapshot.prevSessState,snapshot.prevSpin);
     setLastSpinDelta(snapshot.lastSpinDelta);
     setClearUndo(null);
   }
@@ -604,13 +605,10 @@ export default function App() {
               </div>
             );
           })}
+          {/* Both slots are always drawn: Add Track and Undo change visibility, never presence, so neither moves (rule 82). */}
           <div style={{display:"flex",gap:6}}>
-            {!addOpen && (
-              <button onClick={()=>setAddOpen(true)} style={{flex:1,padding:"10px 0",borderRadius:12,border:"2px dashed #2d4057",background:"transparent",color:"#64748b",fontSize:13,cursor:"pointer"}}>+ Add Track</button>
-            )}
-            {prevSessState && (
-              <button onClick={undoLastSpin} disabled={!!undoWhy} style={{padding:"10px 14px",borderRadius:12,border:"1px solid #f59e0b",background:"#1c1000",color:"#fbbf24",fontSize:12,fontWeight:700,cursor:undoWhy?"not-allowed":"pointer",opacity:undoWhy?0.5:1}}>↩ Undo</button>
-            )}
+            <button onClick={()=>setAddOpen(true)} disabled={addOpen} aria-hidden={addOpen} style={{flex:1,padding:"10px 0",borderRadius:12,border:"2px dashed #2d4057",background:"transparent",color:"#64748b",fontSize:13,cursor:"pointer",visibility:addOpen?"hidden":"visible"}}>+ Add Track</button>
+            <button onClick={undoLastSpin} disabled={!prevSessState||!!undoWhy} aria-hidden={!prevSessState} style={{padding:"10px 14px",borderRadius:12,border:"1px solid #f59e0b",background:"#1c1000",color:"#fbbf24",fontSize:12,fontWeight:700,visibility:prevSessState?"visible":"hidden",cursor:undoWhy?"not-allowed":"pointer",opacity:undoWhy?0.5:1}}>↩ Undo</button>
           </div>
           <div data-undo-note aria-hidden={!undoWhy} style={{minHeight:14,fontSize:10,color:"#fbbf24",visibility:undoWhy?"visible":"hidden"}}>{undoWhy}</div>
         </div>
