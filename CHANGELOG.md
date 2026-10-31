@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-10-31
+
 ### Added
 
 - Each number square on the roulette board, on the Live page and the Game page, 0 and 00 included, gets a subtle outline from its current losing streak's percentile on the wheel in use: green from the 75th percentile, yellow from the 95th and red from the 98th, the highest tier reached winning. The outline is a 2 px ring drawn outside the square, so the board's layout, its borders and the tap area are unchanged.
