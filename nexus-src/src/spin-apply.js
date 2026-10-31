@@ -9,7 +9,8 @@
 //   - Kept exactly as recorded: tracks that were parked or manually closed or reactivated (their history is not in
 //     the record), and any money the record cannot place by spin index.
 //   - Refused: a session whose recorded tracks do not reproduce when its own spins are replayed (for example a
-//     spin logged without settling a track, which the record does not mark).
+//     spin logged without settling a track, which the record does not mark); and a spin played before the last edit
+//     parked a track (lastEditSpin), because the parked track's record is kept as it was and cannot follow a correction.
 
 // A spin index is a whole number from 0 up to, but not including, the count (or up to and including it when
 // the count is the number of spins after the last one).
@@ -297,6 +298,27 @@ function spinCorrectionBlock(sess, replayed) {
     + "This happens when a ghost spin was logged while a track was active. Nothing has been changed.";
 }
 
+// The spin count at which the latest edit parked a track. App.jsx's updateTrackConfig starts the edit's new track at that
+// count and marks it startedByEdit, so this is the largest createdAtSpin among the marked tracks, and 0 when no edit has
+// been made. It is read from the new track, not stamped on the parked one: clearSpins resets createdAtSpin on every track
+// when it removes the spins, so the boundary falls back to 0 with them, and Undo of a clear restores it.
+function lastEditSpin(sess) {
+  let at = 0;
+  (sess.tracks || []).forEach(t => { if(t.startedByEdit && (t.createdAtSpin || 0) > at) at = t.createdAtSpin; });
+  return at;
+}
+
+// The reason a spin played before the last edit cannot be corrected. The parked track keeps its record as it was, so a
+// correction to that spin could not reach its P&L or the bankroll: the refusal is the only honest answer.
+const EDIT_BOUNDARY_REASON = "This spin was played before you edited a track. Corrections can only change spins after the last edit.";
+
+// Why the spin at index cannot be corrected, or null. This is the one refusal: correctSpin applies it and the number picker
+// shows it. A spin before the last edit gets EDIT_BOUNDARY_REASON; any other refusal is spinCorrectionBlock's, for the session.
+function spinCorrectionBlockAt(sess, index, replayed) {
+  if(index < lastEditSpin(sess)) return EDIT_BOUNDARY_REASON;
+  return spinCorrectionBlock(sess, replayed);
+}
+
 // Replaces the spin at index with value and replays the session. Refuses (ok false) when the index or number is not
 // valid for the wheel, or when the record cannot be replayed. Bankroll that the record cannot explain (a bankroll
 // edit, a live manual-bet settlement, a currency change) is kept as a fixed amount on top of the replay.
@@ -306,7 +328,7 @@ function correctSpin(sess, index, value, now) {
   if(!isSpinIndex(index, sess.spins.length)) return {ok: false, reason: "That spin is not in this session."};
   if(!getWheelNumbers(sess.roulette).includes(v)) return {ok: false, reason: "That number is not on this wheel."};
   const recorded = replaySession(sess, sess.spins);
-  const block = spinCorrectionBlock(sess, recorded);
+  const block = spinCorrectionBlockAt(sess, index, recorded);
   if(block) return {ok: false, reason: block};
   if(sess.spins[index]===v) return {ok: true, changed: false, session: JSON.parse(JSON.stringify(sess))};
   const spins = sess.spins.slice();

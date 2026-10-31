@@ -407,7 +407,7 @@ test('after the chased number hits, the bets still held keep their levels and th
   assert.equal(ctx.solutionChaseText(hit.tracks[0], hit.droughts, hit.spins), '33 hit - pick the next number');
 });
 
-test('saving Edit Config keeps the live held bets and their levels, and changes the threshold on the same track', async () => {
+test('the Solution save takes its held bets and chased number from the live track, and the threshold from the panel', async () => {
   const ctx = await load();
   let s = plain(ctx.newSession('american', 1000));
   s.tracks = [solutionTrack(ctx, ['17'], 120)];
@@ -458,7 +458,7 @@ test('the entry threshold steps by 5 and never goes below 20; one stepper serves
   assert.ok(track.includes('<EntryThresholdStepper value={cfg.entryThreshold} onChange={v=>upCfg("entryThreshold",v)}/>'), 'Edit Config changes the track');
   assert.ok(!track.includes('Math.max(20'), 'no stepper keeps its own floor');
   const app = await readFile(new URL('App.jsx', srcDir), 'utf8');
-  assert.ok(app.includes('if(t.type==="solution") { t.config=editedTrackConfig(t.config,newCfg); return; }'), 'a Solution edit is saved in place');
+  assert.ok(app.includes('const edited=sol?editedTrackConfig(t.config,newCfg):newCfg;'), 'a Solution save reads its held bets from the live track (TRACK-EDIT-PARK)');
 });
 
 test('a wheel change and an onboarding restart keep the spin history and recount the droughts from it', async () => {

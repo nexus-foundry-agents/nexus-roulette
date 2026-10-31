@@ -350,22 +350,18 @@ export default function App() {
     updSess(s=>{
       const t=s.tracks.find(x=>x.id===id);
       if(!t) return;
-      // Check if anything actually changed
-      const changed = Object.keys(newCfg).some(k => JSON.stringify(newCfg[k]) !== JSON.stringify(t.config[k]));
-      if(!changed) return;
-      // A Solution track is edited in place: its held bets, their levels and the chased number are kept (editedTrackConfig).
-      // A Progression or Custom Bet track is too when its only change is the base (canEditInPlace, BaseBetInput.jsx).
-      const inPlace = canEditInPlace(t,newCfg);
-      if(inPlace) rebaseTrackPnl(t,newCfg.unit);
-      if(t.type==="solution") { t.config=editedTrackConfig(t.config,newCfg); return; }
-      if(inPlace) { t.config=editedTrackConfig(t.config,newCfg); return; }
-      // Park the original track, create new variation as active
-      t.state = "parked";
-      const mergedCfg = {...t.config, ...newCfg, activeBets: []};
-      const colorIdx = s.tracks.length % TRACK_COLORS.length;
-      const nt = newTrack(t.type, colorIdx, mergedCfg, pickTrackColor(t.type, mergedCfg, s.tracks));
+      // A Solution's held bets, levels and chase are the live ones (editedTrackConfig), so a panel left open while a bet was tapped is no change.
+      const sol=t.type==="solution";
+      const edited=sol?editedTrackConfig(t.config,newCfg):newCfg;
+      if(!Object.keys(edited).some(k => JSON.stringify(edited[k]) !== JSON.stringify(t.config[k]))) return;
+      // Every change parks the track it came from (its record stays) and starts a new active track with a fresh record. A Solution's
+      // held bets and chase move to the new track with their levels; the parked track keeps none, so resuming it cannot double them.
+      const mergedCfg=sol?{...t.config,...edited}:{...t.config,...edited,activeBets:[]};
+      if(sol) t.config={...t.config,activeBets:[],chaseNumber:null};
+      t.state="parked";
+      const nt=newTrack(t.type,s.tracks.length%TRACK_COLORS.length,mergedCfg,pickTrackColor(t.type,mergedCfg,s.tracks));
       nt.state = "active";
-      nt.createdAtSpin = s.spins.length;
+      nt.createdAtSpin = s.spins.length; nt.startedByEdit = true;
       s.tracks.push(nt);
     });
     setEditTrackId(null);
@@ -543,7 +539,7 @@ export default function App() {
           <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
         </SpinCorrectionContext.Provider>
         {spinCorrection && spinCorrection.index<sess.spins.length && (
-          <SpinNumberPicker spinIndex={spinCorrection.index} spinCount={sess.spins.length} currentValue={sess.spins[spinCorrection.index]} roulette={sess.roulette} blockedReason={spinCorrectionBlock(sess)} onChoose={v=>applySpinCorrection(spinCorrection.index,v)} onClose={()=>setSpinCorrection(null)}/>
+          <SpinNumberPicker spinIndex={spinCorrection.index} spinCount={sess.spins.length} currentValue={sess.spins[spinCorrection.index]} roulette={sess.roulette} blockedReason={spinCorrectionBlockAt(sess,spinCorrection.index)} onChoose={v=>applySpinCorrection(spinCorrection.index,v)} onClose={()=>setSpinCorrection(null)}/>
         )}
 
         {/* Roulette Table for Live Mode */}

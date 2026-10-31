@@ -153,8 +153,9 @@ function toggleSolBetConfig(config, number) {
   return {...config, activeBets: [...bets, {number, level: 0, invest: 0}]};
 }
 
-// The config to save from the Edit Config panel. The panel's copy was taken when it opened, so the held bets, their levels
-// and the chased number are always the live ones; only the fields the panel edits come from the copy. Pure.
+// The Solution's config for an Edit Config save. The panel's copy was taken when it opened, so the held bets, their levels
+// and the chased number are always the live ones; only the fields the panel edits come from the copy. updateTrackConfig
+// (App.jsx) hands the live bets to the new Solution track, and the panel's copy is never what carries them. Pure.
 function editedTrackConfig(live, edited) {
   const out = {...edited};
   if(live && "activeBets" in live) out.activeBets = live.activeBets;
