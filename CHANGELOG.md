@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-30
+
 ### Added
 
 - Streak percentiles for every bet, both wheels. `tools/gen-streak-percentiles.mjs` runs a seeded simulation of 1,000 sessions of 1,000,000 spins per wheel and writes `nexus-src/src/streak-percentiles.js`. For each even-money bet, dozen, column, group-bet shape (split, street, corner, six-line, and the basket on American) and single number, it records the streak length at P50, P75, P90, P95 and P98, and the cumulative distribution up to the 99.99% length. A completed losing streak is a run of consecutive spins a bet loses before its next win.
