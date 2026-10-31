@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-10-31
+
 ### Fixed
 
 - Cash Out: an amount typed above the bankroll was quietly cut to the bankroll. It is now refused with its reason ("The highest cash out is $X.") and the amount already set stays. Cash Out passes its range, 0.01 up to the bankroll, to the shared money field (`nexus-src/src/components/modals.jsx`).

@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.60.0";
+const APP_VERSION = "0.61.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,9 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.61.0", date:"Oct 31, 2026", title:"Cash Out Says Why", changes:[
+    "Typing a Cash Out above your bankroll now says why it can't be used and keeps your amount; it is no longer quietly cut to the bankroll"
+  ]},
   { v:"0.60.0", date:"Oct 31, 2026", title:"Every Number, and Gold for the Coldest", changes:[
     "Swipe the recent numbers strip to see every number in the session, loaded 40 at a time; Newer and Older buttons sit beside it",
     "Gold marks the number with the highest loss level in each dozen and each column, on the board and on each tile; turn it off in Settings"
