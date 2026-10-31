@@ -242,9 +242,33 @@ async function mountApp() {
     assert.ok(picker, `the number picker is open for spin ${index}`);
     return picker;
   }
+  // A tap on the Progression grid: tapNumber, which keeps the snapshot that Undo last spin reverts to.
+  async function tapGrid(value) {
+    const grid = collect(trackerTree(), (n) => n.type && n.type.name === 'FibGrid')[0];
+    assert.ok(grid, 'the Progression grid is showing');
+    grid.props.onNumber(value);
+    await flush();
+  }
+  // The Undo last spin button as the Tracker page draws it (null when it is not drawn).
+  function undoButton() {
+    return collect(trackerTree(), (n) => n.type === 'button' && n.props.children === '↩ Undo')[0] || null;
+  }
+  // The note under the track cards that carries the Undo refusal. It is always drawn; only its text and visibility change.
+  function undoNote() {
+    const note = collect(trackerTree(), (n) => n.type === 'div' && n.props['data-undo-note'])[0];
+    assert.ok(note, 'the Undo note slot is drawn');
+    return note;
+  }
+  // Presses the Undo button's handler, as a tap does: the handler itself must refuse, not the disabled attribute.
+  async function undo() {
+    const button = undoButton();
+    assert.ok(button, 'the Undo button is drawn');
+    button.props.onClick();
+    await flush();
+  }
   const state = () => hooks[0].value.appState;
   return {
-    ctx, flush, live, openEdit, save, parkButton, openPicker, state,
+    ctx, flush, live, openEdit, save, parkButton, openPicker, state, tapGrid, undoButton, undoNote, undo,
     // Copied into this realm: the App's state is made inside the sandbox, and deepStrictEqual compares prototypes.
     tracks: () => plain(state().currentSession.tracks),
     restoreSession(over) {
@@ -262,6 +286,9 @@ function freshProgression(over = {}) {
 
 // The refusal the number picker shows for a spin played before the last edit (EDIT_BOUNDARY_REASON in spin-apply.js).
 const EDIT_REASON = 'This spin was played before you edited a track. Corrections can only change spins after the last edit.';
+// The refusal for a spin played before a Park button press, and the Undo refusal the Tracker page draws (spin-apply.js).
+const PARK_REASON = 'This spin was played before a track was parked. Corrections can only change spins after the last park.';
+const UNDO_REASON = 'Undo is off: a track was edited or parked after the spin it would reverse, and Undo would drop that change.';
 
 // Settles spins on the app's current session the way a tap does, and writes the result back as that session.
 async function settle(app, values) {
@@ -570,4 +597,130 @@ test('a Solution edit that carries a bet above level 0 still refuses a correctio
   const after = app.ctx.correctSpin(sess, 5, '9', 1);
   assert.equal(after.ok, false, 'the carried bet at level 2 does not replay from level 0');
   assert.match(after.reason, /can't be corrected/);
+});
+
+// UNDO-AND-PARK: a Park button press is a correction boundary like an edit, and Undo last spin never silently removes a
+// track edit or park made after the spin it reverses.
+test('a Park from the Park button refuses a correction to a spin played before it, with the park reason, and changes nothing', async () => {
+  const app = await mountLive([freshProgression()], []);
+  await settle(app, SPINS);
+  await app.parkButton('prog-1');
+  await settle(app, ['7', '8']);
+  const sess = app.state().currentSession;
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, 0), PARK_REASON, 'the first spin, played before the park, is refused');
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, 3), PARK_REASON, 'the last spin before the park is refused');
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, 4), null, 'the first spin after the park is not');
+  // '1' was a hit on the parked track; '24' would turn that hit into a miss, a change its parked record could not follow.
+  const refused = app.ctx.correctSpin(sess, 0, '24', 1);
+  assert.equal(refused.ok, false, 'the correction is refused');
+  assert.equal(refused.reason, PARK_REASON);
+  assert.deepEqual(plain(app.state().currentSession), plain(sess), 'nothing changes, the bankroll included');
+  const picker = await app.openPicker(0);
+  assert.equal(picker.props.blockedReason, PARK_REASON, 'the number picker shows the same refusal');
+  picker.props.onChoose('24');
+  await app.flush();
+  assert.deepEqual(plain(app.state().currentSession), plain(sess), 'choosing a number in the picker changes nothing');
+  assert.equal(app.tracks()[0].state, 'parked');
+  assert.equal(app.ctx.correctSpin(sess, 4, '9', 1).ok, true, 'a spin from the park onward still corrects');
+});
+
+test('a session with no park corrects as before: no spin is refused for a park, and the hit corrects', async () => {
+  const app = await mountLive([freshProgression()], []);
+  await settle(app, SPINS);
+  const sess = app.state().currentSession;
+  assert.equal(app.ctx.spinCorrectionBlockAt(sess, 0), null);
+  assert.equal(app.ctx.correctSpin(sess, 0, '24', 1).ok, true, 'the same correction is accepted with no park');
+  const picker = await app.openPicker(0);
+  assert.equal(picker.props.blockedReason, null, 'the picker offers every number');
+});
+
+test('Clear numbers takes the park point with the spins, and Undo of Clear puts it back', async () => {
+  const app = await mountLive([freshProgression()], []);
+  await settle(app, SPINS);
+  await app.parkButton('prog-1');
+  const parked = app.state().currentSession;
+  const cleared = app.ctx.clearSpins(parked, 1);
+  assert.equal(cleared.tracks[0].parkedAtSpin, 0, 'the clear resets the park point with the spins');
+  let sess = cleared;
+  for (const v of ['7', '8']) sess = app.ctx.applySpin(sess, v, true).sess;
+  assert.notEqual(app.ctx.spinCorrectionBlockAt(sess, 0), PARK_REASON, 'a spin played after the clear is not refused for the park');
+  const restored = app.ctx.restoreSpinState(cleared, app.ctx.snapshotSpinState(parked), 2);
+  assert.equal(restored.tracks[0].parkedAtSpin, 4, 'Undo of the clear puts the park point back');
+  assert.equal(app.ctx.spinCorrectionBlockAt(restored, 0), PARK_REASON, 'and the spins before it are refused again');
+});
+
+test('Undo after a spin and then an edit is refused: the edit and the spin both stay', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  assert.equal(app.state().currentSession.spins.length, 1, 'the tap settled one spin');
+  const panel = await app.openEdit('prog-1');
+  await app.save(panel, { ...plain(panel.props.track.config), unit: 2 });
+  assert.equal(app.tracks().length, 2, 'the edit added its new track');
+  await app.undo();
+  assert.equal(app.tracks().length, 2, 'Undo did not remove the edit');
+  assert.equal(app.tracks()[1].startedByEdit, true, 'the new track is still the edit');
+  assert.equal(app.state().currentSession.spins.length, 1, 'Undo is refused, so the spin stays too');
+});
+
+test('Undo after a spin and then a Park is refused: the park stays, and so does the spin', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  await app.parkButton('prog-1');
+  assert.equal(app.tracks()[0].state, 'parked');
+  await app.undo();
+  assert.equal(app.tracks()[0].state, 'parked', 'Undo did not bring the parked track back');
+  assert.equal(app.state().currentSession.spins.length, 1, 'Undo is refused, so the spin stays too');
+});
+
+test('a refused Undo is disabled and its reason is drawn in the reserved note slot, which is there in both states', async () => {
+  const app = await mountLive([freshProgression()], []);
+  await app.tapGrid('7');
+  assert.equal(app.undoButton().props.disabled, false, 'Undo is available while nothing has changed since the spin');
+  assert.equal(app.undoNote().props.children, null, 'no refusal is drawn');
+  assert.equal(app.undoNote().props.style.visibility, 'hidden');
+  await app.parkButton('prog-1');
+  assert.equal(app.undoButton().props.disabled, true, 'Undo is disabled once a park is newer than the spin');
+  assert.equal(app.undoNote().props.children, UNDO_REASON, 'the reason is drawn');
+  assert.equal(app.undoNote().props.style.visibility, 'visible');
+});
+
+test('Undo still works when nothing changed since the spin, and a park made before the spin is kept by it', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  await app.tapGrid('7');
+  await app.undo();
+  assert.equal(app.state().currentSession.spins.length, 0, 'Undo reverts the spin');
+  assert.equal(app.tracks()[0].pnl, 0, 'and its P&L');
+
+  const two = await mountLive([freshProgression(), freshProgression({ id: 'prog-2' })], []);
+  two.ctx.confirm = () => true;
+  await two.parkButton('prog-1');
+  await two.tapGrid('7');
+  await two.undo();
+  assert.equal(two.tracks()[0].state, 'parked', 'the park made before the spin is in the record Undo puts back');
+  assert.equal(two.state().currentSession.spins.length, 0, 'and the spin is reverted');
+});
+
+test('the refusal reasons live in spin-apply.js only, and the Undo handler and picker read them from there', async () => {
+  const app = await readFile(new URL('App.jsx', SRC), 'utf8');
+  assert.doesNotMatch(app, /This spin was played before|Undo is off:/, 'App.jsx names no reason of its own');
+  assert.match(app, /blockedReason=\{spinCorrectionBlockAt\(sess,spinCorrection\.index\)\}/, 'the picker reads spinCorrectionBlockAt');
+  assert.match(app, /const undoWhy = undoBlockReason\(sess, prevSessState\);/, 'the Undo refusal comes from undoBlockReason');
+  assert.match(app, /function undoLastSpin\(\) \{\s*if\(!prevSessState \|\| undoWhy\) return;/, 'the Undo handler refuses on that reason');
+});
+
+test('Undo of a spin keeps an edit made before that spin: the boundary is strictly after the spin, so only later changes refuse', async () => {
+  const app = await mountLive([freshProgression()], []);
+  app.ctx.confirm = () => true;
+  const panel = await app.openEdit('prog-1');
+  await app.save(panel, { ...plain(panel.props.track.config), unit: 2 });
+  assert.equal(app.tracks().length, 2, 'the edit is made before the spin');
+  await app.tapGrid('7');
+  assert.equal(app.state().currentSession.spins.length, 1, 'the spin is settled after the edit');
+  await app.undo();
+  assert.equal(app.state().currentSession.spins.length, 0, 'Undo reverts the spin');
+  assert.equal(app.tracks().length, 2, 'and keeps the edit');
+  assert.equal(app.tracks()[1].startedByEdit, true, 'the new track is still the edit');
 });

@@ -10,7 +10,8 @@
 //     the record), and any money the record cannot place by spin index.
 //   - Refused: a session whose recorded tracks do not reproduce when its own spins are replayed (for example a
 //     spin logged without settling a track, which the record does not mark); and a spin played before the last edit
-//     parked a track (lastEditSpin), because the parked track's record is kept as it was and cannot follow a correction.
+//     or the last Park button press (lastEditSpin, lastParkSpin), because a parked track's record is kept as it was and
+//     cannot follow a correction. Undo last spin is refused (undoBlockReason) when an edit or park came after the spin.
 
 // A spin index is a whole number from 0 up to, but not including, the count (or up to and including it when
 // the count is the number of spins after the last one).
@@ -312,11 +313,34 @@ function lastEditSpin(sess) {
 // correction to that spin could not reach its P&L or the bankroll: the refusal is the only honest answer.
 const EDIT_BOUNDARY_REASON = "This spin was played before you edited a track. Corrections can only change spins after the last edit.";
 
+// The spin count at which the latest Park button press parked a track. parkToggle stamps it on the track it parks, and
+// clearSpins resets it to 0 with createdAtSpin, so Clear numbers removes the boundary with the spins. A track parked by an
+// edit carries no park point: lastEditSpin already covers it.
+function lastParkSpin(sess) {
+  let at = 0;
+  (sess.tracks || []).forEach(t => { if((t.parkedAtSpin || 0) > at) at = t.parkedAtSpin; });
+  return at;
+}
+
+// The reason a spin played before the last Park button press cannot be corrected. Same boundary as an edit, for a park.
+const PARK_BOUNDARY_REASON = "This spin was played before a track was parked. Corrections can only change spins after the last park.";
+
 // Why the spin at index cannot be corrected, or null. This is the one refusal: correctSpin applies it and the number picker
-// shows it. A spin before the last edit gets EDIT_BOUNDARY_REASON; any other refusal is spinCorrectionBlock's, for the session.
+// shows it. A spin before the latest edit or park gets that boundary's reason (the edit's when both are the same count); any
+// other refusal is spinCorrectionBlock's, for the session.
 function spinCorrectionBlockAt(sess, index, replayed) {
-  if(index < lastEditSpin(sess)) return EDIT_BOUNDARY_REASON;
+  const edit = lastEditSpin(sess), park = lastParkSpin(sess);
+  if(index < Math.max(edit, park)) return edit >= park ? EDIT_BOUNDARY_REASON : PARK_BOUNDARY_REASON;
   return spinCorrectionBlock(sess, replayed);
+}
+
+// Undo last spin restores the session as it was before the last tapped spin (prevSess). A track edit or park made after
+// that spin would go with it, so Undo is refused for it. A boundary above the spin count prevSess holds was made after the
+// spin. Returns the reason, or null when Undo may run (and when there is nothing to undo).
+const UNDO_BLOCK_REASON = "Undo is off: a track was edited or parked after the spin it would reverse, and Undo would drop that change.";
+function undoBlockReason(sess, prevSess) {
+  if(!prevSess) return null;
+  return Math.max(lastEditSpin(sess), lastParkSpin(sess)) > prevSess.spins.length ? UNDO_BLOCK_REASON : null;
 }
 
 // Replaces the spin at index with value and replays the session. Refuses (ok false) when the index or number is not
