@@ -14,7 +14,7 @@ const NOOP = () => {};
 
 // The files the bundle concatenates ahead of the Full Table page, in build.js order.
 const SLICE = [
-  'constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'roulette-bets.mjs',
+  'constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'streak-percentiles.js', 'percentile.js', 'roulette-bets.mjs',
   'components/NumberDrought.jsx', 'components/ui.jsx', 'components/TablePage.jsx',
 ];
 

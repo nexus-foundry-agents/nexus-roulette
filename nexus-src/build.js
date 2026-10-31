@@ -26,9 +26,13 @@ const FILES = [
   'spin-apply.js',
   // Simulation engine — depends on engine + constants
   'simulation.js',
+  // Streak percentiles: the generated table (tools/gen-streak-percentiles.mjs) and its lookup. Depends on constants only.
+  'streak-percentiles.js',
+  'percentile.js',
   // Base UI — depends on constants
   'roulette-bets.mjs',
-  // Number drought count under each number (NumberDrought, displayDrought). Depends on nothing; ui and grids use it.
+  // Number drought count under each number (NumberDrought, displayDrought), and the percentile tag beside a count (PercentTag).
+  // Depends on percentile.js for the Percentile counter; ui and grids use it.
   'components/NumberDrought.jsx',
   'components/ui.jsx',
   'components/RouletteIcon.jsx',
