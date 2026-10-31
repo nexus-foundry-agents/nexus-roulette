@@ -113,10 +113,14 @@ function stripChevron(points) {
 // Recent numbers, newest first. The first RECENT_STRIP_PAGE chips are drawn, and the next page when the reader scrolls to
 // within one strip width of the oldest chip drawn, so a session of any length can be reached. Chip for spin k is drawn
 // at position spins.length - 1 - k, whenever it was loaded. The container is always rendered at its reserved height: with
-// no numbers it is an empty slot. Pressing and holding one asks App for the picker; nothing else. Newer and Older scroll
-// the strip by one strip width. Both keep their slots, and only their visibility changes.
-function RecentNumbersStrip({spins, trackOverlays}) {
-  const openCorrection = React.useContext(SpinCorrectionContext);
+// no numbers it is an empty slot. Pressing and holding one asks App for the picker, when correctable is set; nothing else.
+// Newer and Older scroll the strip by one strip width. Both keep their slots, and only their visibility changes.
+// Two props differ between the pages that mount it. trackOverlays colours the border of a chip that an active track hit
+// (the Live page passes them; the Game page passes none). correctable (default true) lets a press and hold ask App for the
+// spin correction through SpinCorrectionContext (the Live page); the Game page passes correctable={false}.
+function RecentNumbersStrip({spins, trackOverlays, correctable=true}) {
+  const contextOpen = React.useContext(SpinCorrectionContext);
+  const openCorrection = correctable ? contextOpen : null;
   const latestOpen = React.useRef(openCorrection);
   latestOpen.current = openCorrection;
   const press = React.useMemo(() => createLongPress({
