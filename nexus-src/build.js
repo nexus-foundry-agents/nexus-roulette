@@ -44,6 +44,9 @@ const FILES = [
   'components/ResultFlash.jsx',
   // Track panels — depends on grids + ui + engine
   'components/TrackPanel.jsx',
+  // The Solution picker: the coldest numbers, one component for the track setup, the Solution panel and the candidate card.
+  // Depends on engine (solutionColdest, solutionPickRow), tlv (tierTag) and constants (RED).
+  'components/SolutionPicker.jsx',
   // Modals — depends on ui
   'components/modals.jsx',
   // Live-mode spin tools (clear numbers with inline undo) and the recent-numbers strip — depends on ui (Modal) and constants

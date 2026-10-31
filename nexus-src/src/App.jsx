@@ -178,20 +178,19 @@ export default function App() {
   const primFibTbl = primaryTrack&&primaryTrack.type==="fibonacci" ? computeTableForTrack(primaryTrack) : [];
   const primFibRow = primFibTbl[Math.min(primaryTrack?primaryTrack.level:0, primFibTbl.length-1)] || null;
   const solTable = primaryTrack&&primaryTrack.type==="solution" ? computeTableForTrack(primaryTrack) : [];
-  const solEntryThreshold = primaryTrack&&primaryTrack.type==="solution" ? primaryTrack.config.entryThreshold : 120;
-  const DEFAULT_SOL_ENTRY = 120;
+  // The default entry threshold is the founder's setting (engine.js solEntryDefault). A Solution track keeps its own.
+  const solDefaultEntry = solEntryDefault(settings);
+  const solEntryThreshold = primaryTrack&&primaryTrack.type==="solution" ? primaryTrack.config.entryThreshold : solDefaultEntry;
 
-  const inRange = useMemo(() =>
-    wheelNums.filter(v=>v!=="0"&&v!=="00"&&(sess.droughts[v]||0)>=solEntryThreshold)
-      .sort((a,b)=>(sess.droughts[b]||0)-(sess.droughts[a]||0)),
+  // The Solution's in-range numbers, coldest first: the one predicate (engine.js solutionInRange).
+  const inRange = useMemo(() => solutionInRange(sess.droughts, wheelNums, solEntryThreshold),
     [sess.droughts, solEntryThreshold, wheelNums]);
 
   // Solution candidates visible even without active Solution track
   const solCandidates = useMemo(() => {
     if(primaryTrack&&primaryTrack.type==="solution") return [];
-    return wheelNums.filter(v=>v!=="0"&&v!=="00"&&(sess.droughts[v]||0)>=DEFAULT_SOL_ENTRY)
-      .sort((a,b)=>(sess.droughts[b]||0)-(sess.droughts[a]||0));
-  }, [sess.droughts, primaryTrack, wheelNums]);
+    return solutionInRange(sess.droughts, wheelNums, solDefaultEntry);
+  }, [sess.droughts, primaryTrack, wheelNums, solDefaultEntry]);
 
   // Even money droughts, each with its percentile on this wheel (streakPercentile, percentile.js)
   const emDroughts = useMemo(() =>
@@ -353,6 +352,8 @@ export default function App() {
       // Check if anything actually changed
       const changed = Object.keys(newCfg).some(k => JSON.stringify(newCfg[k]) !== JSON.stringify(t.config[k]));
       if(!changed) return;
+      // A Solution track is edited in place: its held bets, their levels and the chased number are kept (editedTrackConfig).
+      if(t.type==="solution") { t.config=editedTrackConfig(t.config,newCfg); return; }
       // Park the original track, create new variation as active
       t.state = "parked";
       const mergedCfg = {...t.config, ...newCfg, activeBets: []};
@@ -366,14 +367,23 @@ export default function App() {
   }
   function parkToggle(id) { updSess(s=>{const t=s.tracks.find(x=>x.id===id);if(t)t.state=t.state==="active"?"parked":"active";}); }
   function closeTrack(id) { updSess(s=>{const t=s.tracks.find(x=>x.id===id);if(t){t.state="closed";t.closedAtSpin=s.spins.length;}}); }
+  // The in-range list's tap and the Active Bets ×: adds or removes one held bet (toggleSolBetConfig).
   function addSolBet(trackId, number) {
     updSess(s=>{
       const t=s.tracks.find(x=>x.id===trackId); if(!t||t.type!=="solution")return;
-      const bets=t.config.activeBets||[];
-      if(bets.find(b=>b.number===number)) t.config.activeBets=bets.filter(b=>b.number!==number);
-      else t.config.activeBets=[...bets,{number,level:0,invest:0}];
+      t.config=toggleSolBetConfig(t.config,number);
     });
   }
+  // The Solution picker's tap: this number becomes the chased one and its bet is added if not held. Every other held bet
+  // stays with its level (chaseSolConfig).
+  function chaseSolNumber(trackId, number) {
+    updSess(s=>{
+      const t=s.tracks.find(x=>x.id===trackId); if(!t||t.type!=="solution")return;
+      t.config=chaseSolConfig(t.config,number);
+    });
+  }
+  // The track setup's Entry Threshold stepper saves its value as the default for the next Solution track (settings.solEntryDefault).
+  function setSolEntryDefault(v) { updApp(s=>{s.settings.solEntryDefault=v;}); }
 
   function saveSession() {
     let allSessions;
@@ -488,6 +498,8 @@ export default function App() {
       jackpot:hasMix?{ret:6*row.c,profit:6*row.c-row.totalInvest}:null
     } : null;
     const solBets = primaryTrack&&primaryTrack.type==="solution" ? primaryTrack.config.activeBets||[] : [];
+    // The chased number of the Solution track on the panel (null when none, or after a hit); the Active Bets, the picker and the grid read it.
+    const solChase = primaryTrack&&primaryTrack.type==="solution" ? solutionChase(primaryTrack,sess.spins) : null;
 
     return (
       <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
@@ -587,6 +599,7 @@ export default function App() {
                     <span style={{fontSize:9,color:t.state==="active"?"#4ade80":t.state==="parked"?"#fbbf24":"#94a3b8",fontWeight:700}}>[{t.state.toUpperCase()}]</span>
                     <span style={{fontSize:12,fontWeight:800,color:dolPnl>=0?"#4ade80":"#f87171"}}>{dolPnl>=0?"+":"-"}{cur.symbol}{formatNumber(dolPnl)}</span>
                   </div>
+                  {t.type==="solution" && <div style={{fontSize:10,color:t.color,fontWeight:700,height:14,lineHeight:"14px",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{solutionChaseText(t,sess.droughts,sess.spins)}</div>}
                   <BetTargets type={t.type} config={t.config} style={{marginBottom:6}}/>
                   <div style={{display:"flex",gap:8,marginBottom:6}}>
                     <span style={{fontSize:10,color:"#94a3b8"}}>Lvl <strong style={{color:t.level>=10?"#f87171":t.level>=6?"#fbbf24":"#e2e8f0"}}>{t.level}</strong>/{tbl.length}</span>
@@ -613,7 +626,7 @@ export default function App() {
           </div>
         </div>
 
-        {addOpen && <AddTrackPanel onAdd={addTrack} onClose={()=>setAddOpen(false)} nextColor={nextColorIdx} type={pendingTrackType} cfg={pendingTrackCfg} onTypeChange={(t)=>{setPendingTrackType(t);setPendingTrackCfg(t==="fibonacci"?defaultFibCfg():defaultSolCfg());}} onCfgChange={setPendingTrackCfg} closedTracks={sess.tracks.filter(t=>t.state==="closed")} currency={currency} tableMinBet={settings.tableMinBet||1}/>}
+        {addOpen && <AddTrackPanel onAdd={addTrack} onClose={()=>setAddOpen(false)} nextColor={nextColorIdx} type={pendingTrackType} cfg={pendingTrackCfg} onTypeChange={(t)=>{setPendingTrackType(t);setPendingTrackCfg(t==="fibonacci"?defaultFibCfg():solDefaultCfg(settings));}} onCfgChange={setPendingTrackCfg} closedTracks={sess.tracks.filter(t=>t.state==="closed")} currency={currency} tableMinBet={settings.tableMinBet||1} droughts={sess.droughts} wheel={sess.roulette} solColor={pickTrackColor("solution",pendingTrackCfg,sess.tracks)} onEntryDefault={setSolEntryDefault}/>}
 
         {!primaryTrack && !addOpen && (
           <div style={{background:"#1e2d3d",borderRadius:14,padding:"20px",textAlign:"center",border:"1px dashed #2d4057"}}>
@@ -628,17 +641,8 @@ export default function App() {
           <Card>
             <FieldLabel>{"🎯 Solution Candidates ("+solCandidates.length+")"}</FieldLabel>
             <div style={{fontSize:10,color:"#64748b",marginBottom:6}}>Tap a number to start tracking it with The Solution</div>
-            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-              {solCandidates.slice(0,20).map(num=>{
-                const d=sess.droughts[num]||0;
-                return(
-                  <button key={num} onClick={()=>{setPendingTrackType("solution");setPendingTrackCfg({...defaultSolCfg(),activeBets:[{number:num,level:0}]});setAddOpen(true);}} style={{padding:"6px 8px",borderRadius:8,border:"1px solid #f59e0b",background:"#1c1000",cursor:"pointer",textAlign:"center",minWidth:44}}>
-                    <div style={{fontSize:13,fontWeight:900,color:RED.has(+num)?"#f87171":"#f1f5f9"}}>{num}</div>
-                    <div style={{fontSize:8,color:"#fbbf24",fontWeight:700}}>{d}sp</div>
-                  </button>
-                );
-              })}
-            </div>
+            <SolutionPicker droughts={sess.droughts} wheel={sess.roulette} threshold={solDefaultEntry} count={Math.max(6,Math.min(20,solCandidates.length))} chosen={null} color="#f59e0b"
+              onChoose={num=>{setPendingTrackType("solution");setPendingTrackCfg({...solDefaultCfg(settings),activeBets:[{number:num,level:0,invest:0}],chaseNumber:num});setAddOpen(true);}}/>
           </Card>
         )}
 
@@ -685,15 +689,20 @@ export default function App() {
 
         {primaryTrack && primaryTrack.type==="solution" && (
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <Card>
+              <div style={{fontSize:12,fontWeight:800,color:primaryTrack.color,height:16,lineHeight:"16px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{solutionChaseText(primaryTrack,sess.droughts,sess.spins)}</div>
+            </Card>
             {solBets.length>0 && (
               <Card>
                 <FieldLabel>Active Bets</FieldLabel>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {solBets.map(b => {
                     const row=solTable[Math.min(b.level,solTable.length-1)];
+                    const isChased=solChase&&solChase.number===b.number;
                     return (
-                      <div key={b.number} style={{background:"#0f1923",borderRadius:10,padding:"10px 12px",border:"1px solid "+primaryTrack.color,textAlign:"center",minWidth:70}}>
+                      <div key={b.number} style={{background:"#0f1923",borderRadius:10,padding:"10px 12px",border:(isChased?"2":"1")+"px solid "+primaryTrack.color,textAlign:"center",minWidth:70}}>
                         <div style={{fontSize:18,fontWeight:900,color:RED.has(+b.number)?"#f87171":"#f1f5f9"}}>{b.number}</div>
+                        <div aria-hidden={isChased?undefined:true} style={{fontSize:8,fontWeight:800,height:10,lineHeight:"10px",color:primaryTrack.color,visibility:isChased?"visible":"hidden"}}>CHASING</div>
                         <div style={{fontSize:9,color:"#64748b"}}>Lvl {b.level+1}</div>
                         <div style={{fontSize:11,color:"#60a5fa",fontWeight:700}}>{row?formatChips(row.totalBet,primaryTrack.config.unit,currency):"--"}/spin</div>
                         <button onClick={()=>addSolBet(primaryTrack.id,b.number)} style={{marginTop:3,fontSize:8,background:"transparent",border:"1px solid #7f1d1d",borderRadius:4,color:"#f87171",padding:"2px 5px",cursor:"pointer"}}>×</button>
@@ -703,6 +712,11 @@ export default function App() {
                 </div>
               </Card>
             )}
+            <Card>
+              <FieldLabel>Coldest numbers - tap one to chase it</FieldLabel>
+              <SolutionPicker droughts={sess.droughts} wheel={sess.roulette} threshold={solEntryThreshold} count={6} chosen={solChase?solChase.number:null} color={primaryTrack.color}
+                onChoose={num=>chaseSolNumber(primaryTrack.id,num)}/>
+            </Card>
             <Card>
               <FieldLabel>{inRange.length>0?inRange.length+" numbers at or past entry":"No numbers in range yet"}</FieldLabel>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
@@ -720,7 +734,7 @@ export default function App() {
             </Card>
             <Card>
               <FieldLabel>Tap Winning Number</FieldLabel>
-              <SolGrid onNumber={v=>tapNumber(v,true)} droughts={sess.droughts} entry={solEntryThreshold} maxLvl={solTable.length} activeBets={solBets} wheelNums={wheelNums} trackOverlays={trackOverlays.filter(o=>o.id!==primaryTrack.id)} flashNum={flashNum}/>
+              <SolGrid onNumber={v=>tapNumber(v,true)} droughts={sess.droughts} entry={solEntryThreshold} maxLvl={solTable.length} activeBets={solBets} wheelNums={wheelNums} trackOverlays={trackOverlays.filter(o=>o.id!==primaryTrack.id)} flashNum={flashNum} chasedNumber={solChase?solChase.number:null} chaseColor={primaryTrack.color}/>
             </Card>
           </div>
         )}

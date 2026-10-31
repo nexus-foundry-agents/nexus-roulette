@@ -13,7 +13,7 @@ function completeOnboarding(updApp, {roulette, bankroll, defaultBuyIn, currency:
               // Restart -- adjust existing session's bankroll
               const delta = bankroll - prevBankroll;
               s.currentSession.roulette = roulette;
-              s.currentSession.droughts = initDroughts(roulette);
+              s.currentSession.droughts = droughtsFromSpins(s.currentSession.spins, roulette);
               if(delta > 0) {
                 // Added money → Buy In
                 s.currentSession.bankrollCurrent = Math.round((s.currentSession.bankrollCurrent + delta)*100)/100;

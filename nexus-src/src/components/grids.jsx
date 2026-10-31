@@ -74,7 +74,11 @@ function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOver
   );
 }
 
-function SolGrid({onNumber, droughts, entry, maxLvl, activeBets, wheelNums, trackOverlays}) {
+// The Tap Winning Number grid. Every held bet shows its level badge and the held colours. The chased number (chasedNumber,
+// one at most) takes the track's colour as its ring and the CHASE label; its line is always reserved, so a cell is the same
+// size chased or not. flashNum is the number just tapped; it flashes as on the progression grid. The last hit keeps its own
+// colours (solGridCellStyle in engine.js).
+function SolGrid({onNumber, droughts, entry, maxLvl, activeBets, wheelNums, trackOverlays, flashNum, chasedNumber, chaseColor}) {
   const activeSet = new Set((activeBets||[]).map(b=>b.number));
   const zeros = wheelNums.filter(v=>v==="0"||v==="00");
   const nums36 = wheelNums.filter(v=>v!=="0"&&v!=="00");
@@ -92,14 +96,15 @@ function SolGrid({onNumber, droughts, entry, maxLvl, activeBets, wheelNums, trac
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:3}}>
         {nums36.map(val => {
-          const d=droughts[val]||0, isAct=activeSet.has(val);
-          const cs=numDroughtStyle(d,entry,maxLvl,isAct);
+          const d=droughts[val]||0, held=activeSet.has(val), chased=chasedNumber===val, flashed=flashNum===val;
+          const cs=solGridCellStyle(d,entry,maxLvl,held,chased,flashed,chaseColor);
           const inR=d>=entry, ab=(activeBets||[]).find(b=>b.number===val);
           const overlays=(trackOverlays||[]).filter(o=>o.type==="solution"&&(o.activeBets||[]).some(b=>b.number===val));
           return (
-            <button key={val} onClick={()=>onNumber(val)} style={{padding:"7px 0",borderRadius:6,border:(inR||isAct?"2":"1")+"px solid "+cs.bd,background:cs.bg,color:cs.tx,fontSize:10,fontWeight:800,cursor:"pointer",position:"relative"}}>
+            <button key={val} onClick={()=>onNumber(val)} style={{padding:"7px 0",borderRadius:6,border:(inR||held||chased||flashed?"2":"1")+"px solid "+cs.bd,background:cs.bg,color:cs.tx,fontSize:10,fontWeight:800,cursor:"pointer",position:"relative"}}>
               <div>{val}</div>
-              <div style={{fontSize:7,color:isAct?"#4ade80":inR?"#fbbf24":"#1f2937"}}>{d}</div>
+              <div style={{fontSize:7,color:chased?(chaseColor||"#4ade80"):held?"#4ade80":inR?"#fbbf24":"#1f2937"}}>{d}</div>
+              <div aria-hidden={chased?undefined:true} style={{fontSize:6,fontWeight:800,height:7,lineHeight:"7px",color:chaseColor||"#4ade80",visibility:chased?"visible":"hidden"}}>CHASE</div>
               {ab && <div style={{position:"absolute",top:1,right:1,fontSize:6,color:"#4ade80",fontWeight:900}}>L{ab.level+1}</div>}
               {overlays.length>0 && (
                 <div style={{display:"flex",justifyContent:"center",gap:1,marginTop:1}}>
