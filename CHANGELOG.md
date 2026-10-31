@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-10-31
+
 ### Added
 
 - Photo review says which reader read the numbers. A board-photo return may carry an optional reader field after the numbers: `#readboard=ok:8,31,3;by=cloud` (the hosted cloud model) or `#readboard=ok:8,31,3;by=pc` (the user's PC). The review shows "Read by the cloud model" or "Read by your PC" in a reserved line above the numbers, and that line's space is kept whether or not it has text. A return without the field, or with an unknown value, parses exactly as before and shows no line. The shape is stated in the parser comment of `nexus-src/src/components/BoardPhoto.jsx`, where the Nexus Foundry reader side must match it. The parse and the review's `reader` prop are in that file; the field is accepted on numbers returns only.

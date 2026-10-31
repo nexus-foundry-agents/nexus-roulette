@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.61.0";
+const APP_VERSION = "0.62.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,9 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.62.0", date:"Oct 31, 2026", title:"Who Read Your Board", changes:[
+    "When a board photo comes back, the review says whether the cloud model or your PC read it"
+  ]},
   { v:"0.61.0", date:"Oct 31, 2026", title:"Cash Out Says Why", changes:[
     "Typing a Cash Out above your bankroll now says why it can't be used and keeps your amount; it is no longer quietly cut to the bankroll"
   ]},
