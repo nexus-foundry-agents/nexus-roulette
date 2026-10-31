@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.73.0] - 2026-10-31
+
 ### Changed
 
 - Table minimum has no default. A new user has no table minimum until one is set in the startup wizard or in Settings. The wizard's Min Bet field starts at "No minimum" and may be left there. Settings shows "No minimum" when none is set, and its stepper returns to none from $0.25. Stored values are not rewritten: an existing user keeps the minimum they have. The migration in `nexus-src/src/session.js` (`loadApp()`) no longer fills $10 for a missing value; a missing value is none (`null`), and `defaultSettings()` stores `null`.
