@@ -7,6 +7,10 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- Added tests `test/session-flows.test.mjs` for the session flows through the real App: resuming a saved session saves the unsaved current session first and then makes the saved one current exactly as saved, and survives a save and reload; a session's label persists through save and reload and survives the account-sync merge by its modified stamp; the typed catch-up `2 2 2 24 4` adds five spins in that order and settles the active tracks through `commitBoardAdd`. Tests only: no source, version or cache change.
+
 ## [0.62.0] - 2026-10-31
 
 ### Added
