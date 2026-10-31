@@ -29,6 +29,9 @@ const FILES = [
   // Streak percentiles: the generated table (tools/gen-streak-percentiles.mjs) and its lookup. Depends on constants only.
   'streak-percentiles.js',
   'percentile.js',
+  // Section TLV readings (sum of the 12 loss levels of a dozen or column, its average, maximum, count at P95 and history).
+  // Depends on percentile.js and constants. The tiles and the detail view read them.
+  'tlv.js',
   // Base UI — depends on constants
   'roulette-bets.mjs',
   // Number drought count under each number (NumberDrought, displayDrought), and the percentile tag beside a count (PercentTag).
@@ -62,6 +65,10 @@ const FILES = [
   'components/session-files.jsx',
   'components/onboarding-apply.jsx',
   'components/UpdateBanner.jsx',
+  // The drought panel's section tiles: the sparkline (hand-drawn SVG) and the tile and detail view. Depends on tlv.js,
+  // ui (Modal) and constants. DroughtPanel mounts them.
+  'components/TlvSparkline.jsx',
+  'components/SectionTile.jsx',
   'components/DroughtPanel.jsx',
   'components/GamePage.jsx',
   'components/TablePage.jsx',

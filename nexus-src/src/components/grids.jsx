@@ -5,6 +5,8 @@ function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOver
   // Drought count under every number (NumberDrought). Display only: droughts is read, never written. The Counter
   // setting picks Spins or Percentile, and the wheel names the table the percentile is read from.
   const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false, counter:counterMode(counterShows), wheel:roulette};
+  // The zeros row takes the wheel's own zeros: 0 and 00 on American, 0 alone on European.
+  const zeros = getWheelNumbers(roulette).filter(v => v==="0"||v==="00");
   const pressTimer = React.useRef(null);
   function numCell(val) {
     const isZ = val==="0"||val==="00";
@@ -37,8 +39,8 @@ function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOver
   }
   return (
     <div style={{width:"100%"}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginBottom:4}}>
-        {["0","00"].map(v => (
+      <div style={{display:"grid",gridTemplateColumns:"repeat("+zeros.length+",1fr)",gap:4,marginBottom:4}}>
+        {zeros.map(v => (
           <button key={v} onClick={()=>onNumber(v)} style={{padding:"7px 0",borderRadius:8,border:"1px solid #1f2937",background:"#1a0a0a",color:"#6b7280",fontSize:14,fontWeight:800,cursor:"pointer"}}><div>{v}</div><NumberDrought num={v} view={droughtView}/></button>
         ))}
       </div>
