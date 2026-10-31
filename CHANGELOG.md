@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-10-31
+
 ### Fixed
 
 - A spin recorded while an earlier spin's send to Casino is still unconfirmed is no longer dropped from the Casino recording. The new spin queues behind the earlier one in `useCasinoRecording()` in `nexus-src/src/casino-recording.mjs`, takes the next sequence number in spin order, and is sent once the earlier spin confirms. Every retry of a send reuses that spin's sequence and request id. A send that keeps failing shows how many spins are waiting to send to Casino.

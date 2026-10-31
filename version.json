@@ -1,1 +1,1 @@
-{"version":"0.64.0","date":"2026-10-31","notes":"Every track edit starts a new track and parks the old one; the screen no longer resets while you scroll or type."}
+{"version":"0.65.0","date":"2026-10-31","notes":"If the Casino connection blips, spins wait in line and send in order; nothing is dropped without a count."}
