@@ -7,6 +7,18 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Changed
+
+- The Game page's recent-numbers ticker is now the shared recent-numbers strip the Live page uses, `RecentNumbersStrip` in `nexus-src/src/components/SpinTools.jsx`. The separate 30-chip row in `nexus-src/src/components/GamePage.jsx` is removed. The Game page reaches every spin of the session with no limit: it draws the newest 40 chips first, loads the next 40 as the reader scrolls toward the oldest chip drawn, and has the same Newer and Older pager buttons and hidden scrollbar as the Live page.
+- The shared strip takes a `correctable` prop, on by default. The Game page passes `correctable={false}`, so a long-press on a number there does not open the Live spin correction, as before. The Game page passes no track overlays, as before, so the track colour borders stay on the Live page.
+- The Game page's strip reserves its 40 px row from the first render, with no numbers in it, so the spin result and the drought panel below it do not move when the first spin lands. Before this change the ticker appeared only after the first spin.
+
+### Open
+
+- The visual checks of the Game page strip (the hidden scrollbar, the pager buttons, and the scroll at 360 and 390 px) are UNVERIFIED: no browser suite was run for this change.
+- The strip's loaded pages and scroll position reset whenever `App` re-renders, because `GamePage` and `TrackerPage` are declared inside `App` in `nexus-src/src/App.jsx` and so remount on every render. A bet, a chip tap or a spin animation tick in Game mode therefore returns the strip to its newest 40 chips. The Live page has the same reset on each Live update. The fix is in `App.jsx`, which this change does not edit.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 ## [0.61.0] - 2026-10-31
 
 ### Fixed
