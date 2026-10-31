@@ -7,6 +7,32 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- The base bet is exact. The track setup and Edit Config (every track type: progression, Custom Bet and The Solution) take a Custom amount from 0.01 to 10,000 with up to 2 decimals, in the session's currency. Commas separate thousands and a currency symbol at either end is ignored. A value that cannot be read, is zero or negative, has more than 2 decimals or is over 10,000 shows its reason beside the field and keeps the amount already applied; nothing is clamped or truncated. The Custom field applies on blur or Enter. The control is `nexus-src/src/components/BaseBetInput.jsx`, one component mounted by both panels in `nexus-src/src/components/TrackPanel.jsx`.
+- The base bet preview under the presets shows, for each level of the track's table at the applied amount: bet per spin, total invested and bankroll needed, through `formatChips()`. It updates as soon as an amount is applied, and it honours the track's stop loss, which caps the ladder at stop loss divided by the base.
+- The base bet shows "Below the table minimum (X)" beside the field when it is under `settings.tableMinBet`. The warning does not block the amount; the operator decides.
+
+### Changed
+
+- The quick presets are 0.25, 0.50, 1.00, 2, 5 and 10. One tap applies a preset.
+- A preset below the table minimum is no longer disabled. It is still shown, with the warning above. Before, the check compared the base multiplied by the number of targets; the check now compares the base alone.
+- Edit Config on a Progression Bet or Custom Bet track whose only change is the base now edits the track in place, as The Solution already did. Its level, held bets and history are kept, and the new base applies from the next bet. The track is not parked and recreated. A save that also changes another field (ROI, stop loss, targets, bet mode) still parks the track and starts a new one, as before.
+- An in-place base change rebases the track's stored P&L (`pnl`, held in chips) by old base over new base, so the money already recorded for the track does not change. This applies to every track type edited in place, including The Solution.
+
+### Fixed
+
+- A base change on a The Solution track, which has been edited in place since 0.56.0, re-priced the P&L the track had already recorded, because P&L is held in chips and multiplied by the current base. The stored P&L is now rebased when the base changes (`rebaseTrackPnl()` in `nexus-src/src/components/BaseBetInput.jsx`, called from `updateTrackConfig()` in `nexus-src/src/App.jsx`), so the money recorded so far does not move.
+
+### Open
+
+- Bankroll needed and total invested are the same figure in the engine for every level (the cumulative stake through that level). The preview shows both columns, as the brief asked. A single column is a follow-on choice.
+- The shared money input in `nexus-src/src/components/ui.jsx` (`MoneyInput`) strips non-numeric characters and rounds on blur without a message. It is not changed here, because it is used by bankroll, buy-in and cash-out surfaces outside this change. The base bet field copies its styling but not its commit logic.
+- The Settings copy in `nexus-src/src/components/modals.jsx` ("This controls which unit bet sizes are valid") describes the old gating and is stale. It is outside this change's files.
+- The in-app release notes list in `nexus-src/src/constants.js` is not updated; it belongs to the release step.
+- A base change saved together with another field on a Progression or Custom track still parks the track, so its level restarts. Moving that case in place is a separate ruling.
+- The base bet preview is a sample of the table, UNVERIFIED on a device: no browser suite was run for this change.
+
 ## [0.56.0] - 2026-10-31
 
 ### Added
