@@ -14,7 +14,7 @@ const SRC = new URL('../nexus-src/src/', import.meta.url);
 
 const SLICE = [
   'constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'spin-apply.js',
-  'streak-percentiles.js', 'percentile.js', 'roulette-bets.mjs', 'components/ui.jsx', 'components/BaseBetInput.jsx',
+  'streak-percentiles.js', 'percentile.js', 'roulette-bets.mjs', 'money-parse.js', 'components/ui.jsx', 'components/BaseBetInput.jsx',
 ];
 
 async function loadSlice() {
@@ -55,6 +55,9 @@ async function loadSlice() {
 let slice = null;
 const load = () => { if (!slice) slice = loadSlice(); return slice; };
 
+// The base is read by the one shared parser (money-parse.js) with the base's range (BaseBetInput.jsx, baseRange).
+const parseBase = (ctx, text, currency) => ctx.parseMoneyAmount(text, currency, ctx.baseRange(ctx.getCurrency(currency)));
+
 const straight = (target, baseAmount) => ({ type: 'straight', target, baseAmount });
 
 // A progression on dozen 1: a fibonacci track whose only settings are the base and the stop loss.
@@ -65,10 +68,10 @@ const progressionCfg = (unit, stopLoss) => ({
 // Money a table row represents at a base, in cents, so a comparison of two bases is exact.
 const moneyCents = (row, unit) => [row.totalBet, row.totalInvest, row.ret, row.profit].map((v) => Math.round(v * unit * 100));
 
-test('parseBaseAmount reads decimals, thousands commas, and a currency symbol that is stripped', async () => {
+test('the base amount reads decimals, thousands commas, and a currency symbol that is stripped', async () => {
   const { ctx } = await load();
   const ok = (text, currency = 'USD') => {
-    const r = ctx.parseBaseAmount(text, currency);
+    const r = parseBase(ctx, text, currency);
     assert.equal(r.ok, true, `"${text}" should be read: ${r.reason || ''}`);
     return r.value;
   };
@@ -86,10 +89,10 @@ test('parseBaseAmount reads decimals, thousands commas, and a currency symbol th
   assert.equal(ok('$0.01'), 0.01);
 });
 
-test('parseBaseAmount refuses each bad value with its reason, and the base is not changed', async () => {
+test('the base amount refuses each bad value with its reason, and the base is not changed', async () => {
   const { ctx } = await load();
   const refuse = (text, currency, reason) => {
-    const r = ctx.parseBaseAmount(text, currency || 'USD');
+    const r = parseBase(ctx, text, currency || 'USD');
     assert.equal(r.ok, false, `"${text}" should be refused`);
     assert.match(r.reason, reason, `"${text}" should say why`);
   };
@@ -113,15 +116,15 @@ test('parseBaseAmount refuses each bad value with its reason, and the base is no
   refuse('0', 'JPY', /lowest base is ¥1/);
 });
 
-test('parseBaseAmount accepts the limits 0.01 and 10,000 and nothing beyond them', async () => {
+test('the base amount accepts the limits 0.01 and 10,000 and nothing beyond them', async () => {
   const { ctx } = await load();
-  assert.equal(ctx.parseBaseAmount('0.01', 'USD').value, 0.01);
-  assert.equal(ctx.parseBaseAmount('9999.99', 'USD').value, 9999.99);
-  assert.equal(ctx.parseBaseAmount('10000', 'USD').value, 10000);
-  assert.equal(ctx.parseBaseAmount('10000.00', 'USD').value, 10000);
-  assert.equal(ctx.parseBaseAmount('10000.01', 'USD').ok, false);
-  assert.equal(ctx.parseBaseAmount('0.009', 'USD').ok, false);
-  assert.equal(ctx.parseBaseAmount('1', 'JPY').value, 1);
+  assert.equal(parseBase(ctx, '0.01', 'USD').value, 0.01);
+  assert.equal(parseBase(ctx, '9999.99', 'USD').value, 9999.99);
+  assert.equal(parseBase(ctx, '10000', 'USD').value, 10000);
+  assert.equal(parseBase(ctx, '10000.00', 'USD').value, 10000);
+  assert.equal(parseBase(ctx, '10000.01', 'USD').ok, false);
+  assert.equal(parseBase(ctx, '0.009', 'USD').ok, false);
+  assert.equal(parseBase(ctx, '1', 'JPY').value, 1);
 });
 
 // The stop loss is money, so the ladder is capped at stopLoss / base chips. A stop loss this large is never reached in the

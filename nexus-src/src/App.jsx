@@ -64,9 +64,9 @@ export default function App() {
   const [clearOpen, setClearOpen] = useState(false);
   const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
   const [spinCorrection, setSpinCorrection] = useState(null); // {index} while the number picker for a recent spin is open
-  const {boardReturn, setBoardReturn, setBoardAdd, addBoardNumbers} = useBoardPhotoReturn(
+  const {boardReturn, setBoardReturn, setBoardAdd, addBoardNumbers, readBoardPhoto} = useBoardPhotoReturn(
     appState.currentSession, appMode, setAppMode, casinoSync.status, boardDecision, commitBoardAdd,
-    {setPrevSessState, setResult, setLastSpinDelta, setFlashNum, liveRecording, vibration:(appState.settings||{}).vibration});
+    {setPrevSessState, setResult, setLastSpinDelta, setFlashNum, liveRecording, gameRecording, vibration:(appState.settings||{}).vibration});
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
@@ -537,7 +537,7 @@ export default function App() {
           <span style={{flex:"1 1 0",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12,color:sess.venue?"#cbd5e1":"#64748b"}}>{venueLine(sess.venue)||"No venue recorded"}</span>
           <button onClick={()=>venueSheets.openEdit("current")} style={{flex:"0 0 auto",padding:"5px 10px",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>{sess.venue?"Edit venue":"Add venue"}</button>
         </div>
-        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)}/>
+        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={readBoardPhoto}/>
         <BoardPhotoStatus result={boardReturn}/>
         <SpinCorrectionContext.Provider value={openSpinCorrection}>
           <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
@@ -572,7 +572,7 @@ export default function App() {
           return (
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               <button onClick={()=>setLiveSelectingWinner(!liveSelectingWinner)} style={{width:"100%",padding:"12px 0",borderRadius:10,border:liveSelectingWinner?"2px solid #fbbf24":"2px solid #2d4057",background:liveSelectingWinner?"linear-gradient(135deg,#92400e,#78350f)":"#0f1923",color:liveSelectingWinner?"#fbbf24":"#94a3b8",fontSize:13,fontWeight:800,cursor:"pointer"}}>{liveSelectingWinner?"👆 Tap the winning number...":"🎯 Choose Winning Number"}</button>
-              <RouletteBoard pickNumbers={liveSelectingWinner} roulette={sess.roulette} winningNumber={liveWinNumber} stratBets={stratBets} spinning={false} onBet={livePlaceBet} boardBets={liveBoardBets} chipColor={(CHIPS.find(c=>c.val===selectedChip)||CHIPS[0]).color} betResults={liveBetResults} stratChips={computeStratChips(nonClosedTracks)} landscape={isLandscape} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true} counterShows={settings.counterShows} percentileOutlines={settings.percentileOutlines}/>
+              <RouletteBoard pickNumbers={liveSelectingWinner} roulette={sess.roulette} winningNumber={liveWinNumber} stratBets={stratBets} spinning={false} onBet={livePlaceBet} boardBets={liveBoardBets} chipColor={(CHIPS.find(c=>c.val===selectedChip)||CHIPS[0]).color} betResults={liveBetResults} stratChips={computeStratChips(nonClosedTracks)} landscape={isLandscape} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true} counterShows={settings.counterShows} percentileOutlines={settings.percentileOutlines} coldestGold={settings.coldestGold!==false}/>
               <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap"}}>{CHIPS.map(c=>(<button key={c.val} onClick={()=>{setSelectedChip(c.val);setLiveSelectingWinner(false);}} style={{width:34,height:34,borderRadius:"50%",border:"2px solid "+(selectedChip===c.val&&!liveSelectingWinner?"#fbbf24":c.border),background:c.color,color:c.val>=100?"#fff":c.val<=0.5?"#1e293b":"#1e293b",fontSize:c.val<1?6:8,fontWeight:900,cursor:"pointer",boxShadow:selectedChip===c.val&&!liveSelectingWinner?"0 0 8px #fbbf24":"none",display:"flex",alignItems:"center",justifyContent:"center"}}>{c.label}</button>))}</div>
               <div style={{display:"flex",gap:3}}><button onClick={liveUndoBet} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#60a5fa":"#374151",fontSize:8,fontWeight:700}}>↩Undo</button><button onClick={liveClearBets} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#f87171":"#374151",fontSize:8,fontWeight:700}}>✕Clear</button><button onClick={liveDoubleBets} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#fbbf24":"#374151",fontSize:8,fontWeight:700}}>2×</button><button onClick={liveRepeatBets} disabled={liveLastBets.length===0} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveLastBets.length>0?"#86efac":"#374151",fontSize:8,fontWeight:700}}>♻Rpt</button></div>
               {liveTotalBet>0&&<div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fbbf24"}}>Bet: {cur.symbol}{formatNumber(liveTotalBet)}</div>}
@@ -583,7 +583,7 @@ export default function App() {
 
         {/* Drought panel. Its slot is reserved at DROUGHT_PANEL_HEIGHT and hidden, not removed, when there are no numbers, so clearing moves nothing below it. */}
         <div aria-hidden={sess.spins.length===0} style={{minHeight:DROUGHT_PANEL_HEIGHT,visibility:sess.spins.length>0?"visible":"hidden"}}>
-          <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD} dozP={dozP} colP={colP} spins={sess.spins} droughts={sess.droughts} roulette={sess.roulette}/>
+          <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD} dozP={dozP} colP={colP} spins={sess.spins} droughts={sess.droughts} roulette={sess.roulette} coldestGold={settings.coldestGold!==false}/>
         </div>
 
         {/* Track cards with drag-to-reorder */}
@@ -850,13 +850,13 @@ export default function App() {
             {tab===0 && <TrackerPage/>}
             {tab===1 && <TablePage/>}
             {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays}/>}
-            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
+            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={readBoardPhoto} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
             {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
           </div>
         )}
 
       {/* Modals */}
-      {appMode==="live" && boardReturn && boardReturn.kind==="numbers" && <BoardPhotoReview numbers={boardReturn.numbers} roulette={sess.roulette} onAdd={addBoardNumbers} onCancel={()=>setBoardReturn(null)}/>}
+      {appMode==="live" && boardReturn && boardReturn.kind==="numbers" && <BoardPhotoReview numbers={boardReturn.numbers} roulette={sess.roulette} reader={boardReturn.reader} onAdd={addBoardNumbers} onCancel={()=>setBoardReturn(null)}/>}
       {result && <ResultFlash result={result} cur={cur} onDismiss={()=>setResult(null)}/>}
       {buyInOpen && <BuyInModal defaultAmount={settings.defaultBuyIn||100} currency={currency} currentBankroll={sess.bankrollCurrent} onBuyIn={doBuyIn} onClose={()=>setBuyInOpen(false)}/>}
       {cashOutOpen && <CashOutModal maxAmount={sess.bankrollCurrent} currency={currency} currentBankroll={sess.bankrollCurrent} onCashOut={doCashOut} onClose={()=>setCashOutOpen(false)}/>}

@@ -7,6 +7,10 @@
 // The percentile tiers a badge can show, highest first. A value shows the highest tier it has reached.
 const TIER_LEVELS = [98, 95, 75, 50, 25];
 
+// The gold of a section's coldest number: the number's text and a small corner pip on the board, and its text on the tile and
+// in the detail view. It is never the F10 outline colour, so the outline still reads on the same square.
+const COLDEST_GOLD = "#ffd700";
+
 // The tier a percentile has reached: the highest of TIER_LEVELS at or below it, or null below P25 or with no percentile.
 function percentileTier(pct) {
   if (typeof pct !== "number" || !(pct >= 0)) return null;
@@ -66,6 +70,25 @@ function sectionMax(droughts, numbers) {
     }
   }
   return { loss: loss < 0 ? 0 : loss, number };
+}
+
+// The coldest numbers of a section: every number tied at the section's highest loss level, in list order, and that level.
+// When the highest level is 0 no number is coldest and the result has no numbers. 0 and 00 are never in a section.
+function sectionColdest(kind, index, droughts) {
+  const numbers = sectionNumbers(kind, index);
+  const level = sectionMax(droughts, numbers).loss;
+  if (level <= 0) return { level: 0, numbers: [] };
+  return { level, numbers: numbers.filter((n) => ((droughts && droughts[n]) || 0) === level) };
+}
+
+// The numbers the board marks gold: the coldest numbers of all six sections (each dozen and each column), as a set keyed by
+// label. Read from droughts alone, so it follows every spin, undo and correction.
+function coldestGoldNumbers(droughts) {
+  const out = {};
+  ["dozen", "column"].forEach((kind) => {
+    for (let i = 0; i < 3; i++) sectionColdest(kind, i, droughts).numbers.forEach((n) => { out[n] = true; });
+  });
+  return out;
 }
 
 // How many of a section's numbers are at or above their own single-number P95 on this wheel. `table` defaults to the
@@ -149,6 +172,7 @@ function sectionReadout(input, table) {
   const tlvPct = distPercentile(tlvEntry, tlv);
   const avgPct = distPercentile(avgEntry, avgTenths(tlv));
   const max = sectionMax(droughts, numbers);
+  const coldest = sectionColdest(kind, index, droughts);
   const maxPct = max.number === null ? null : streakPercentile("straight:" + max.number, wheel, max.loss, table);
   const cold = coldCount(droughts, numbers, wheel, table);
   const window = tlvWindow(series, streak);
@@ -156,7 +180,7 @@ function sectionReadout(input, table) {
   const perNumber = numbers.map((n, order) => {
     const loss = droughts[n] || 0;
     const pct = streakPercentile("straight:" + n, wheel, loss, table);
-    return { number: n, loss, pct, tier: percentileTier(pct), order };
+    return { number: n, loss, pct, tier: percentileTier(pct), order, gold: coldest.numbers.indexOf(n) !== -1 };
   });
   perNumber.sort((a, b) => (b.loss - a.loss) || (a.order - b.order));
   const labels = kind === "dozen"
@@ -169,6 +193,7 @@ function sectionReadout(input, table) {
     avg, avgPct, avgTier: percentileTier(avgPct),
     max: max.loss, maxNumber: max.number, maxPct, maxTier: percentileTier(maxPct),
     cold,
+    coldest,
     perNumber,
     series,
     windowValues: window.values,

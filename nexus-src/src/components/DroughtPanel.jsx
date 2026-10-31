@@ -18,7 +18,7 @@ function droughtPanelHeight() {
   return EM_CELL_H + PANEL_GAP + SECTION_RULE_GAP + SECTION_RULE + SECTION_PAD_TOP + 2 * TILE_H + TILE_ROW_GAP;
 }
 
-function DroughtPanel({emDroughts, dozD, colD, dozP, colP, spins, droughts, roulette}) {
+function DroughtPanel({emDroughts, dozD, colD, dozP, colP, spins, droughts, roulette, coldestGold = true}) {
   const [openKey, setOpenKey] = useState(null);
   const wheel = roulette || "american";
   const readouts = useMemo(() => {
@@ -37,7 +37,9 @@ function DroughtPanel({emDroughts, dozD, colD, dozP, colP, spins, droughts, roul
     });
     return out;
   }, [spins, droughts, wheel, dozD, colD, dozP, colP]);
-  const open = openKey ? readouts.filter((r) => r.key === openKey)[0] : null;
+  // The F18 Settings toggle: with gold off, no tile or detail row shows a coldest number (the slot stays reserved).
+  const shown = coldestGold ? readouts : readouts.map((r) => ({...r, coldest: {level: 0, numbers: []}, perNumber: r.perNumber.map((p) => ({...p, gold: false}))}));
+  const open = openKey ? shown.filter((r) => r.key === openKey)[0] : null;
   const close = () => setOpenKey(null);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:PANEL_GAP}}>
@@ -51,10 +53,10 @@ function DroughtPanel({emDroughts, dozD, colD, dozP, colP, spins, droughts, roul
       </div>
       <div style={{borderTop:"1px solid #2d4057",marginTop:SECTION_RULE_GAP,paddingTop:SECTION_PAD_TOP,display:"flex",flexDirection:"column",gap:TILE_ROW_GAP}}>
         <div style={{display:"flex",gap:4}}>
-          {readouts.slice(0,3).map(r=><SectionTile key={r.key} r={r} onOpen={setOpenKey}/>)}
+          {shown.slice(0,3).map(r=><SectionTile key={r.key} r={r} onOpen={setOpenKey}/>)}
         </div>
         <div style={{display:"flex",gap:4}}>
-          {readouts.slice(3,6).map(r=><SectionTile key={r.key} r={r} onOpen={setOpenKey}/>)}
+          {shown.slice(3,6).map(r=><SectionTile key={r.key} r={r} onOpen={setOpenKey}/>)}
         </div>
       </div>
       {open && (

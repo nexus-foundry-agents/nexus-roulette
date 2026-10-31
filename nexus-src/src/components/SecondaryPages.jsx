@@ -77,6 +77,8 @@ function VenueSpinCounts({sessions}) {
 function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, saveSession, newEmptySession, tearSession, reactivateTrack, saved, resumeSaved, renameSaved, addCatchUp, readPhoto, exportJSON, venueSession, onEditVenue }) {
     // The sessions sheet (F13): null when closed, {focusId} when opened, focusId names a session to resume at once or null.
     const [browse, setBrowse] = useState(null);
+    // The real vs simulated sheet (F12): open or closed. It reads the saved sessions and the current one.
+    const [realVsSim, setRealVsSim] = useState(false);
     // Group tracks by type + roi + stopLoss for consolidated view
     const trackGroups = useMemo(() => {
       const groups = {};
@@ -236,6 +238,7 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
         </Card>
 
         {saved.length>0 && <VenueSpinCounts sessions={saved}/>}
+        <Card><button type="button" onClick={()=>setRealVsSim(true)} style={{width:"100%",padding:"9px 0",borderRadius:9,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:12,fontWeight:700,cursor:"pointer"}}>Real vs simulated</button></Card>
 
         <StreakPercentileTable wheel={sess.roulette}/>
 
@@ -245,6 +248,7 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
           </Card>
         )}
         {browse && <SessionsPage saved={saved} sess={sess} cur={cur} initialResumeId={browse.focusId} onResume={resumeSaved} onRename={renameSaved} onAddNumbers={addCatchUp} readPhoto={readPhoto} onClose={()=>setBrowse(null)}/>}
+        {realVsSim && <RealVsSimPage sessions={saved} current={sess} onClose={()=>setRealVsSim(false)}/>}
       </div>
     );
   }
@@ -343,6 +347,10 @@ function SettingsPage({ settings, updSettings, setCurrencyOpen, currency, cur, u
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
               <span style={{fontSize:13,color:"#94a3b8"}}>Percentile outlines</span>
               <button onClick={()=>updApp(s=>{s.settings.percentileOutlines=s.settings.percentileOutlines===false;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.percentileOutlines!==false?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.percentileOutlines!==false?"ON":"OFF"}</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
+              <span style={{fontSize:13,color:"#94a3b8"}}>Gold for the coldest number in each dozen and column</span>
+              <button onClick={()=>updApp(s=>{s.settings.coldestGold=s.settings.coldestGold===false;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.coldestGold!==false?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.coldestGold!==false?"ON":"OFF"}</button>
             </div>
           </div>
         </Card>

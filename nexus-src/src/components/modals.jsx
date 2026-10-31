@@ -17,7 +17,7 @@ function CashOutModal({maxAmount, currency, currentBankroll, onCashOut, onClose}
         <button onClick={onClose} style={{background:"transparent",border:"none",color:"#64748b",fontSize:22,cursor:"pointer"}}>×</button>
       </div>
 
-      <MoneyInput value={amount} onChange={v=>setAmount(Math.min(v,maxAmount))} currCode={currency} label="Cash Out Amount"/>
+      <MoneyInput value={amount} onChange={setAmount} currCode={currency} label="Cash Out Amount" range={{min:0.01, max:maxAmount, noun:"cash out"}}/>
 
       <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:12}}>
         {[25,50,100,200,500].filter(v=>v<=maxAmount).map(v => (
@@ -112,7 +112,7 @@ function OnboardingScreen({onComplete, initialBankroll}) {
         {step===3 && (
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{fontSize:17,fontWeight:700,color:"#e2e8f0",textAlign:"center"}}>Table Limits</div>
-            <div style={{fontSize:12,color:"#64748b",textAlign:"center"}}>Set your table's actual limits. This controls which unit bet sizes are valid and warns when a progression would exceed the max.</div>
+            <div style={{fontSize:12,color:"#64748b",textAlign:"center"}}>Set your table's actual limits. A base bet below the Min Bet is allowed and shows a note; it is never blocked.</div>
             {[
               {label:"Min Bet",              key:"minBet",   val:tableMinBet, set:setTableMinBet, color:"#4ade80"},
               {label:"Max Bet (per position)",key:"maxBet",  val:tableMaxBet, set:setTableMaxBet, color:"#fbbf24"},

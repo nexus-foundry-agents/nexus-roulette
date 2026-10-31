@@ -63,3 +63,6 @@ Agent-active time per worker run (Haiku 5.5, xhigh; Opus supervisor):
 | F3.1e PC frame set | 1 (Codex Sol 6.1 high) | 20:34 | 20:38 | about 4 min | accepted (b611d096) |
 | F3.1 review round 3 | 1 (Codex Sol 6.1 high) | 20:05 | 20:09 | about 12 min | accepted (423010a1) |
 | F3.1 NF route | 3 | 13:33 | 14:27 | about 55 min (incl. 503 fix) | accepted |
+| F15 board-add repeats (10-31) | 1 (Haiku 5.5 xhigh) | 07:57 | 08:10 | about 13 min | accepted with a seat fix: strip limit 30 to 40 applied by the supervisor (f71df98), shipped 0.57.0 |
+| F16 exact base bet (10-31) | 1 (Haiku 5.5 xhigh) | 08:05 | 08:18 | about 13 min | accepted (8ba3582), shipped 0.58.0 |
+| F13 session browser (10-31) | 1 (Haiku 5.5 xhigh) | 08:05 | 08:19 | about 14 min | accepted (9e863ef), shipped 0.58.0 |

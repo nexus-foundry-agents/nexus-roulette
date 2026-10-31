@@ -68,38 +68,48 @@ function Modal({children, onClose, fullScreen}) {
   );
 }
 
-function MoneyInput({value, onChange, currCode, label}) {
+// The money field (MONEYINPUT-SILENT-STRIP). The text is kept exactly as typed while editing. On blur or Enter a valid amount
+// applies. An invalid one shows its reason under the field and keeps the amount already applied; its text stays, so it can be
+// corrected. Nothing is rounded: parseMoneyAmount (money-parse.js) refuses an entry with more decimals than it takes.
+// range is {min, max, noun} (money-parse.js). Omitted, it is MONEY_INPUT_RANGE, the range every current caller has.
+function MoneyInput({value, onChange, currCode, label, range}) {
   const [raw, setRaw] = useState(String(value));
-  const [focused, setFocused] = useState(false);
+  const [error, setError] = useState("");
   const cur = getCurrency(currCode);
 
-  // Reflect external value changes (preset buttons, steppers) while the field
-  // isn't being typed in — without this, preset clicks never update the display
-  // and a later blur commits the stale text right back over them.
-  useEffect(() => { if(!focused) setRaw(String(value)); }, [value, focused]);
+  // Reflect external value changes (preset buttons, steppers, a caller's clamp). A refused entry leaves the value as it was,
+  // so its text and its reason stay in place.
+  useEffect(() => { setRaw(String(value)); setError(""); }, [value]);
 
   function commit(str) {
-    const n = parseFloat(str.replace(/[^0-9.]/g,""));
-    if(!isNaN(n) && n >= 0) onChange(Math.round(n * 100) / 100);
-    else setRaw(value.toFixed(cur.dec));
+    const r = parseMoneyAmount(str, currCode, range || MONEY_INPUT_RANGE);
+    if(r.ok) { setError(""); setRaw(String(r.value)); onChange(r.value); }
+    else setError(r.reason);
   }
 
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
-      <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:12,border:"1px solid #2d4057",overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:12,border:"1px solid "+(error?"#f87171":"#2d4057"),overflow:"hidden"}}>
         <div style={{padding:"0 14px",fontSize:20,color:"#64748b",fontWeight:700}}>{cur.symbol}</div>
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          aria-label={label || "Amount"}
+          aria-invalid={error ? "true" : "false"}
           value={raw}
           onChange={e => setRaw(e.target.value)}
-          onBlur={e => { setFocused(false); commit(e.target.value); }}
-          onFocus={e => { setFocused(true); e.target.select(); }}
-          onKeyDown={e => e.key==="Enter" && commit(e.target.value)}
-          style={{flex:1,padding:"14px 0",fontSize:22,fontWeight:800,color:"#86efac",background:"transparent",border:"none",outline:"none",WebkitAppearance:"none"}}
+          onBlur={() => commit(raw)}
+          onFocus={e => e.target.select()}
+          onKeyDown={e => { if(e.key === "Enter") commit(raw); }}
+          style={{flex:1,minWidth:0,padding:"14px 0",fontSize:22,fontWeight:800,color:"#86efac",background:"transparent",border:"none",outline:"none",WebkitAppearance:"none"}}
         />
       </div>
+      <div aria-hidden={!error} style={{minHeight:14,marginTop:4,fontSize:10,color:"#f87171",visibility:error?"visible":"hidden"}}>{error || " "}</div>
     </div>
   );
 }
@@ -137,7 +147,7 @@ function SessionClock({startedAt, endedAt, style, pauseOffset}) {
 // -- Roulette Table Board --
 // pickNumbers: the board is picking a hit, not placing a bet, so a tap anywhere in a number's square is that number
 // (the counter under the number sits in the edge zone, which would otherwise read as a split or corner).
-function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows, pickNumbers, percentileOutlines}) {
+function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows, pickNumbers, percentileOutlines, coldestGold}) {
   const isAmerican = roulette === "american";
   const sb = stratBets || {};
   const bb = boardBets || {};
@@ -276,6 +286,15 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
     insideBetChips[anchorNum].push({amount:bb[k],posKey:k,style:chipStyle});
   });
 
+  // The coldest number of each dozen and column (F18): gold number text and a small gold pip at the corner. Drawn only when the
+  // page passes coldestGold true (the Settings toggle), and read from droughts, so it follows every spin, undo and correction.
+  // Neither changes a square's size, border or outline.
+  var goldNums = coldestGold===true ? coldestGoldNumbers(droughtView.droughts) : {};
+  function coldestStyle(numStr){ return goldNums[numStr] && winStr!==numStr ? {color:COLDEST_GOLD} : {}; }
+  function coldestPip(numStr){
+    return goldNums[numStr] ? React.createElement("div",{"aria-hidden":true,style:{position:"absolute",top:2,left:2,width:5,height:5,borderRadius:"50%",background:COLDEST_GOLD,pointerEvents:"none",zIndex:3}}) : null;
+  }
+
   function cell(num,isZero,zeroLabel){
     var numStr=isZero?(zeroLabel||"0"):String(num);
     var betKey="s:"+numStr;
@@ -303,8 +322,9 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
       onBet(det.type,det.target);
     }
 
-    return React.createElement("div",{key:numStr,onClick:handleClick,style:{...numStyle(num,isZero),...percentileOutline(numStr),cursor:canBet?"pointer":"default",border:betBorder||numStyle(num,isZero).border}},
+    return React.createElement("div",{key:numStr,onClick:handleClick,style:{...numStyle(num,isZero),...percentileOutline(numStr),...coldestStyle(numStr),cursor:canBet?"pointer":"default",border:betBorder||numStyle(num,isZero).border}},
       numberFace(numStr),
+      coldestPip(numStr),
       winStr===numStr&&!spinning&&React.createElement(Mkr),
       sChips&&React.createElement(StratChipBadge,{chips:sChips}),
       bb[betKey]&&React.createElement(BetChip,{amount:bb[betKey],posKey:betKey})

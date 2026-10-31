@@ -7,6 +7,92 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-10-31
+
+### Added
+
+- Real vs simulated (F12): a Real vs simulated button on the Stats page opens a sheet that compares what was logged at each casino, machine or table, and dealer with the simulated wheel. For the chosen venue it shows the spins observed, a number grid of observed counts against a simulated reference (the spins on that wheel divided by its pockets), and a dozen and column table with hits, the reference hits, the longest completed losing streak and its percentile against the simulated streak distribution in `nexus-src/src/streak-percentiles.js`. A completed losing streak is consecutive spins without a hit, ended by a hit, counted within one session and, for a table, within one dealer's spins; a streak still running at the end is not counted. The venue picker offers casino, then machine or table, then dealer, and lists only the values logged sessions hold. A venue with fewer than 100 spins says how many were logged. The logic is pure, in `nexus-src/src/real-vs-sim.js`; the sheet is `nexus-src/src/components/RealVsSimPage.jsx`, mounted from `nexus-src/src/components/SecondaryPages.jsx`; the tests are in `test/real-vs-sim.test.mjs`.
+- Added tests `test/session-flows.test.mjs` for the session flows through the real App: resuming a saved session saves the unsaved current session first and then makes the saved one current exactly as saved, and survives a save and reload; a session's label persists through save and reload and survives the account-sync merge by its modified stamp; the typed catch-up `2 2 2 24 4` adds five spins in that order and settles the active tracks through `commitBoardAdd`. Tests only: no source, version or cache change.
+
+### Changed
+
+- Catch up card (`nexus-src/src/components/SessionsPage.jsx`): its "Read board photo" button is the shared `ReadBoardPhotoButton` in `nexus-src/src/components/SpinTools.jsx`, the same component the Live spin tools mount, with the same handler from `nexus-src/src/App.jsx`. The card defines no photo button of its own.
+- Catch up for Game sessions: the card offers the bulk entry for a Game session as it does for a Live one, and the Game-mode note is removed. The board-add path `commitBoardAdd()` in `nexus-src/src/board-return.mjs` takes the session kind (live or game) as a parameter and writes that session, so "2 2 2 24" enters four spins oldest first and settles the Game tracks. The add is recorded to the recorder for its mode.
+- The card offers Read board photo for Live sessions only. A photo return opens the Live review, so the button would lead nowhere for a Game session.
+
+### Open
+
+- The visual checks of the sheet at 360 and 390 px (no horizontal scroll, and no layout movement as the venue changes) are UNVERIFIED: no browser suite was run for this change.
+- The venue chip rows are laid out again in `RealVsSimPage.jsx`, next to the Sessions sheet's chip rows in `SessionsPage.jsx`, which use the same `SessionsChip`. The shared row belongs in one component; `SessionsPage.jsx` is outside this change, so it is not edited here.
+- Each chip row holds two lines and scrolls inside them when more chips do not fit, so the sheet's height does not change with the venue. The applied choice stays in its row, shown pressed, rather than leaving the list (a filter that hides its own applied value gives no sign of what is applied); tapping it changes nothing.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+- A Game catch-up cannot be reached from the screen yet. The sessions sheet is mounted only in the Live Stats tab (`nexus-src/src/App.jsx`, `nexus-src/src/components/SecondaryPages.jsx`), and resuming a Game session switches the app to Game mode, which unmounts the sheet before the card shows. Opening the card for a Game session needs a change to where the sheet is mounted, or an entry on the Game page (`nexus-src/src/components/GamePage.jsx`). Both are outside this item and need their own item and a ruling.
+- The visual checks of the card are UNVERIFIED: no browser suite was run for this change. They cover the single photo button in a Live card and the Add button's width in a Game card, where there is no photo button.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+- The Game page's recent-numbers ticker is now the shared recent-numbers strip the Live page uses, `RecentNumbersStrip` in `nexus-src/src/components/SpinTools.jsx`. The separate 30-chip row in `nexus-src/src/components/GamePage.jsx` is removed. The Game page reaches every spin of the session with no limit: it draws the newest 40 chips first, loads the next 40 as the reader scrolls toward the oldest chip drawn, and has the same Newer and Older pager buttons and hidden scrollbar as the Live page.
+- The shared strip takes a `correctable` prop, on by default. The Game page passes `correctable={false}`, so a long-press on a number there does not open the Live spin correction, as before. The Game page passes no track overlays, as before, so the track colour borders stay on the Live page.
+- The Game page's strip reserves its 40 px row from the first render, with no numbers in it, so the spin result and the drought panel below it do not move when the first spin lands. Before this change the ticker appeared only after the first spin.
+- The visual checks of the Game page strip (the hidden scrollbar, the pager buttons, and the scroll at 360 and 390 px) are UNVERIFIED: no browser suite was run for this change.
+- The strip's loaded pages and scroll position reset whenever `App` re-renders, because `GamePage` and `TrackerPage` are declared inside `App` in `nexus-src/src/App.jsx` and so remount on every render. A bet, a chip tap or a spin animation tick in Game mode therefore returns the strip to its newest 40 chips. The Live page has the same reset on each Live update. The fix is in `App.jsx`, which this change does not edit.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
+## [0.62.0] - 2026-10-31
+
+### Added
+
+- Photo review says which reader read the numbers. A board-photo return may carry an optional reader field after the numbers: `#readboard=ok:8,31,3;by=cloud` (the hosted cloud model) or `#readboard=ok:8,31,3;by=pc` (the user's PC). The review shows "Read by the cloud model" or "Read by your PC" in a reserved line above the numbers, and that line's space is kept whether or not it has text. A return without the field, or with an unknown value, parses exactly as before and shows no line. The shape is stated in the parser comment of `nexus-src/src/components/BoardPhoto.jsx`, where the Nexus Foundry reader side must match it. The parse and the review's `reader` prop are in that file; the field is accepted on numbers returns only.
+
+### Open
+
+- The Nexus Foundry side that sends `;by=` is a separate item.
+- The visual check of the reader line at 360 and 390 px is UNVERIFIED: no browser suite was run for this change.
+
+## [0.61.0] - 2026-10-31
+
+### Fixed
+
+- Cash Out: an amount typed above the bankroll was quietly cut to the bankroll. It is now refused with its reason ("The highest cash out is $X.") and the amount already set stays. Cash Out passes its range, 0.01 up to the bankroll, to the shared money field (`nexus-src/src/components/modals.jsx`).
+
+## [0.60.0] - 2026-10-31
+
+### Added
+
+- Gold for the coldest number in each dozen and column. On the board, the number with the highest loss level in each of the six sections is gold: gold number text and a small gold corner pip. The F10 outline is unchanged, so gold and the outline read separately. Each section tile shows its coldest number or numbers and their loss level in gold, in a row with a reserved slot, and its detail view lists the section's numbers coldest first with the coldest in gold. The rule is `sectionColdest()` in `nexus-src/src/tlv.js`: ties return every tied number, and nothing is gold when the highest loss level is 0. 0 and 00 are never in a section.
+- Settings: "Gold for the coldest number in each dozen and column", on by default, beside Percentile outlines and saved with the other settings (`nexus-src/src/components/SecondaryPages.jsx`).
+
+### Changed
+
+- The recent-numbers strip on the Live page shows every spin of the session, newest first, with no limit. It draws the newest 40 chips first, and loads the next 40 when the reader scrolls to within one strip width of the oldest chip drawn, until every spin is shown. A new spin still appears at the front at once. The strip's scrollbar is hidden; two pager buttons, Newer at the left and Older at the right, scroll it by about one strip width. Their space is reserved and only their visibility changes. The long-press correction and the track colour borders work on every chip, including the ones loaded later. The strip's height is unchanged. Before this change it showed only its newest 40 spins (`RECENT_STRIP_LIMIT` in `nexus-src/src/components/SpinTools.jsx`).
+- Clearing the numbers returns the strip to its first page of 40 chips.
+
+### Open
+
+- The visual checks of the strip (the hidden scrollbar, the pager buttons and the scroll at 360 and 390 px) are UNVERIFIED: no browser suite was run for this change.
+- The Game-mode recent-numbers ticker in `nexus-src/src/components/GamePage.jsx` still shows only its newest 30 spins. It is outside this change's files.
+- The toggle governs the board on the Live page only. Tile gold shows regardless of the toggle, and the Game page board shows no gold until `nexus-src/src/components/GamePage.jsx` passes `coldestGold`. Wiring the toggle into the tiles needs a prop through `nexus-src/src/components/DroughtPanel.jsx`. `GamePage.jsx` and `DroughtPanel.jsx` are outside this change, so neither is edited here.
+- The visual checks for the gold board cell and the tile's coldest row at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
+
+## [0.59.0] - 2026-10-31
+
+### Fixed
+
+- `MoneyInput` (the bankroll, buy-in and cash-out fields in `nexus-src/src/components/ui.jsx`) no longer changes what was typed without a message. It used to strip non-numeric characters, read `-5` as `5` and round to cents on blur. It now keeps the text as typed. On blur or Enter a valid amount applies. An amount that cannot be read, is negative, has more than 2 decimal places, is outside its range or has cents in a currency with no minor unit shows its reason under the field and keeps the amount already applied. A 3-decimal entry is refused, never rounded.
+- The Table Limits copy in `nexus-src/src/components/modals.jsx` said "This controls which unit bet sizes are valid" and "warns when a progression would exceed the max". Both were stale. A base below the Min Bet is allowed and shows a note, and no max-bet warning exists in the code. The copy now states only the Min Bet behaviour.
+
+### Changed
+
+- The amount parser is one shared module, `nexus-src/src/money-parse.js` (`parseMoneyAmount(text, currCode, range)`), used by `BaseBetInput.jsx` and `MoneyInput`. `parseBaseAmount()` is removed. The base is read with `baseRange()`, which keeps the base's limits (0.01 to 10,000, or 1 to 10,000 in a currency with no minor unit) and its messages.
+- `MoneyInput` takes an optional `range` ({min, max, noun}). Its default is the range every current caller has: 0 or more, no upper bound. Its field is a text field, so "1,000" and "$5" are read rather than emptied.
+- Callers and their ranges, unchanged: Cash Out (`modals.jsx`), 0 or more, capped at the bankroll by the parent (see Open); Starting Bankroll, Default Buy In and the Buy In amount (`modals.jsx`); Default Buy In (`SecondaryPages.jsx`); Starting Bankroll (`SimModePage.jsx`); Current Bankroll (`App.jsx`). All are 0 or more with no upper bound.
+
+### Open
+
+- The visual checks are UNVERIFIED: no browser suite was run for this change.
+- Cash Out: `modals.jsx` clamps a typed amount above the bankroll to the bankroll with no message (`setAmount(Math.min(v,maxAmount))`). That is outside this change's files. It needs its own item so the field can show the cap.
+- The Buy In modal accepts 0 into the field, and its button does nothing at 0, because `handleBuyIn` requires more than 0. Not changed here.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion. The rebuilt `index.html` therefore has new bytes under the current version, which `deploy.sh` refuses until that step.
+- The in-app release notes list in `nexus-src/src/constants.js` is not updated; it belongs to the release step.
+
 ### Fixed
 
 - A spin recorded while an earlier spin's send to Casino is still unconfirmed is no longer dropped from the Casino recording. The new spin queues behind the earlier one in `useCasinoRecording()` in `nexus-src/src/casino-recording.mjs`, takes the next sequence number in spin order, and is sent once the earlier spin confirms. Every retry of a send reuses that spin's sequence and request id. A send that keeps failing shows how many spins are waiting to send to Casino.
@@ -59,7 +145,6 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 - The visual checks at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
 - Catch up is not offered for Game sessions. The board-add path writes only the Live session; a Game catch-up needs a ruling and a change to `nexus-src/src/board-return.mjs`.
-- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
 - The catch-up card's Read board photo button calls the same action as the spin tools' button, but it is a second button. One shared component needs `nexus-src/src/components/SpinTools.jsx`, outside this change.
 - A resume now stays on Stats with the sessions sheet open. The old Resume jumped to the Tracker. Where a resume should land is a ruling.
 - The base bet is exact. The track setup and Edit Config (every track type: progression, Custom Bet and The Solution) take a Custom amount from 0.01 to 10,000 with up to 2 decimals, in the session's currency. Commas separate thousands and a currency symbol at either end is ignored. A value that cannot be read, is zero or negative, has more than 2 decimals or is over 10,000 shows its reason beside the field and keeps the amount already applied; nothing is clamped or truncated. The Custom field applies on blur or Enter. The control is `nexus-src/src/components/BaseBetInput.jsx`, one component mounted by both panels in `nexus-src/src/components/TrackPanel.jsx`.
