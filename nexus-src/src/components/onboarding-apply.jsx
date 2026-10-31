@@ -5,9 +5,11 @@ function completeOnboarding(updApp, {roulette, bankroll, defaultBuyIn, currency:
             s.settings.onboarded = true;
             s.settings.currency = curr;
             s.settings.defaultBuyIn = defaultBuyIn;
-            if(tableMinBet) s.settings.tableMinBet = tableMinBet;
-            if(tableMaxBet) s.settings.tableMaxBet = tableMaxBet;
-            if(tableMaxTotal) s.settings.tableMaxTotal = tableMaxTotal;
+            // Each answer is applied as given. No minimum arrives as null and stores none; an answer that was not given
+            // (undefined) keeps the stored value. The wizard's Max fields always hold a number, so a number is stored as given.
+            if(tableMinBet!==undefined) s.settings.tableMinBet = tableMinimum(tableMinBet);
+            if(Number.isFinite(tableMaxBet)) s.settings.tableMaxBet = tableMaxBet;
+            if(Number.isFinite(tableMaxTotal)) s.settings.tableMaxTotal = tableMaxTotal;
             delete s.settings._restartBankroll;
             if(prevBankroll !== undefined) {
               // Restart -- adjust existing session's bankroll

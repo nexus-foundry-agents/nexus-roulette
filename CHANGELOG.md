@@ -7,6 +7,18 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- Restart Onboarding applies the wizard's Min Bet as given. "No minimum" clears an existing table minimum to none, and a number stores that number. `completeOnboarding()` in `nexus-src/src/components/onboarding-apply.jsx` wrote the minimum only when it was truthy, so a restart that left Min Bet at "No minimum" kept the old minimum. The minimum is now written through `tableMinimum()` in `nexus-src/src/session.js`. Max Bet and Max Total in the same function now store any finite number the wizard gives, instead of only truthy ones. The wizard's Max stepper never goes below $1, so the wizard does not change a Max value this way today.
+
+### Tests
+
+- Added `test/onboarding-clears-min.test.mjs`: a restart from a minimum of 10 with No minimum stores none; none to none, none to 5 and 5 to 5 are applied as given; a minimum that is not answered keeps the stored one; the wizard's No minimum reaches the restart as null; Max Bet and Max Total are stored as given, and kept when not answered.
+
+### Open
+
+- The version, `APP_VERSION` and the `sw.js` CACHE name are not bumped by this change; they move at promotion. The cache-bust question for the single-file bundle is still open as recorded under 0.73.0.
+
 ## [0.73.0] - 2026-10-31
 
 ### Changed
