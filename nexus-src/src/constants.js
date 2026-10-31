@@ -18,7 +18,7 @@ const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
 const APP_VERSION = "0.57.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
-const UNITS = [0.25, 0.50, 1.00];
+const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
 const CURRENCIES = {
   USD:{ symbol:"$",  name:"US Dollar",        flag:"🇺🇸", rate:1,      dec:2 },

@@ -42,6 +42,9 @@ const FILES = [
   // Grids — depends on engine + constants + ui
   'components/grids.jsx',
   'components/ResultFlash.jsx',
+  // Base bet (F16): the one base-size control for the track setup and Edit Config. Depends on engine (computeTableForTrack,
+  // editedTrackConfig), constants (CURRENCIES, UNITS, getCurrency, formatMoney, formatChips) and ui (FieldLabel).
+  'components/BaseBetInput.jsx',
   // Track panels — depends on grids + ui + engine
   'components/TrackPanel.jsx',
   // The Solution picker: the coldest numbers, one component for the track setup, the Solution panel and the candidate card.

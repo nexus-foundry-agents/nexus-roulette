@@ -354,7 +354,11 @@ export default function App() {
       const changed = Object.keys(newCfg).some(k => JSON.stringify(newCfg[k]) !== JSON.stringify(t.config[k]));
       if(!changed) return;
       // A Solution track is edited in place: its held bets, their levels and the chased number are kept (editedTrackConfig).
+      // A Progression or Custom Bet track is too when its only change is the base (canEditInPlace, BaseBetInput.jsx).
+      const inPlace = canEditInPlace(t,newCfg);
+      if(inPlace) rebaseTrackPnl(t,newCfg.unit);
       if(t.type==="solution") { t.config=editedTrackConfig(t.config,newCfg); return; }
+      if(inPlace) { t.config=editedTrackConfig(t.config,newCfg); return; }
       // Park the original track, create new variation as active
       t.state = "parked";
       const mergedCfg = {...t.config, ...newCfg, activeBets: []};
