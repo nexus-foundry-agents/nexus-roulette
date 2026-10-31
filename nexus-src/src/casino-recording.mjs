@@ -117,9 +117,11 @@ const retryDelay = (milliseconds) => new Promise(function(resolve){ setTimeout(r
  * A timeout or 5xx can happen after the database commit, so the retry MUST carry the identical
  * sequence and payload. `recorded:false` reconciles only after such an ambiguous attempt; on the
  * first attempt it means the client arrived with a stale sequence and must not advance over it.
+ * `priorAmbiguous` carries an ambiguous attempt made by an earlier call, so a later retry reconciles
+ * the same way instead of reading the server's duplicate answer as a stale sequence.
  */
-export async function sendCasinoSpinUntilReconciled(payload,send=askCasino,wait=retryDelay,onRetry,maxAttempts=3) {
-  let ambiguous=false;
+export async function sendCasinoSpinUntilReconciled(payload,send=askCasino,wait=retryDelay,onRetry,maxAttempts=3,priorAmbiguous=false) {
+  let ambiguous=priorAmbiguous;
   for(let attempt=0;attempt<maxAttempts;attempt++) {
     let result;
     try{result=await send('spin',payload);}
@@ -128,10 +130,10 @@ export async function sendCasinoSpinUntilReconciled(payload,send=askCasino,wait=
       const recorded=result.body&&result.body.recorded;
       if(recorded===true) return {...result,reconciled:false};
       if(recorded===false&&ambiguous) return {...result,reconciled:true};
-      if(recorded===false) return {ok:false,status:409,error:'That recording sequence already existed before this spin.'};
-      return {ok:false,status:0,error:'Casino returned no recording verdict for that spin.'};
+      if(recorded===false) return {ok:false,status:409,ambiguous,error:'That recording sequence already existed before this spin.'};
+      return {ok:false,status:0,ambiguous:true,error:'Casino returned no recording verdict for that spin.'};
     }
-    if(result.status!==0&&result.status<500) return result;
+    if(result.status!==0&&result.status<500) return {...result,ambiguous};
     ambiguous=true;
     if(onRetry) onRetry(attempt+1);
     if(attempt+1<maxAttempts)await wait(Math.min(1000*(attempt+1),5000));
@@ -140,10 +142,117 @@ export async function sendCasinoSpinUntilReconciled(payload,send=askCasino,wait=
 }
 
 /** The first request both records the pending spin and banks duration; it never waits to ask pause. */
-export function sendCasinoSpinAndPause(payload,send=askCasino,wait=retryDelay,onRetry,maxAttempts=3) {
+export function sendCasinoSpinAndPause(payload,send=askCasino,wait=retryDelay,onRetry,maxAttempts=3,priorAmbiguous=false) {
   return sendCasinoSpinUntilReconciled(
-    {...payload,spin:{...payload.spin,pauseAfter:true}},send,wait,onRetry,maxAttempts,
+    {...payload,spin:{...payload.spin,pauseAfter:true}},send,wait,onRetry,maxAttempts,priorAmbiguous,
   );
+}
+
+export const SPIN_RETRY_MS = 10000;
+const SPIN_ATTEMPTS = 3;
+const SPIN_RETRY_COPY = 'Casino has not confirmed that spin yet. Retrying the same sequence.';
+const PAIR_RETRY_COPY = 'Casino has not confirmed the spin-and-pause yet. Retrying the same sequence.';
+
+/** The problem line for spins Casino has not confirmed. */
+export function spinsWaitingCopy(count) {
+  return count+(count===1?' spin':' spins')+' waiting to send to Casino.';
+}
+
+/**
+ * Spins Casino has not confirmed yet, sent strictly in spin order. A spin is numbered and bound to
+ * its session on its first send; every retry resends that identical payload, so the server sees the
+ * same sequence and request id again. A retry is reconciled, never renumbered or recorded twice.
+ * A spin leaves the queue only when Casino confirms it, or when Casino refuses recording: that
+ * discards the queue and reports how many spins were not saved.
+ *
+ * deps.resolveSession() -> {ok:true,session} | {ok:false,off:true} | {ok:false,error}
+ * deps.send(op,payload), deps.wait(ms), deps.pauseRequested() -> boolean
+ * deps.report(text|null), deps.confirmed(body), deps.recordingOff(count), deps.schedule(fn,ms) -> cancel
+ */
+export function createSpinQueue(deps) {
+  const entries=[];
+  const cursor={sessionId:null,next:1};
+  let chain=Promise.resolve();
+  let cancelRetry=null;
+
+  function observe(session) {
+    if(!session||!Number.isInteger(session.spins)) return;
+    cursor.next=nextSequenceForSession(cursor.sessionId,cursor.next,session);
+    cursor.sessionId=session.id;
+  }
+  function stopRetry() {
+    const cancel=cancelRetry;
+    cancelRetry=null;
+    if(cancel) cancel();
+  }
+  function scheduleRetry() {
+    if(cancelRetry||!entries.length||!deps.schedule) return;
+    cancelRetry=deps.schedule(function(){ cancelRetry=null; void flush(); },SPIN_RETRY_MS)||function(){};
+  }
+  function hold(detail) {
+    deps.report(spinsWaitingCopy(entries.length)+(detail?' '+detail:''));
+    scheduleRetry();
+    return false;
+  }
+  function refuseRecording() {
+    const count=entries.length;
+    entries.length=0;
+    stopRetry();
+    deps.recordingOff(count);
+    return false;
+  }
+  function enqueue(spin) {
+    entries.push({
+      requestId:crypto.randomUUID(),
+      spin:{...spin,net:spin.returned-spin.staked},
+      sessionId:null,sequence:null,payload:null,pauseAfter:false,ambiguous:false,
+    });
+    return entries.length;
+  }
+  async function drain() {
+    while(entries.length) {
+      const head=entries[0];
+      if(head.sessionId===null) {
+        const resolved=await deps.resolveSession();
+        if(!resolved.ok) return resolved.off?refuseRecording():hold(resolved.error);
+        observe(resolved.session);
+        head.sessionId=resolved.session.id;
+        head.sequence=cursor.next;
+        head.pauseAfter=!!deps.pauseRequested();
+        head.payload={sessionId:head.sessionId,spin:{...head.spin,requestId:head.requestId,sequence:head.sequence}};
+      }
+      const copy=head.pauseAfter?PAIR_RETRY_COPY:SPIN_RETRY_COPY;
+      const onRetry=function(){ deps.report(copy); };
+      const result=head.pauseAfter
+        ? await sendCasinoSpinAndPause(head.payload,deps.send,deps.wait,onRetry,SPIN_ATTEMPTS,head.ambiguous)
+        : await sendCasinoSpinUntilReconciled(head.payload,deps.send,deps.wait,onRetry,SPIN_ATTEMPTS,head.ambiguous);
+      if(!result.ok) {
+        if(isRecordingDisabledResult(result)) return refuseRecording();
+        head.ambiguous=head.ambiguous||result.ambiguous===true;
+        return hold(result.error||('Casino did not record that spin ('+result.status+').'));
+      }
+      entries.shift();
+      if(cursor.sessionId===head.sessionId) cursor.next=head.sequence+1;
+      deps.confirmed(result.body);
+      deps.report(null);
+    }
+    stopRetry();
+    deps.report(null);
+    return true;
+  }
+  function flush() {
+    chain=chain.then(function(){ return entries.length?drain():true; }).catch(function(error){
+      return hold(error&&error.message?error.message:'Casino recording failed.');
+    });
+    return chain;
+  }
+  return {
+    enqueue,
+    flush,
+    observe,
+    waiting:function(){ return entries.length; },
+    dispose:stopRetry,
+  };
 }
 
 export function recordingForMode(mode,gameRecording,liveRecording) {
@@ -167,15 +276,14 @@ export function useCasinoRecording(mode,active) {
   const [problem,setProblem] = useState(null);
   const [tick,setTick] = useState(0);
   const sessionRef = React.useRef(null);
-  const sequence = React.useRef(1);
-  const starting = React.useRef(null);
   const refreshing = React.useRef(null);
   const queue = React.useRef(Promise.resolve());
   const resumedAt = React.useRef(Date.now());
   const activeRef = React.useRef(active);
   const pauseOwner = React.useRef('none');
   const lifecycleTransition = React.useRef(null);
-  const pendingSpin = React.useRef(null);
+  const recorder = React.useRef(null);
+  const latest = React.useRef(null);
   const availabilityRef = React.useRef('unknown');
   sessionRef.current = session;
   activeRef.current = active;
@@ -186,7 +294,7 @@ export function useCasinoRecording(mode,active) {
   },[]);
 
   const adopt = React.useCallback(function(next){
-    sequence.current=nextSequenceForSession(sessionRef.current&&sessionRef.current.id,sequence.current,next);
+    if(recorder.current) recorder.current.observe(next);
     setSession(next);
     sessionRef.current = next;
   },[]);
@@ -232,77 +340,73 @@ export function useCasinoRecording(mode,active) {
   },[session && session.status]);
   useEffect(function(){ resumedAt.current=Date.now(); },[session && session.id,session && session.status]);
 
-  const ensureSession = React.useCallback(async function(){
+  const resolveSession = React.useCallback(async function(){
     const existing = sessionRef.current;
-    if(existing && existing.status!=='stopped') return existing;
-    if(starting.current) return starting.current;
-    starting.current = (async function(){
-      const result = await askCasino('start',{mode});
-      if(!result.ok){
-        if(result.status===409) setAvailability('off');
-        else setProblem(result.error||'Casino refused to start the recording session.');
-        return null;
-      }
-      const next = casinoSession(result.body);
-      if(next){ adopt(next); setProblem(null); }
-      return next;
-    })();
-    try { return await starting.current; }
-    finally { starting.current=null; }
-  },[mode,adopt,setAvailability]);
-
-  const flushPendingSpin = React.useCallback(async function(){
-    const pending=pendingSpin.current;
-    if(!pending)return true;
-    const pauseRequested=pauseOwner.current!=='none';
-    const result=pauseRequested
-      ? await sendCasinoSpinAndPause(pending,askCasino,retryDelay,function(){
-          setProblem('Casino has not confirmed the spin-and-pause yet. Retrying the same sequence.');
-        })
-      : await sendCasinoSpinUntilReconciled(pending,askCasino,retryDelay,function(){
-          setProblem('Casino has not confirmed that spin yet. Retrying the same sequence.');
-        });
-    if(!result.ok){
-      if(isRecordingDisabledResult(result)){
-        pendingSpin.current=null;
-        setAvailability('off');
-        setProblem('Casino recording is off. That spin was not saved.');
-        return true;
-      }
-      setProblem(result.error||('Casino did not record that spin ('+result.status+').'));
-      return false;
+    if(existing && existing.status!=='stopped') return {ok:true,session:existing};
+    const result = await askCasino('start',{mode});
+    if(!result.ok) {
+      return result.status===409
+        ? {ok:false,off:true}
+        : {ok:false,error:result.error||'Casino refused to start the recording session.'};
     }
-    pendingSpin.current=null;
-    sequence.current=pending.spin.sequence+1;
-    setProblem(null);
-    adopt(casinoSession(result.body)||sessionRef.current);
-    return true;
-  },[adopt,setAvailability]);
+    const next = casinoSession(result.body);
+    if(!next) return {ok:false,error:'Casino returned no recording session.'};
+    adopt(next);
+    return {ok:true,session:next};
+  },[mode,adopt]);
 
+  // The queue is created once per hook instance. Its callbacks read the latest render's functions.
+  latest.current = {resolveSession,adopt,setAvailability,setProblem};
+  if(!recorder.current) recorder.current = createSpinQueue({
+    resolveSession:function(){ return latest.current.resolveSession(); },
+    send:function(op,payload){ return askCasino(op,payload); },
+    wait:retryDelay,
+    pauseRequested:function(){ return pauseOwner.current!=='none'; },
+    report:function(text){ latest.current.setProblem(text); },
+    confirmed:function(body){ latest.current.adopt(casinoSession(body)||sessionRef.current); },
+    recordingOff:function(count){
+      latest.current.setAvailability('off');
+      latest.current.setProblem(count===1
+        ? 'Casino recording is off. That spin was not saved.'
+        : 'Casino recording is off. '+count+' spins were not saved.');
+    },
+    schedule:function(callback,milliseconds){
+      const handle=setTimeout(callback,milliseconds);
+      return function(){ clearTimeout(handle); };
+    },
+  });
+
+  // True when no spin is waiting. False keeps the spins queued, with the problem line saying how many.
+  const flushPendingSpins = React.useCallback(function(){
+    return recorder.current.flush();
+  },[]);
+
+  // A spin is never dropped once it is part of a running recording: it joins the queue, and the queue
+  // sends it when Casino confirms every earlier spin. Recording that has not started (off, not
+  // connected, or deliberately paused) still refuses the spin, and the bar or problem line says why.
   const record = React.useCallback(function(spin){
     queue.current = queue.current.then(async function(){
-      if(!await flushPendingSpin())return;
-      if(availabilityRef.current==='unknown'||availabilityRef.current==='unavailable')await refresh();
-      if(availabilityRef.current!=='on')return;
-      const live = await ensureSession();
-      if(!live) return;
-      if(live.status!=='running'){
-        setProblem('Casino recording is paused. Resume it before the next spin.');
-        return;
+      const live = sessionRef.current;
+      if(!recorder.current.waiting()){
+        if(live && live.status==='paused'){
+          setProblem('Casino recording is paused. Resume it before the next spin.');
+          return;
+        }
+        if(!(live && live.status==='running')){
+          if(availabilityRef.current==='unknown'||availabilityRef.current==='unavailable')await refresh();
+          if(availabilityRef.current!=='on')return;
+        }
       }
-      const seq = sequence.current;
-      pendingSpin.current={
-        sessionId:live.id,
-        spin:{...spin,requestId:crypto.randomUUID(),sequence:seq,net:spin.returned-spin.staked},
-      };
-      await flushPendingSpin();
+      recorder.current.enqueue(spin);
+      await flushPendingSpins();
     });
-  },[refresh,ensureSession,flushPendingSpin]);
+  },[refresh,flushPendingSpins]);
 
   const lifecycle = React.useCallback(function(op){
     const task=queue.current.then(async function(){
-      if(!await flushPendingSpin()){
-        setProblem('Casino cannot '+op+' while an earlier spin is still unconfirmed. It remains queued locally.');
+      if(!await flushPendingSpins()){
+        const waiting=recorder.current.waiting();
+        if(waiting) setProblem(spinsWaitingCopy(waiting)+' Casino cannot '+op+' until they are confirmed.');
         return false;
       }
       const live = sessionRef.current;
@@ -315,7 +419,7 @@ export function useCasinoRecording(mode,active) {
     });
     queue.current=task;
     return task;
-  },[adopt,flushPendingSpin]);
+  },[adopt,flushPendingSpins]);
 
   const pauseImmediately = React.useCallback(function(owner){
     const previousOwner=pauseOwner.current;
@@ -323,8 +427,9 @@ export function useCasinoRecording(mode,active) {
     const task=queue.current.then(async function(){
       const live=sessionRef.current;
       if(!live){pauseOwner.current=previousOwner;return false;}
-      if(!await flushPendingSpin()){
-        setProblem('Casino cannot pause while an earlier spin is still unconfirmed. It remains queued locally.');
+      if(!await flushPendingSpins()){
+        const waiting=recorder.current.waiting();
+        if(waiting) setProblem(spinsWaitingCopy(waiting)+' Casino cannot pause until they are confirmed.');
         pauseOwner.current='none';
         return false;
       }
@@ -342,7 +447,11 @@ export function useCasinoRecording(mode,active) {
     });
     queue.current=task;
     return task;
-  },[adopt,flushPendingSpin]);
+  },[adopt,flushPendingSpins]);
+
+  useEffect(function(){
+    return function(){ if(recorder.current) recorder.current.dispose(); };
+  },[]);
 
   useEffect(function(){
     const live=sessionRef.current;

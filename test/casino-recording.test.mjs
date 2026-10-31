@@ -177,16 +177,17 @@ test('the built app wires both play modes to recording after splitting the legac
 
 test('the first spin waits for settings, sequences are one-based, and inactive modes auto-pause', async () => {
   const source = await readFile(new URL('../nexus-src/src/casino-recording.mjs', import.meta.url), 'utf8');
-  assert.match(source, /const sequence = React\.useRef\(1\)/);
+  assert.match(source, /const cursor=\{sessionId:null,next:1\}/);
   assert.match(source, /await refresh\(\)/);
   assert.doesNotMatch(source, /if\(availability!==['"]on['"]\) return/);
   assert.match(source, /!active&&live\.status==='running'/);
   assert.match(source, /active&&live\.status==='paused'&&pauseOwner\.current==='auto'/);
   assert.match(source, /pause:function\(\)\{void pauseImmediately\('manual'\)/);
   assert.match(source, /pauseOwner\.current=owner;\s*const task=queue\.current\.then/);
-  assert.match(source, /pauseOwner\.current!=='none';\s*const result=pauseRequested\s*\? await sendCasinoSpinAndPause\(pending/);
+  assert.match(source, /pauseRequested:function\(\)\s*\{\s*return pauseOwner\.current!=='none';\s*\}/);
+  assert.match(source, /head\.pauseAfter\s*\?\s*await sendCasinoSpinAndPause\(head\.payload/);
   assert.match(source, /if\(!ok\)pauseOwner\.current='none'/);
-  assert.match(source, /pendingSpin\.current/);
+  assert.match(source, /recorder\.current\.enqueue\(spin\)/);
 });
 
 test('the handshake is pinned to the Casino parent, and no request broadcasts play data', async () => {

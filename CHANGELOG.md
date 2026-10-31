@@ -7,6 +7,19 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- A spin recorded while an earlier spin's send to Casino is still unconfirmed is no longer dropped from the Casino recording. The new spin queues behind the earlier one in `useCasinoRecording()` in `nexus-src/src/casino-recording.mjs`, takes the next sequence number in spin order, and is sent once the earlier spin confirms. Every retry of a send reuses that spin's sequence and request id. A send that keeps failing shows how many spins are waiting to send to Casino.
+
+### Open
+
+- The unconfirmed spins are held in memory. If the page closes or reloads before Casino confirms them, they are missing from the Casino record; the local session still has them.
+- A refusal that is not recording being off (for example a sequence Casino already holds that this client did not send) keeps that spin at the head of the queue. Later spins wait behind it, and the problem line keeps counting them. What to do with it needs a ruling.
+- While the shell does not answer, each new spin starts a full retry round (up to three attempts, 12 seconds each), so Pause and Stop wait behind the queue.
+- Account sync (`nexus-src/src/casino-sync.mjs`) may replace a spin made before the account sync has loaded the saved state. This is not reproduced by a test here and is not changed by this fix.
+- No browser suite was run. The problem line under a waiting queue is UNVERIFIED on a device.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 ## [0.58.0] - 2026-10-31
 
 ### Added
