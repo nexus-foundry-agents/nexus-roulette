@@ -7,6 +7,16 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- Undo last spin is refused after an Abandon Progression made after the spin it would reverse. The Undo button is disabled and the note beneath the track cards reads "Undo is off after a track was abandoned. Fix the number instead." Undo used to restore the session from before the spin and drop the abandon without a word. The check is in `undoBlockReason()` in `nexus-src/src/spin-apply.js`, beside the other Undo refusals. An abandon made before the spin is kept, as before.
+- Clear History on the Spin Log tab (its confirm reads "Clear all spins from session history?") clears the Undo snapshot with the spins, so Undo is not offered after it. Undo used to bring the cleared spins back. The handler is `SpinPage` in `nexus-src/src/components/SecondaryPages.jsx`, and App.jsx passes it `onClearHistory`.
+- End Session, Tear session and New session clear the Undo snapshot when they replace the current session, so Undo is not offered after them. Undo used to restore the replaced session from before the last spin whenever the money records matched. The handlers are `endSession()`, `tearSession()` and `newEmptySession()` in `nexus-src/src/App.jsx`.
+
+### Tests
+
+- `test/undo-other-gaps.test.mjs`: Undo after an Abandon Progression is refused with its reason and the abandon stays; an abandon made before a spin is kept by Undo; Clear History, End Session, Tear and New session each leave no Undo offered; the abandon refusal's wording lives in spin-apply.js only.
+
 ## [0.68.0] - 2026-10-31
 
 ### Changed

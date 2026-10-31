@@ -416,7 +416,7 @@ export default function App() {
     });
     setTimeout(()=>autoExport(allSessions),300);
     if(appMode==="live") liveRecording.stop(); else if(appMode==="game") gameRecording.stop();
-    setTab(0);
+    setTab(0); setPrevSessState(null);
   }
 
   function ghostSpin(val) {
@@ -439,13 +439,13 @@ export default function App() {
 
   function tearSession() {
     if(!window.confirm("Tear this session?")) return;
-    updApp(s=>{s.currentSession=newSession(s.currentSession.roulette,s.currentSession.bankroll);});
+    updApp(s=>{s.currentSession=newSession(s.currentSession.roulette,s.currentSession.bankroll);}); setPrevSessState(null);
     liveRecording.stop();
     setTab(0);
   }
 
   function newEmptySession() {
-    updApp(s=>{s.currentSession=newSession("american",500);});
+    updApp(s=>{s.currentSession=newSession("american",500);}); setPrevSessState(null);
     liveRecording.stop();
     setTab(0);
   }
@@ -821,7 +821,7 @@ export default function App() {
             </div>
             {tab===0 && <TrackerPage render={renderTrackerPage}/>}
             {tab===1 && <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur} selectedLevel={selectedLevel} setSelectedLevel={setSelectedLevel}/>}
-            {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays}/>}
+            {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays} onClearHistory={()=>setPrevSessState(null)}/>}
             {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={readBoardPhoto} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
             {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
           </div>
