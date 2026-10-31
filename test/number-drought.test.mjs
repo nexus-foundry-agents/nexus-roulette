@@ -292,3 +292,40 @@ test('the count reads on the green, red and black number cells the board uses (c
     assert.ok(contrast(color, bg) >= 3, `${color} on ${bg} is ${contrast(color, bg).toFixed(2)}:1`);
   }
 });
+
+// Picking a hit: the counter sits in the lower edge zone of each square, which reads as a split or a corner
+// when placing a bet. While the board is picking a winning number, a tap anywhere in a square is that number.
+function cellsByKey(node, out = new Map()) {
+  if (Array.isArray(node)) { node.forEach((n) => cellsByKey(n, out)); return out; }
+  if (!node || typeof node !== 'object' || !node.props) return out;
+  if (node.key != null && typeof node.props.onClick === 'function') out.set(String(node.key), node);
+  cellsByKey(node.props.children, out);
+  return out;
+}
+const tapAt = (cell, fx, fy) => cell.props.onClick({
+  currentTarget: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 30, height: 30 }) },
+  clientX: 30 * fx, clientY: 30 * fy, target: null, stopPropagation() {},
+});
+function boardTaps(ctx, pickNumbers) {
+  const bets = [];
+  const tree = ctx.RouletteBoard({ roulette: 'american', onBet: (type, target) => bets.push([type, target]), spinning: false, pickNumbers, droughts: {}, spins: [] });
+  return { cells: cellsByKey(tree), bets };
+}
+
+test('picking a hit: a tap low in a number square (on the counter) selects that number', async () => {
+  const { ctx } = await load();
+  const { cells, bets } = boardTaps(ctx, true);
+  const seventeen = cells.get('17');
+  assert.ok(seventeen, 'the 17 square is found');
+  tapAt(seventeen, 0.5, 0.92); // on the counter, the bottom edge
+  tapAt(seventeen, 0.05, 0.05); // a corner
+  assert.deepEqual(bets, [['straight', '17'], ['straight', '17']]);
+});
+
+test('placing bets is unchanged: a corner tap on a number square is still not a straight bet', async () => {
+  const { ctx } = await load();
+  const { cells, bets } = boardTaps(ctx, false);
+  tapAt(cells.get('17'), 0.02, 0.02);
+  assert.equal(bets.length, 1);
+  assert.notEqual(bets[0][0], 'straight');
+});

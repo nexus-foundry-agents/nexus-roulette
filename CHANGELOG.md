@@ -22,6 +22,7 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ### Fixed
 
+- While picking the winning number on the Live table, a tap anywhere inside a number's square selects that number. The loss counter under each number sits in the square's lower edge, which the table reads as a split or corner when placing bets, so those taps were silently ignored when picking a hit. Placing bets still reads the tap position as before.
 - The progression grid's zero row shows the wheel's own zeros. A European wheel shows a single 0 and no 00 cell; it was showing 0 and 00 on both wheels.
 
 ## [0.52.0] - 2026-10-30
