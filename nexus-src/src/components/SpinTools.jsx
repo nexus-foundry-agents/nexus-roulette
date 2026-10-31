@@ -7,10 +7,13 @@
 // Reserved heights, in px. Each is the populated height of its control, measured in headless Chrome at a
 // 420 px viewport: the strip is 30 with five numbers (28 px chips and 2 px bottom padding) and 40 with thirty,
 // where the horizontal scrollbar takes 10 px. A platform with a thicker scrollbar would grow the strip past
-// this reservation when it first overflows. The drought panel is 251 px with five spins and with thirty.
+// this reservation when it first overflows.
 const SPIN_TOOLS_ROW_HEIGHT = 30;
 const RECENT_STRIP_MIN_HEIGHT = 40;
-const DROUGHT_PANEL_HEIGHT = 251;
+// The drought panel's height in px, with no spins and with any number of them: every row in it has a fixed height
+// (droughtPanelHeight() in DroughtPanel.jsx sums them, and a test holds this value equal to that sum). Derived from the
+// row sizes; not measured in a browser.
+const DROUGHT_PANEL_HEIGHT = 367;
 const RECENT_STRIP_LIMIT = 30;
 
 // A press on a recent number opens the picker after this long, unless the pointer moves more than the slop first.

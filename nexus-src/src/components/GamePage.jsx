@@ -207,10 +207,8 @@ function GamePageView({
           </div>
         )}
 
-        {/* Drought panel */}
-        {sess.spins.length>0 && (
-          <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD} dozP={dozP} colP={colP}/>
-        )}
+        {/* Drought panel. Always rendered, with zero values before the first spin, so nothing below it moves. */}
+        <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD} dozP={dozP} colP={colP} spins={sess.spins} droughts={sess.droughts} roulette={sess.roulette}/>
 
         {/* Strategy tracks */}
         <FieldLabel>Strategy Tracks</FieldLabel>

@@ -20,12 +20,19 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 export const SEED_LABEL = 'nexus-roulette-streak-percentiles-2026-10-30';
 export const ALGORITHM = 'xoshiro128** (Blackman and Vigna), one generator per session, seeded by splitmix32 '
   + 'from the FNV-1a 32-bit hash of the seed label, the wheel index and the session index';
-export const PERCENTILES = [50, 75, 90, 95, 98];
+export const PERCENTILES = [25, 50, 75, 90, 95, 98];
 export const WHEELS = ['american', 'european'];
 // The cumulative table ends at the first length whose share reaches 99.99%. Kept as 9999 of 10000 so the test is exact.
 const CUMULATIVE_PER_10000 = 9999;
 // Streaks longer than this are an error, not a silent clamp: the table must be exact.
 export const MAX_LENGTH = 4096;
+// A section's TLV (the sum of its 12 loss levels) at or above this is an error, not a silent clamp, for the same reason.
+export const MAX_TLV = 4096;
+// The average loss level is TLV / 12 rounded to one decimal. Its distribution is the TLV distribution carried through
+// this rounding, so the same value serves the average's percentiles.
+export function avgTenths(tlv) {
+  return Math.round((tlv * 10) / 12);
+}
 const MAX_BYTES = 300 * 1024;
 const DEFAULT_OUT = fileURLToPath(new URL('../nexus-src/src/streak-percentiles.js', import.meta.url));
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -86,6 +93,23 @@ export function winTable(wheel) {
   return { labels, cats, table, nP, nC };
 }
 
+// Which section each pocket is in, as a flat table: member[pocket * 6 + s] is 1 when the pocket is in section s.
+// Sections 0 to 2 are the dozens and 3 to 5 the columns. A zero is in none. Read from betCategories, so the sections
+// are the ones the streak table uses.
+export function sectionMembership(wheel) {
+  const labels = pocketLabels(wheel);
+  const cats = betCategories(wheel);
+  const order = ['dozen:0', 'dozen:1', 'dozen:2', 'column:0', 'column:1', 'column:2'];
+  const member = new Uint8Array(labels.length * 6);
+  order.forEach((key, s) => {
+    const cat = cats.find((c) => c.key === key);
+    labels.forEach((label, p) => {
+      if (cat.cover.includes(label)) member[p * 6 + s] = 1;
+    });
+  });
+  return member;
+}
+
 export function fnv1a32(text) {
   let h = 0x811c9dc5;
   for (const byte of Buffer.from(text, 'utf8')) {
@@ -134,7 +158,13 @@ export function xoshiroNext(s) {
 // Plays one session of `spins` spins and adds each completed losing streak into `hist`:
 // hist[c * MAX_LENGTH + length] counts the streaks of category c with that length. `run` is scratch space of one
 // Int32 per category. Returns how many streaks were longer than MAX_LENGTH, which must be zero.
-export function playSession(state, spins, tbl, hist, run) {
+//
+// When `tl` is given, the same spins also feed the section TLV: after every spin the six section TLVs are updated
+// and each is counted once in tl.hist (dozens first, then columns, MAX_TLV bins each). tl.last holds the index of
+// each pocket's last hit (-1 before its first), tl.sum the six TLVs and tl.member the section membership table.
+// A pocket's loss level before spin i is (i - 1) - last, so a section that misses gains 12, and one that hits gains 11
+// minus the loss level of the pocket that hit.
+export function playSession(state, spins, tbl, hist, run, tl) {
   const { nP, nC, table } = tbl;
   let s0 = state[0] | 0;
   let s1 = state[1] | 0;
@@ -142,6 +172,7 @@ export function playSession(state, spins, tbl, hist, run) {
   let s3 = state[3] | 0;
   run.fill(0);
   let overflow = 0;
+  const tlv = tl || null;
   for (let i = 0; i < spins; i++) {
     const m = Math.imul(s1, 5);
     const r = Math.imul((m << 7) | (m >>> 25), 9);
@@ -152,7 +183,8 @@ export function playSession(state, spins, tbl, hist, run) {
     s0 ^= s3;
     s2 ^= t;
     s3 = (s3 << 11) | (s3 >>> 21);
-    const base = Math.floor(((r >>> 0) * nP) / 4294967296) * nC;
+    const pocket = Math.floor(((r >>> 0) * nP) / 4294967296);
+    const base = pocket * nC;
     for (let c = 0; c < nC; c++) {
       if (table[base + c] === 1) {
         const k = run[c];
@@ -165,25 +197,47 @@ export function playSession(state, spins, tbl, hist, run) {
         run[c] += 1;
       }
     }
+    if (tlv) {
+      const dPrev = i - 1 - tlv.last[pocket];
+      for (let s = 0; s < 6; s++) {
+        const v = tlv.sum[s] + (tlv.member[pocket * 6 + s] === 1 ? 11 - dPrev : 12);
+        tlv.sum[s] = v;
+        if (v < MAX_TLV) tlv.hist[(s < 3 ? 0 : MAX_TLV) + v] += 1;
+        else tlv.overflow += 1;
+      }
+      tlv.last[pocket] = i;
+    }
   }
   return overflow;
 }
 
-// One shard: the sessions whose index is congruent to `shard` modulo `shards`, for each wheel named.
+// One shard: the sessions whose index is congruent to `shard` modulo `shards`, for each wheel named. Returns the streak
+// histograms (hist), the streaks longer than MAX_LENGTH (overflow), the TLV histograms (tlv, MAX_TLV bins for each of
+// the dozen and column blocks) and the TLV values at or above MAX_TLV (tlvOverflow).
 export function runShard({ master, sessions, spins, wheels, shard, shards }) {
   const hist = {};
+  const tlv = {};
   let overflow = 0;
+  let tlvOverflow = 0;
   for (const wheelName of wheels) {
     const tbl = winTable(wheelName);
     const h = new Float64Array(tbl.nC * MAX_LENGTH);
     const run = new Int32Array(tbl.nC);
     const widx = WHEELS.indexOf(wheelName);
+    const tl = {
+      hist: new Float64Array(2 * MAX_TLV), last: new Int32Array(tbl.nP), sum: new Float64Array(6),
+      member: sectionMembership(wheelName), overflow: 0,
+    };
     for (let s = shard; s < sessions; s += shards) {
-      overflow += playSession(sessionState(master, widx, s), spins, tbl, h, run);
+      tl.last.fill(-1);
+      tl.sum.fill(0);
+      overflow += playSession(sessionState(master, widx, s), spins, tbl, h, run, tl);
     }
     hist[wheelName] = h;
+    tlv[wheelName] = tl.hist;
+    tlvOverflow += tl.overflow;
   }
-  return { hist, overflow };
+  return { hist, overflow, tlv, tlvOverflow };
 }
 
 function runInWorker(job) {
@@ -227,8 +281,52 @@ function summarize(wheelName, hist) {
   return categories;
 }
 
+// A distribution of whole values, given as bins (bins[v] counts the samples equal to v). Returns n, the value at each
+// percentile in PERCENTILES order (the lowest v whose share reaches it), and cum[v]: parts per million of the samples
+// at or below v, for v from 0 up to the value where the cumulative share reaches 99.99%.
+function summarizeDistribution(bins) {
+  let n = 0;
+  for (let v = 0; v < bins.length; v++) n += bins[v];
+  if (n === 0) throw new Error('a distribution has no samples');
+  const cum = [];
+  const at = {};
+  let running = 0;
+  let reached = false;
+  for (let v = 0; v < bins.length && !reached; v++) {
+    running += bins[v];
+    cum.push(Math.floor((running * 1000000) / n));
+    for (const pct of PERCENTILES) {
+      if (at[pct] === undefined && running * 100 >= pct * n) at[pct] = v;
+    }
+    if (running * 10000 >= n * CUMULATIVE_PER_10000) reached = true;
+  }
+  if (!reached) throw new Error('the 99.99% value is past the bins');
+  return { n, p: PERCENTILES.map((pct) => at[pct]), cum };
+}
+
+// The TLV and average-loss tables for one wheel. hist holds the dozen block, then the column block, MAX_TLV bins each.
+// Each is pooled over the three sections of its type and sampled after every spin. The average's table is the TLV
+// distribution carried through avgTenths, which gives the same counts as sampling the average itself at every spin.
+// Its p values are in loss levels (tenths divided by 10) and its cum is indexed by tenths.
+function summarizeSections(hist) {
+  const tlv = {};
+  const avg = {};
+  ['dozen', 'column'].forEach((kind, t) => {
+    const bins = hist.subarray(t * MAX_TLV, (t + 1) * MAX_TLV);
+    tlv[kind] = summarizeDistribution(bins);
+    const tenths = new Float64Array(Math.ceil((MAX_TLV * 10) / 12) + 1);
+    bins.forEach((count, v) => {
+      if (count > 0) tenths[avgTenths(v)] += count;
+    });
+    const a = summarizeDistribution(tenths);
+    avg[kind] = { n: a.n, p: a.p.map((tenth) => tenth / 10), cum: a.cum };
+  });
+  return { tlv, avg };
+}
+
 // Runs every shard (in workers when there is more than one) and sums them into the table.
-// Returns { meta, american, european } with the table's shape: meta, then one object per wheel.
+// Returns { meta, american, european, tlv, avg } with the table's shape: meta, then one object per wheel, then the
+// section tables keyed by wheel.
 export async function simulate({ seedLabel = SEED_LABEL, sessions = 1000, spins = 1000000, workers = 1, wheels = WHEELS } = {}) {
   const master = fnv1a32(seedLabel);
   const shards = Math.max(1, Math.min(workers, sessions));
@@ -239,17 +337,25 @@ export async function simulate({ seedLabel = SEED_LABEL, sessions = 1000, spins 
   }
   const parts = await Promise.all(jobs);
   const totals = {};
+  const tlvTotals = {};
   let overflow = 0;
+  let tlvOverflow = 0;
   for (const part of parts) {
     overflow += part.overflow;
+    tlvOverflow += part.tlvOverflow;
     for (const w of wheels) {
       if (!totals[w]) totals[w] = new Float64Array(part.hist[w].length);
       const src = part.hist[w];
       const dst = totals[w];
       for (let i = 0; i < src.length; i++) dst[i] += src[i];
+      if (!tlvTotals[w]) tlvTotals[w] = new Float64Array(part.tlv[w].length);
+      const tsrc = part.tlv[w];
+      const tdst = tlvTotals[w];
+      for (let i = 0; i < tsrc.length; i++) tdst[i] += tsrc[i];
     }
   }
   if (overflow > 0) throw new Error(`${overflow} streaks were longer than MAX_LENGTH (${MAX_LENGTH}); the table would not be exact`);
+  if (tlvOverflow > 0) throw new Error(`${tlvOverflow} TLV values were at or above MAX_TLV (${MAX_TLV}); the table would not be exact`);
   const data = {
     meta: {
       seedLabel,
@@ -262,16 +368,27 @@ export async function simulate({ seedLabel = SEED_LABEL, sessions = 1000, spins 
       percentiles: [...PERCENTILES],
       cumulativeTo: CUMULATIVE_PER_10000 / 10000,
       streakDefinition: 'consecutive spins a bet loses before its next win; a streak still running when a session ends is not counted',
+      tlvDefinition: 'TLV is the sum of the loss levels of a section\'s 12 numbers, sampled after every spin; dozen and column are pooled over their three sections',
+      avgDefinition: 'average loss level = TLV / 12 rounded to one decimal; the average cum is indexed in tenths of a loss level',
       generator: 'tools/gen-streak-percentiles.mjs',
     },
+    tlv: {},
+    avg: {},
   };
-  for (const w of wheels) data[w] = summarize(w, totals[w]);
+  for (const w of wheels) {
+    data[w] = summarize(w, totals[w]);
+    const sections = summarizeSections(tlvTotals[w]);
+    data.tlv[w] = sections.tlv;
+    data.avg[w] = sections.avg;
+  }
   return data;
 }
 
 // Renders the module: a header with the seed, sessions, spins, algorithm and generation time, then plain data.
 export function renderModule(data, generatedAt) {
   const m = data.meta;
+  const pctList = PERCENTILES.map((p) => 'P' + p);
+  const pctText = `${pctList.slice(0, -1).join(', ')} and ${pctList[pctList.length - 1]}`;
   const header = [
     '// Streak percentiles. GENERATED FILE: do not edit by hand. Regenerate with tools/gen-streak-percentiles.mjs.',
     `// Generated: ${generatedAt}`,
@@ -279,14 +396,21 @@ export function renderModule(data, generatedAt) {
     `// Algorithm: ${m.algorithm}.`,
     `// Simulation: ${m.sessions} sessions x ${m.spinsPerSession} spins for each wheel: ${m.wheels.map((w) => `${w} (${m.pockets[w]} pockets)`).join(', ')}.`,
     `// A completed losing streak is ${m.streakDefinition}.`,
-    '// Each category: n = completed streaks; p = their length at P50, P75, P90, P95 and P98; cum[k - 1] = parts per',
+    `// Each category: n = completed streaks; p = their length at ${pctText}; cum[k - 1] = parts per`,
     '// million of completed streaks of length k or shorter, for k = 1 up to the length where the cumulative reaches 99.99%.',
     '// Read through streakPercentile() in percentile.js.',
+    `// tlv[wheel].dozen and .column: ${m.tlvDefinition}. p = the TLV at ${pctText}; cum[v] = parts per million`,
+    '// of the samples with TLV v or below. avg[wheel] has the same shape for the average loss level, with its cum indexed in',
+    '// tenths. Read through tlv.js.',
   ];
   const body = ['var STREAK_PERCENTILE_DATA = {', `"meta":${JSON.stringify({ ...m, generatedAt })}`];
   for (const w of m.wheels) {
     const entries = Object.entries(data[w]).map(([key, entry]) => `${JSON.stringify(key)}:${JSON.stringify(entry)}`);
     body.push(`,${JSON.stringify(w)}:{`, entries.join(',\n'), '}');
+  }
+  for (const block of ['tlv', 'avg']) {
+    const wheels = m.wheels.map((w) => `${JSON.stringify(w)}:${JSON.stringify(data[block][w])}`);
+    body.push(`,${JSON.stringify(block)}:{`, wheels.join(',\n'), '}');
   }
   body.push('};');
   return header.join('\n') + '\n' + body.join('\n') + '\n';
@@ -335,6 +459,16 @@ async function main(argv) {
   for (const w of WHEELS) {
     console.log(`\n${w}  ${'category'.padEnd(16)} ${'n'.padStart(11)} ${PERCENTILES.map((p) => ('P' + p).padStart(5)).join(' ')}`);
     for (const [key, entry] of Object.entries(data[w])) console.log(percentileRow(key, entry));
+  }
+  const head = PERCENTILES.map((p) => ('P' + p).padStart(7)).join(' ');
+  console.log(`\nsection TLV (sum of the 12 loss levels), sampled after every spin; average = TLV / 12`);
+  console.log(`${'wheel'.padEnd(9)} ${'section'.padEnd(8)} ${'n'.padStart(13)} ${head}   | average loss level (tenths rounded)`);
+  for (const w of WHEELS) {
+    for (const kind of ['dozen', 'column']) {
+      const t = data.tlv[w][kind];
+      const a = data.avg[w][kind];
+      console.log(`${w.padEnd(9)} ${kind.padEnd(8)} ${String(t.n).padStart(13)} ${t.p.map((v) => String(v).padStart(7)).join(' ')}   | ${a.p.map((v) => v.toFixed(1).padStart(6)).join(' ')}`);
+    }
   }
 }
 

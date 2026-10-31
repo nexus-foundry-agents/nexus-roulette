@@ -558,7 +558,7 @@ export default function App() {
 
         {/* Drought panel. Its slot is reserved at DROUGHT_PANEL_HEIGHT and hidden, not removed, when there are no numbers, so clearing moves nothing below it. */}
         <div aria-hidden={sess.spins.length===0} style={{minHeight:DROUGHT_PANEL_HEIGHT,visibility:sess.spins.length>0?"visible":"hidden"}}>
-          <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD} dozP={dozP} colP={colP}/>
+          <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD} dozP={dozP} colP={colP} spins={sess.spins} droughts={sess.droughts} roulette={sess.roulette}/>
         </div>
 
         {/* Track cards with drag-to-reorder */}

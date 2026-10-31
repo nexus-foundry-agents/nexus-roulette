@@ -118,21 +118,6 @@ function ROIStepper({value, onChange, disabled}) {
   );
 }
 
-// `pct` is the drought's percentile (PercentTag). The "misses" row has a fixed height and always renders the tag, so
-// a card with a percentile and one without are the same size (rule 82): only the tag's text and visibility differ.
-function DCard({label, range, drought, pct, colorBd, colorTx}) {
-  const bd = droughtBadge(drought);
-  return (
-    <div style={{flex:1,background:"#1e2d3d",borderRadius:12,padding:"9px 5px",border:"1px solid "+colorBd,textAlign:"center"}}>
-      <div style={{fontSize:8,color:colorTx,fontWeight:700,textTransform:"uppercase",marginBottom:1}}>{label}</div>
-      <div style={{fontSize:7,color:"#475569",marginBottom:4}}>{range}</div>
-      <div style={{fontSize:24,fontWeight:900,color:"#e2e8f0",lineHeight:1}}>{drought}</div>
-      <div style={{fontSize:7,color:"#475569",marginBottom:2,height:10,lineHeight:"10px",whiteSpace:"nowrap"}}>misses<PercentTag pct={pct}/></div>
-      <div style={{fontSize:8,fontWeight:700,color:bd.c}}>{bd.t}</div>
-    </div>
-  );
-}
-
 // Self-contained clock that won't cause parent re-renders
 function SessionClock({startedAt, endedAt, style, pauseOffset}) {
   const [now, setNow] = useState(Date.now());
