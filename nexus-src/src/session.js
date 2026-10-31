@@ -109,8 +109,13 @@ function computeMartingaleTable(maxChips) {
 }
 
 function defaultSettings() {
-  return{ currency:"USD", defaultBuyIn:100, onboarded:false, vibration:true, showDroughtCounts:true, headStartUnseen:false, counterShows:"spins", percentileOutlines:true, tableMinBet:10, tableMaxBet:500, tableMaxTotal:10000 };
+  return{ currency:"USD", defaultBuyIn:100, onboarded:false, vibration:true, showDroughtCounts:true, headStartUnseen:false, counterShows:"spins", percentileOutlines:true, tableMinBet:null, tableMaxBet:500, tableMaxTotal:10000 };
 }
+
+// The table minimum as a number, or null when there is none. null, undefined and 0 are all "none": there is no default minimum.
+// Every reader of settings.tableMinBet goes through this. It lives here, not in BaseBetInput.jsx, because the Settings page
+// reads it and session.js is loaded wherever that page is.
+function tableMinimum(stored) { return stored > 0 ? stored : null; }
 
 // Standalone keeps the historical keys. Embedded storage stays closed until the authenticated
 // shell supplies an opaque account scope, so one account can never render or overwrite another
@@ -160,7 +165,8 @@ function loadApp() {
       if(!d.settings.currency) d.settings.currency = "USD";
       if(!d.settings.defaultBuyIn) d.settings.defaultBuyIn = 100;
       if(d.settings.onboarded === undefined) d.settings.onboarded = true; // existing users skip
-      if(d.settings.tableMinBet === undefined) d.settings.tableMinBet = 10;
+      // A missing table minimum is none (null), never an invented one. A stored value is kept as it is.
+      if(d.settings.tableMinBet === undefined) d.settings.tableMinBet = null;
       if(d.settings.tableMaxBet === undefined) d.settings.tableMaxBet = 500;
       if(d.settings.tableMaxTotal === undefined) d.settings.tableMaxTotal = 10000;
       if(!d.currentSession) d.currentSession = newSession();

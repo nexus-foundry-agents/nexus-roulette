@@ -338,13 +338,15 @@ function spinCorrectionBlockAt(sess, index, replayed) {
 // would go with it, so Undo is refused for each kind, with its reason: a track edit or park (a boundary above the spin count
 // prevSess holds), money that moved (a buy-in, cash-out, bankroll edit or currency conversion), an abandon (Abandon
 // Progression, which moves a track's P&L and writes a record into its bets, so the money check cannot see it), and a spin
-// recorded after it (a ghost spin, or a spin no track settled). Returns the reason, or null when Undo may run (and when there
-// is nothing to undo).
+// recorded after it (a ghost spin, or a spin no track settled), a replace of the tapped number, and any other track change: a
+// track added, closed, reactivated or moved, a Solution bet added or removed, a chase changed (any difference from the tracks the
+// tap leaves). Returns the reason, or null when Undo may run (and when there is nothing to undo). tapped is the number the tap recorded.
 const UNDO_BLOCK_REASON = "Undo is off: a track was edited or parked after the spin it would reverse, and Undo would drop that change.";
 const UNDO_MONEY_REASON = "Undo is off after a buy-in, cash-out or bankroll change. Fix the number instead.";
 const UNDO_ABANDON_REASON = "Undo is off after a track was abandoned. Fix the number instead.";
 const UNDO_SPIN_REASON = "Undo is off after a ghost spin or an untracked spin. Fix the number instead.";
 const UNDO_CHANGED_REASON = "Undo is off: the session was changed after the spin it would reverse. Undo would drop that change.";
+const UNDO_TRACK_REASON = "Undo is off after a track change. Fix the number instead.";
 // The fields a tapped spin changes, and the fields a Save stamps (mode, metrics, modified). Any other field of the session that
 // differs from the snapshot was changed after the spin, so Undo would undo that change too. The list is closed: a field added
 // later is refused until it is named here.
@@ -352,7 +354,10 @@ const TAP_CHANGED_KEYS = ["spins", "droughts", "tracks", "bankrollCurrent", "mod
 // The money records a spin never changes, so a difference from prevSess is money that moved after the spin. Compared by
 // value, not by spin index: Clear numbers keeps the money and its spin indices and resets only the spin count.
 const MONEY_RECORD_KEYS = ["bankroll", "totalBuyIn", "totalCashOut", "buyIns", "cashOuts", "bankrollEdits"];
-function undoBlockReason(sess, prevSess) {
+// The tracks the tap leaves when it is applied to the snapshot: the snapshot's tracks plus the tapped spin's own settlement.
+// A track that differs from them was changed after the spin, by an action rather than by the tap.
+function tracksAfterTap(prevSess, tapped) { return applySpin(prevSess, tapped, true).sess.tracks; }
+function undoBlockReason(sess, prevSess, tapped) {
   if(!prevSess) return null;
   if(Math.max(lastEditSpin(sess), lastParkSpin(sess)) > prevSess.spins.length) return UNDO_BLOCK_REASON;
   if(MONEY_RECORD_KEYS.some(k => !sameValue(sess[k], prevSess[k]))) return UNDO_MONEY_REASON;
@@ -365,6 +370,11 @@ function undoBlockReason(sess, prevSess) {
   // earlier, or kept its length, was not made by this tap (the session was replaced, or another copy of it was merged in).
   const spins = sess.spins || [], was = prevSess.spins || [];
   if(spins.length !== was.length + 1 || !was.every((v, i) => spins[i] === v)) return UNDO_CHANGED_REASON;
+  // The last spin must be the number the tap recorded, so a replace of that number is refused. A snapshot with no recorded number is refused too.
+  if(spins[spins.length - 1] !== tapped) return UNDO_CHANGED_REASON;
+  // The tracks must be what the snapshot's tracks become under the tapped spin. Any track action after the spin (added, closed,
+  // reactivated, moved, a Solution bet changed) leaves a difference here, so no action has to be stamped to be refused.
+  if(!sameValue(canonicalTracks(tracksAfterTap(prevSess, tapped)), canonicalTracks(sess.tracks || []))) return UNDO_TRACK_REASON;
   // Every other field must be as the snapshot left it, apart from what a tap and a Save change.
   if(Object.keys({...sess, ...prevSess}).some(k => !TAP_CHANGED_KEYS.includes(k) && !sameValue(sess[k], prevSess[k]))) return UNDO_CHANGED_REASON;
   return null;

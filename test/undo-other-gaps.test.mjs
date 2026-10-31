@@ -325,7 +325,7 @@ test('Clear History on the Spin Log tab leaves no Undo offered, so the cleared s
   assert.equal(app.state().currentSession.spins.length, 0, 'the spins are cleared');
 
   await app.tab('Tracker');
-  assert.equal(app.undoButton(), null, 'Undo is not offered after Clear History');
+  assert.equal(app.undoButton().props.style.visibility, 'hidden', 'Undo is not offered after Clear History (the slot stays drawn, rule 82)');
 });
 
 test('End Session after a spin that moved no money leaves no Undo offered, so the ended session is not restored', async () => {
@@ -336,7 +336,7 @@ test('End Session after a spin that moved no money leaves no Undo offered, so th
   await app.endSession();
   assert.equal(app.state().currentSession.spins.length, 0, 'the session has ended and a new one is current');
 
-  assert.equal(app.undoButton(), null, 'Undo is not offered after End Session');
+  assert.equal(app.undoButton().props.style.visibility, 'hidden', 'Undo is not offered after End Session (the slot stays drawn, rule 82)');
 });
 
 test('End Session after a spin that moved money leaves no Undo offered', async () => {
@@ -346,7 +346,7 @@ test('End Session after a spin that moved money leaves no Undo offered', async (
   await app.endSession();
   assert.equal(app.state().currentSession.spins.length, 0, 'the session has ended and a new one is current');
 
-  assert.equal(app.undoButton(), null, 'Undo is not offered after End Session');
+  assert.equal(app.undoButton().props.style.visibility, 'hidden', 'Undo is not offered after End Session (the slot stays drawn, rule 82)');
 });
 
 test('Tear session after a tracked spin leaves no Undo offered, so the torn session is not restored', async () => {
@@ -358,7 +358,7 @@ test('Tear session after a tracked spin leaves no Undo offered, so the torn sess
   assert.equal(app.state().currentSession.spins.length, 0, 'the session is torn');
 
   await app.tab('Tracker');
-  assert.equal(app.undoButton(), null, 'Undo is not offered after Tear');
+  assert.equal(app.undoButton().props.style.visibility, 'hidden', 'Undo is not offered after Tear (the slot stays drawn, rule 82)');
 });
 
 test('New session after a tracked spin leaves no Undo offered, so the replaced session is not restored', async () => {
@@ -370,7 +370,7 @@ test('New session after a tracked spin leaves no Undo offered, so the replaced s
   assert.equal(app.state().currentSession.spins.length, 0, 'the new session is empty');
 
   await app.tab('Tracker');
-  assert.equal(app.undoButton(), null, 'Undo is not offered after New');
+  assert.equal(app.undoButton().props.style.visibility, 'hidden', 'Undo is not offered after New (the slot stays drawn, rule 82)');
 });
 
 test('the abandon refusal is worded in spin-apply.js only, and App.jsx names no Undo reason of its own', async () => {
