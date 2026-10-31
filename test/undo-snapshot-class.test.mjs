@@ -25,6 +25,7 @@ const PARK_RULES = { droughtThreshold: null, waitForWin: false, parkAfterStopLos
 const MISS = '30';
 
 const CHANGED_REASON = 'Undo is off: the session was changed after the spin it would reverse. Undo would drop that change.';
+const TRACK_REASON = 'Undo is off after a track change. Fix the number instead.';
 const SPIN_REASON = 'Undo is off after a ghost spin or an untracked spin. Fix the number instead.';
 
 // Each number counts the spins since it last came up (every spin when it never has), as applySpin keeps them.
@@ -414,26 +415,39 @@ async function snapshotPair() {
   return { ctx, base, tapped };
 }
 
-test('undoBlockReason: the tapped spin, a Save and a track change alone are not refused', async () => {
+test('undoBlockReason: the tapped spin and a Save alone are not refused', async () => {
   const { ctx, base, tapped } = await snapshotPair();
-  assert.equal(ctx.undoBlockReason(tapped, base), null, 'the tapped spin alone can be undone');
-  const saved = { ...tapped, modified: tapped.modified + 5, mode: 'live', metrics: { netPnL: 0 }, sessionStartedAt: 123,
-    tracks: [...tapped.tracks, freshProgression({ id: 'trk-new', createdAtSpin: 3 })] };
-  assert.equal(ctx.undoBlockReason(saved, base), null, 'a Save stamps mode and metrics, and a new track is a track change: neither refuses Undo');
+  assert.equal(ctx.undoBlockReason(tapped, base, '7'), null, 'the tapped spin alone can be undone');
+  const saved = { ...tapped, modified: tapped.modified + 5, mode: 'live', metrics: { netPnL: 0 }, sessionStartedAt: 123 };
+  assert.equal(ctx.undoBlockReason(saved, base, '7'), null, 'a Save stamps mode and metrics: neither refuses Undo');
+});
+
+test('undoBlockReason: a track added after the tapped spin is a track change, and refuses Undo', async () => {
+  const { ctx, base, tapped } = await snapshotPair();
+  const added = { ...tapped, tracks: [...tapped.tracks, freshProgression({ id: 'trk-new', createdAtSpin: 3 })] };
+  assert.equal(ctx.undoBlockReason(added, base, '7'), TRACK_REASON, 'a new track after the spin is refused, with the track reason');
 });
 
 test('undoBlockReason: a changed wheel, label or id is refused, because Undo would undo that change', async () => {
   const { ctx, base, tapped } = await snapshotPair();
-  assert.equal(ctx.undoBlockReason({ ...tapped, roulette: 'european' }, base), CHANGED_REASON, 'a wheel change');
-  assert.equal(ctx.undoBlockReason({ ...tapped, label: 'Tuesday' }, base), CHANGED_REASON, 'a label');
-  assert.equal(ctx.undoBlockReason({ ...tapped, id: 'other' }, base), CHANGED_REASON, 'another session');
+  assert.equal(ctx.undoBlockReason({ ...tapped, roulette: 'european' }, base, '7'), CHANGED_REASON, 'a wheel change');
+  assert.equal(ctx.undoBlockReason({ ...tapped, label: 'Tuesday' }, base, '7'), CHANGED_REASON, 'a label');
+  assert.equal(ctx.undoBlockReason({ ...tapped, id: 'other' }, base, '7'), CHANGED_REASON, 'another session');
 });
 
 test('undoBlockReason: a spin list that is not the snapshot plus the tapped spin is refused, even at the same length', async () => {
   const { ctx, base, tapped } = await snapshotPair();
-  assert.equal(ctx.undoBlockReason({ ...tapped, spins: ['1', '9', '7'] }, base), CHANGED_REASON, 'an earlier spin changed');
-  assert.equal(ctx.undoBlockReason(base, base), CHANGED_REASON, 'no spin was added since the snapshot');
-  assert.equal(ctx.undoBlockReason({ ...tapped, spins: ['1', '2', '7', '3'] }, base), SPIN_REASON, 'two spins since the snapshot keep their reason');
+  assert.equal(ctx.undoBlockReason({ ...tapped, spins: ['1', '9', '7'] }, base, '7'), CHANGED_REASON, 'an earlier spin changed');
+  assert.equal(ctx.undoBlockReason(base, base, '7'), CHANGED_REASON, 'no spin was added since the snapshot');
+  assert.equal(ctx.undoBlockReason({ ...tapped, spins: ['1', '2', '7', '3'] }, base, '7'), SPIN_REASON, 'two spins since the snapshot keep their reason');
+});
+
+test('undoBlockReason: the number the snapshot recorded must be the last spin, so a replace of it is refused', async () => {
+  const { ctx, base, tapped } = await snapshotPair();
+  assert.equal(ctx.undoBlockReason(tapped, base, '8'), CHANGED_REASON, 'a snapshot that recorded another number is refused');
+  assert.equal(ctx.undoBlockReason(tapped, base), CHANGED_REASON, 'a snapshot with no recorded number is refused');
+  const replaced = plain(ctx.applySpin(base, '9', true).sess);
+  assert.equal(ctx.undoBlockReason(replaced, base, '7'), CHANGED_REASON, 'a replace of the tapped number is refused');
 });
 
 test('the changed-session reason is worded in spin-apply.js only, and App.jsx stays under the 900-line test cap', async () => {

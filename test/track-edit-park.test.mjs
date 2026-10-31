@@ -742,7 +742,7 @@ test('the refusal reasons live in spin-apply.js only, and the Undo handler and p
   const app = await readFile(new URL('App.jsx', SRC), 'utf8');
   assert.doesNotMatch(app, /This spin was played before|Undo is off:/, 'App.jsx names no reason of its own');
   assert.match(app, /blockedReason=\{spinCorrectionBlockAt\(sess,spinCorrection\.index\)\}/, 'the picker reads spinCorrectionBlockAt');
-  assert.match(app, /const undoWhy = undoBlockReason\(sess, prevSessState\);/, 'the Undo refusal comes from undoBlockReason');
+  assert.match(app, /const undoWhy = undoBlockReason\(sess, prevSessState, undoSpin\);/, 'the Undo refusal comes from undoBlockReason, with the tapped number');
   assert.match(app, /function undoLastSpin\(\) \{\s*if\(!prevSessState \|\| undoWhy\) return;/, 'the Undo handler refuses on that reason');
 });
 
@@ -886,11 +886,11 @@ test('undoBlockReason: nothing to undo gives no reason; a spin no track settled 
   const before = plain(ctx.newSession('american', 500));
   assert.equal(ctx.undoBlockReason(before, null), null, 'with no snapshot there is nothing to undo');
   const tracked = plain(ctx.applySpin(before, '7', true).sess);
-  assert.equal(ctx.undoBlockReason(tracked, before), null, 'the tracked spin alone can be undone');
+  assert.equal(ctx.undoBlockReason(tracked, before, '7'), null, 'the tracked spin alone can be undone');
   const untracked = plain(ctx.applySpin(tracked, '3', false).sess);
-  assert.equal(ctx.undoBlockReason(untracked, before), SPIN_REASON, 'a spin no track settled, recorded after the tracked one, is refused');
+  assert.equal(ctx.undoBlockReason(untracked, before, '7'), SPIN_REASON, 'a spin no track settled, recorded after the tracked one, is refused');
   const converted = { ...tracked, bankroll: 450 };
-  assert.equal(ctx.undoBlockReason(converted, before), MONEY_REASON, 'a change to the starting bankroll, as a currency conversion makes, is money');
+  assert.equal(ctx.undoBlockReason(converted, before, '7'), MONEY_REASON, 'a change to the starting bankroll, as a currency conversion makes, is money');
 });
 
 // IMPORT-AND-MIGRATION PARK POINTS: every park carries the spin count it was made at. An import parks active tracks and stamps
