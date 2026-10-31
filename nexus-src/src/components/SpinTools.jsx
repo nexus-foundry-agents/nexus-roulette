@@ -14,7 +14,7 @@ const RECENT_STRIP_MIN_HEIGHT = 40;
 // (droughtPanelHeight() in DroughtPanel.jsx sums them, and a test holds this value equal to that sum). Derived from the
 // row sizes; not measured in a browser.
 const DROUGHT_PANEL_HEIGHT = 367;
-const RECENT_STRIP_LIMIT = 30;
+const RECENT_STRIP_LIMIT = 40; // = BOARD_MAX_NUMBERS (BoardPhoto.jsx), so one board Add always fits on the strip
 
 // A press on a recent number opens the picker after this long, unless the pointer moves more than the slop first.
 const LONG_PRESS_MS = 500;

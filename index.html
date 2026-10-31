@@ -1377,7 +1377,8 @@ function VenuePicker(_ref38){var title=_ref38.title,value=_ref38.value,options=_
 var SPIN_TOOLS_ROW_HEIGHT=30;var RECENT_STRIP_MIN_HEIGHT=40;// The drought panel's height in px, with no spins and with any number of them: every row in it has a fixed height
 // (droughtPanelHeight() in DroughtPanel.jsx sums them, and a test holds this value equal to that sum). Derived from the
 // row sizes; not measured in a browser.
-var DROUGHT_PANEL_HEIGHT=367;var RECENT_STRIP_LIMIT=30;// A press on a recent number opens the picker after this long, unless the pointer moves more than the slop first.
+var DROUGHT_PANEL_HEIGHT=367;var RECENT_STRIP_LIMIT=40;// = BOARD_MAX_NUMBERS (BoardPhoto.jsx), so one board Add always fits on the strip
+// A press on a recent number opens the picker after this long, unless the pointer moves more than the slop first.
 var LONG_PRESS_MS=500;var LONG_PRESS_SLOP_PX=8;// App provides the function that opens the picker for a spin index. Outside App it is null and a press does nothing.
 var SpinCorrectionContext=React.createContext(null);function SpinTools(_ref39){var spinCount=_ref39.spinCount,confirmOpen=_ref39.confirmOpen,undoVisible=_ref39.undoVisible,onAsk=_ref39.onAsk,onCancel=_ref39.onCancel,onConfirm=_ref39.onConfirm,onUndo=_ref39.onUndo,onReadPhoto=_ref39.onReadPhoto;var hasSpins=spinCount>0;var noun=spinCount===1?"spin":"spins";var confirmBody="Removes the ".concat(spinCount," ").concat(noun," from this session. Each track's bets and progression level restart at zero. Bankroll, buy-ins, cash-outs and track profit and loss are not changed. Undo stays available until the next spin, or for 15 seconds.");// Clear numbers and the undo notice share grid column 2, so the column is as wide as the larger of the two. Only the
 // one that applies is visible; the other keeps its place. Read board photo has column 1 to itself and is always shown.
