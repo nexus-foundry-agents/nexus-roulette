@@ -153,6 +153,10 @@ function stopOfferCopy(count){
   return spinsWaitingCopy(count)+' Press Stop again to discard '+count+(count===1?' unsent spin':' unsent spins')+' and end the recording.';
 }
 
+// The problem lines for an automatic pause or resume that Casino refused or that threw. Renders do not retry it.
+const AUTOMATIC_PAUSE_LINE='Casino did not pause the session. It will try again at your next spin.';
+const AUTOMATIC_RESUME_LINE='Casino did not resume the session. It will try again at your next spin.';
+
 /** One central recording session. Local Roulette sessions remain unchanged. */
 export function useCasinoRecording(mode,active) {
   const [availability,setAvailabilityState] = useState('unknown');
@@ -175,6 +179,8 @@ export function useCasinoRecording(mode,active) {
   const discardPending = React.useRef(false);
   // Spins refused while a discard waits. They are stated on screen once the discard finishes.
   const stoppingRefusals = React.useRef(0);
+  // Set when an automatic pause or resume is refused or throws. Only a user action or the next spin clears it.
+  const autoHalt = React.useRef(false);
   sessionRef.current = session;
   activeRef.current = active;
 
@@ -187,6 +193,12 @@ export function useCasinoRecording(mode,active) {
   const setProblem = React.useCallback(function(text){
     if(mounted.current) setProblemState(text);
   },[]);
+
+  // An automatic pause or resume that Casino refused or threw. It is not retried by renders: it stays off until a user action or the next spin.
+  const automaticRefused = React.useCallback(function(kind){
+    autoHalt.current=true;
+    setProblem(kind==='pause'?AUTOMATIC_PAUSE_LINE:AUTOMATIC_RESUME_LINE);
+  },[setProblem]);
 
   const adopt = React.useCallback(function(next){
     if(recorder.current) recorder.current.observe(next);
@@ -211,10 +223,11 @@ export function useCasinoRecording(mode,active) {
         if(running&&running.status==='running'&&!activeRef.current){
           pauseOwner.current='auto';
           let paused;
+          // A pause that threw did not pause the session: it is stated as a refused automatic pause, and not retried by renders.
           try{paused=await askCasino('pause',{sessionId:running.id});}
-          catch(error){pauseOwner.current='none';throw error;}
+          catch(error){paused={ok:false,error:thrownCopy(error)};}
           if(paused.ok)running=casinoSession(paused.body)||running;
-          else pauseOwner.current='none';
+          else{pauseOwner.current='none';automaticRefused('pause');}
         }
         if(running)adopt(running);
         return 'on';
@@ -228,7 +241,7 @@ export function useCasinoRecording(mode,active) {
     refreshing.current=pending;
     void pending.finally(function(){if(refreshing.current===pending)refreshing.current=null;});
     return pending;
-  },[mode,adopt,setAvailability]);
+  },[mode,adopt,automaticRefused,setAvailability]);
 
   useEffect(function(){
     installCasinoBridge();
@@ -290,6 +303,11 @@ export function useCasinoRecording(mode,active) {
       setProblem(spinsNotSavedCopy(stoppingRefusals.current,'recording is stopping'));
     };
     if(discardPending.current) return refuse();
+    // A halted automatic attempt gets its one attempt here, on this spin, before the spin is queued behind it.
+    if(autoHalt.current){
+      autoHalt.current=false;
+      latest.current.automaticAtSpin();
+    }
     // Set once the spin is in the queue. A link that throws before that did not save the spin, and the line says so.
     let queued=false;
     appendLink(queue,async function(){
@@ -316,7 +334,8 @@ export function useCasinoRecording(mode,active) {
     });
   },[refresh,setProblem,syncUnsent]);
 
-  const lifecycle = React.useCallback(function(op){
+  // `automatic` marks the resume the view makes itself, on a return to the mode. Its refusal halts the automatic attempts.
+  const lifecycle = React.useCallback(function(op,automatic){
     // A discard owns the queue while it waits. A Resume then does nothing and says nothing.
     if(discardPending.current) return Promise.resolve(false);
     return appendLink(queue,async function(){
@@ -334,15 +353,22 @@ export function useCasinoRecording(mode,active) {
       const live = sessionRef.current;
       if(!live) return false;
       const result = await askCasino(op,{sessionId:live.id});
-      if(!result.ok){ setProblem(result.error||('Casino refused to '+op+' the session.')); return false; }
+      if(!result.ok){
+        if(automatic){ automaticRefused(op); return false; }
+        setProblem(result.error||('Casino refused to '+op+' the session.'));
+        return false;
+      }
       setProblem(null);
       adopt(casinoSession(result.body));
       if(resumingHeld) await flushPendingSpins();
       // A stopped session has no pause left to carry.
       if(op==='stop'){ pauseOwner.current='none'; pausePending.current=false; }
       return true;
-    },function(error){ setProblem(thrownCopy(error)); });
-  },[adopt,flushPendingSpins,setProblem]);
+    },function(error){
+      if(automatic){ automaticRefused(op); return; }
+      setProblem(thrownCopy(error));
+    });
+  },[adopt,automaticRefused,flushPendingSpins,setProblem]);
 
   // On a held queue Pause does not wait for the retries. Its intent is kept, and applied once the queue has drained.
   const deferPause = React.useCallback(function(){
@@ -371,7 +397,8 @@ export function useCasinoRecording(mode,active) {
       if(current.status==='paused'){pausePending.current=false;return true;}
       const result=await askCasino('pause',{sessionId:current.id});
       if(!result.ok){
-        setProblem(result.error||'Casino refused to pause the recording session.');
+        if(owner==='auto') automaticRefused('pause');
+        else setProblem(result.error||'Casino refused to pause the recording session.');
         pauseOwner.current='none';
         return false;
       }
@@ -382,9 +409,47 @@ export function useCasinoRecording(mode,active) {
     },function(error){
       // A Pause that threw did not pause the session, so no pause is carried to the spins after it.
       pauseOwner.current='none';
-      setProblem(thrownCopy(error));
+      if(owner==='auto') automaticRefused('pause');
+      else setProblem(thrownCopy(error));
     });
-  },[adopt,deferPause,flushPendingSpins,setProblem]);
+  },[adopt,automaticRefused,deferPause,flushPendingSpins,setProblem]);
+
+  // The automatic pause or resume the view is due now, if any: the view left a running session, or returned to a session
+  // this view paused. Nothing is due while a transition is in flight.
+  function automaticDue(){
+    const live=sessionRef.current;
+    if(!live||lifecycleTransition.current) return null;
+    if(!activeRef.current&&live.status==='running'&&pauseOwner.current==='none') return 'pause';
+    if(activeRef.current&&live.status==='paused'&&pauseOwner.current==='auto') return 'resume';
+    return null;
+  }
+
+  // Starts one automatic pause or resume. A refusal or a throw halts the automatic attempts (see automaticRefused).
+  const startAutomatic = React.useCallback(function(kind){
+    lifecycleTransition.current=kind;
+    const finish=function(ok){
+      lifecycleTransition.current=null;
+      if(!ok) autoHalt.current=true;
+    };
+    if(kind==='pause'){
+      pauseOwner.current='auto';
+      return pauseImmediately('auto').then(function(ok){
+        if(!ok) pauseOwner.current='none';
+        finish(ok);
+      });
+    }
+    return lifecycle('resume',true).then(function(ok){
+      if(ok) pauseOwner.current='none';
+      finish(ok);
+    });
+  },[lifecycle,pauseImmediately]);
+
+  // A spin is the next chance for the automatic attempt a halt stopped. It makes at most one, and it is started before the
+  // spin is queued, so the queue's link for the spin runs after it.
+  function automaticAtSpin(){
+    const due=automaticDue();
+    if(due) void startAutomatic(due);
+  }
 
   // The second press discards the queued spins, once a send in flight has finished, and then ends the recording.
   // The count is the queue's own. A spin whose send may have been recorded is stated as may have been saved.
@@ -402,11 +467,13 @@ export function useCasinoRecording(mode,active) {
     };
     // The owner this Stop replaces. A Stop whose call throws restores it, as a refused Stop does.
     let previousOwner=null;
+    // The count the discard dropped, in the discard's wording. Every failure line after the discard states it.
+    let notSaved=null;
     try{
       const outcome=await recorder.current.discard();
       stopOffer.current=null;
       pausePending.current=false;
-      const notSaved=outcome.count?spinsDroppedCopy(outcome.count,outcome.maybeSaved,'recording was stopped'):null;
+      notSaved=outcome.count?spinsDroppedCopy(outcome.count,outcome.maybeSaved,'discarded by Stop'):null;
       syncUnsent();
       const live=sessionRef.current;
       if(!live){ setProblem(withRefusals(notSaved)); return; }
@@ -416,7 +483,7 @@ export function useCasinoRecording(mode,active) {
       const result=await askCasino('stop',{sessionId:live.id});
       if(!result.ok){
         pauseOwner.current=previousOwner;
-        setProblem(withRefusals((notSaved?notSaved+' ':'')+(result.error||'Casino refused to stop the recording session.')));
+        setProblem(withRefusals((notSaved?notSaved+' ':'')+'Stop did not reach Casino: '+(result.error||'Casino refused to stop the recording session.')));
         return;
       }
       pauseOwner.current='none';
@@ -424,7 +491,7 @@ export function useCasinoRecording(mode,active) {
       adopt(casinoSession(result.body)||live);
     }catch(e){
       if(previousOwner!==null) pauseOwner.current=previousOwner;
-      setProblem(withRefusals((e&&e.message) || 'Stop failed.'));
+      setProblem(withRefusals((notSaved?notSaved+' ':'')+'Stop did not reach Casino: '+((e&&e.message) || 'the call failed.')));
     }finally{
       discardPending.current=false;
       stoppingRefusals.current=0;
@@ -463,7 +530,7 @@ export function useCasinoRecording(mode,active) {
   }
 
   // The queue is created once per hook instance. Its callbacks read the latest render's functions.
-  latest.current = {resolveSession,rereadSession,adopt,setAvailability,setProblem,reportQueue,pauseWhenDrained,syncUnsent};
+  latest.current = {resolveSession,rereadSession,adopt,setAvailability,setProblem,reportQueue,pauseWhenDrained,syncUnsent,automaticAtSpin};
   if(!recorder.current) recorder.current = createSpinQueue({
     resolveSession:function(){ return latest.current.resolveSession(); },
     reread:function(){ return latest.current.rereadSession(); },
@@ -516,36 +583,24 @@ export function useCasinoRecording(mode,active) {
     };
   },[]);
 
+  // Runs when the view changes or the session's status does, never on the clock: a refused automatic attempt is not re-armed
+  // by a render. While a halt stands nothing is started here; a user action or the next spin ends the halt.
   useEffect(function(){
-    const live=sessionRef.current;
-    if(!live)return;
-    if(!active&&live.status==='running'&&pauseOwner.current==='none'&&!lifecycleTransition.current){
-      pauseOwner.current='auto';
-      lifecycleTransition.current='pause';
-      void pauseImmediately('auto').then(function(ok){
-        lifecycleTransition.current=null;
-        if(!ok)pauseOwner.current='none';
-        setTick(function(value){return value+1;});
-      });
-    } else if(active&&live.status==='paused'&&pauseOwner.current==='auto'&&!lifecycleTransition.current){
-      lifecycleTransition.current='resume';
-      void lifecycle('resume').then(function(ok){
-        lifecycleTransition.current=null;
-        if(ok)pauseOwner.current='none';
-        setTick(function(value){return value+1;});
-      });
-    }
-  },[active,session&&session.status,pauseImmediately,lifecycle,tick]);
+    if(autoHalt.current) return;
+    const due=automaticDue();
+    if(due) void startAutomatic(due);
+  },[active,session&&session.status,startAutomatic]);
 
   const elapsedMs = session
     ? (session.activeMs||0)+(session.status==='running'?Date.now()-resumedAt.current:0)
     : 0;
   void tick;
+  // A user action ends a halt on the automatic attempts, as the next spin does. The action's own call reports its own result.
   return {
     availability,session,elapsedMs,problem,record,
-    pause:function(){void pauseImmediately('manual');},
-    resume:function(){pauseOwner.current='none';pausePending.current=false;void lifecycle('resume');},
-    stop:function(){stopNow();},
+    pause:function(){autoHalt.current=false;void pauseImmediately('manual');},
+    resume:function(){autoHalt.current=false;pauseOwner.current='none';pausePending.current=false;void lifecycle('resume');},
+    stop:function(){autoHalt.current=false;stopNow();},
   };
 }
 

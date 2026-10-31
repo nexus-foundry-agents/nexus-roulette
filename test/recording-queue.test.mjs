@@ -336,7 +336,7 @@ test('Stop on a held queue offers the discard with its count, and the second pre
 
   view().stop();
   assert.equal(await until(() => casino.server.stops === 1), true, 'the second press did not end the recording');
-  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: recording was stopped.'), true,
+  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: discarded by Stop.'), true,
     'the discard was not stated with its count');
   assert.equal(casino.server.recorded.length, 0, 'a discarded spin reached Casino');
 });
@@ -1147,7 +1147,7 @@ test('FLUSH-DROP 3: Resume and Pause during the discard wait are refused with no
   assert.equal(view().problem, 'Discarding unsent spins…', 'Resume during the discard wait wrote a line of its own');
   assert.equal(casino.server.resumes, 0, 'Resume reached Casino during the discard');
   await releaseNext(casino);
-  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: recording was stopped.'), true,
+  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: discarded by Stop.'), true,
     'the discard was not stated with its count');
 });
 
