@@ -68,38 +68,48 @@ function Modal({children, onClose, fullScreen}) {
   );
 }
 
-function MoneyInput({value, onChange, currCode, label}) {
+// The money field (MONEYINPUT-SILENT-STRIP). The text is kept exactly as typed while editing. On blur or Enter a valid amount
+// applies. An invalid one shows its reason under the field and keeps the amount already applied; its text stays, so it can be
+// corrected. Nothing is rounded: parseMoneyAmount (money-parse.js) refuses an entry with more decimals than it takes.
+// range is {min, max, noun} (money-parse.js). Omitted, it is MONEY_INPUT_RANGE, the range every current caller has.
+function MoneyInput({value, onChange, currCode, label, range}) {
   const [raw, setRaw] = useState(String(value));
-  const [focused, setFocused] = useState(false);
+  const [error, setError] = useState("");
   const cur = getCurrency(currCode);
 
-  // Reflect external value changes (preset buttons, steppers) while the field
-  // isn't being typed in — without this, preset clicks never update the display
-  // and a later blur commits the stale text right back over them.
-  useEffect(() => { if(!focused) setRaw(String(value)); }, [value, focused]);
+  // Reflect external value changes (preset buttons, steppers, a caller's clamp). A refused entry leaves the value as it was,
+  // so its text and its reason stay in place.
+  useEffect(() => { setRaw(String(value)); setError(""); }, [value]);
 
   function commit(str) {
-    const n = parseFloat(str.replace(/[^0-9.]/g,""));
-    if(!isNaN(n) && n >= 0) onChange(Math.round(n * 100) / 100);
-    else setRaw(value.toFixed(cur.dec));
+    const r = parseMoneyAmount(str, currCode, range || MONEY_INPUT_RANGE);
+    if(r.ok) { setError(""); setRaw(String(r.value)); onChange(r.value); }
+    else setError(r.reason);
   }
 
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
-      <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:12,border:"1px solid #2d4057",overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:12,border:"1px solid "+(error?"#f87171":"#2d4057"),overflow:"hidden"}}>
         <div style={{padding:"0 14px",fontSize:20,color:"#64748b",fontWeight:700}}>{cur.symbol}</div>
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          aria-label={label || "Amount"}
+          aria-invalid={error ? "true" : "false"}
           value={raw}
           onChange={e => setRaw(e.target.value)}
-          onBlur={e => { setFocused(false); commit(e.target.value); }}
-          onFocus={e => { setFocused(true); e.target.select(); }}
-          onKeyDown={e => e.key==="Enter" && commit(e.target.value)}
-          style={{flex:1,padding:"14px 0",fontSize:22,fontWeight:800,color:"#86efac",background:"transparent",border:"none",outline:"none",WebkitAppearance:"none"}}
+          onBlur={() => commit(raw)}
+          onFocus={e => e.target.select()}
+          onKeyDown={e => { if(e.key === "Enter") commit(raw); }}
+          style={{flex:1,minWidth:0,padding:"14px 0",fontSize:22,fontWeight:800,color:"#86efac",background:"transparent",border:"none",outline:"none",WebkitAppearance:"none"}}
         />
       </div>
+      <div aria-hidden={!error} style={{minHeight:14,marginTop:4,fontSize:10,color:"#f87171",visibility:error?"visible":"hidden"}}>{error || " "}</div>
     </div>
   );
 }

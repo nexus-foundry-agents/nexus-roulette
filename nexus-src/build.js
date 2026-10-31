@@ -36,6 +36,9 @@ const FILES = [
   'tlv.js',
   // Base UI — depends on constants
   'roulette-bets.mjs',
+  // Shared money parser (MONEYINPUT-SILENT-STRIP): the one reader for every typed amount, used by MoneyInput (ui.jsx) and
+  // BaseBetInput. Depends on constants (getCurrency, CURRENCIES) only.
+  'money-parse.js',
   // Number drought count under each number (NumberDrought, displayDrought), and the percentile tag beside a count (PercentTag).
   // Depends on percentile.js for the Percentile counter; ui and grids use it.
   'components/NumberDrought.jsx',
