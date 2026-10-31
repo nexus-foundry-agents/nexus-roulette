@@ -48,7 +48,8 @@ function BetTargets({type, config, compact, showRanges, max, style}) {
 // starts inside the dialog and releases on the backdrop arrives here as a backdrop click. The press
 // flag (started on the backdrop, primary button) and the release flag (ended on the backdrop) reject
 // both that case and a press that starts on the backdrop and releases inside the dialog.
-function Modal({children, onClose}) {
+// fullScreen: the sheet fills the viewport instead of rising from the bottom (used by the section detail view).
+function Modal({children, onClose, fullScreen}) {
   const downOnBackdrop = React.useRef(false);
   const upOnBackdrop = React.useRef(false);
   return (
@@ -57,8 +58,10 @@ function Modal({children, onClose}) {
       onPointerUp={e => { upOnBackdrop.current = e.target===e.currentTarget; }}
       onPointerCancel={() => { downOnBackdrop.current = false; upOnBackdrop.current = false; }}
       onClick={e => { const go = downOnBackdrop.current && upOnBackdrop.current && e.target===e.currentTarget; downOnBackdrop.current = false; upOnBackdrop.current = false; if(go) onClose(); }}
-      style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#0f1923",borderRadius:"20px 20px 0 0",padding:"20px 16px 36px",width:"100%",maxWidth:460,border:"1px solid #2d4057",borderBottom:"none",maxHeight:"90vh",overflowY:"auto"}}>
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:fullScreen?1100:500,display:"flex",alignItems:fullScreen?"stretch":"flex-end",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={fullScreen
+        ? {background:"#0f1923",padding:"16px 16px 24px",width:"100%",height:"100%",boxSizing:"border-box",overflowY:"auto",overflowX:"hidden"}
+        : {background:"#0f1923",borderRadius:"20px 20px 0 0",padding:"20px 16px 36px",width:"100%",maxWidth:460,border:"1px solid #2d4057",borderBottom:"none",maxHeight:"90vh",overflowY:"auto"}}>
         {children}
       </div>
     </div>

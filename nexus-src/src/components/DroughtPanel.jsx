@@ -58,7 +58,7 @@ function DroughtPanel({emDroughts, dozD, colD, dozP, colP, spins, droughts, roul
         </div>
       </div>
       {open && (
-        <Modal onClose={close}>
+        <Modal fullScreen onClose={close}>
           <SectionDetail r={open} onClose={close}/>
         </Modal>
       )}
