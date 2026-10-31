@@ -9,7 +9,14 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ### Fixed
 
-- Account sync: a change made before the account state has loaded (a spin or a settings change) is no longer dropped when the state loads. It is merged over the loaded account state and pushed. The account's active session is never replaced: a session the change would displace is kept in saved sessions. Repeated spin numbers stay separate spins. The rule is in `nexus-src/src/casino-sync.mjs`.
+- Account sync: a change made before the account state has loaded (a spin or a settings change) is no longer dropped when the state loads. It is merged over the loaded account state and pushed. Repeated spin numbers stay separate spins. The rule is in `nexus-src/src/casino-sync.mjs`.
+- Account sync: a session change made before the account state has loaded takes the account's active session slot whenever that slot holds work. The choice does not compare the clocks of the two devices. The account session it displaces is kept in saved sessions. A displaced Game session is kept with its Game mode, so it does not appear in the Live list.
+- Account sync: a change made before the account state loads that holds no session work (a label or a stamp on an empty session) changes no session. It neither takes the active slot nor adds an empty session to saved sessions.
+
+### Open
+
+- CASINO-SYNC-PRERESET: a reset or clear made before the account state has loaded is not recorded. `markRouletteAccountReset` in `nexus-src/src/casino-sync.mjs` writes its reset marker only once the account storage scope is open, so before that it writes nothing, and the account keeps its history. A clear that leaves a session with no work is ignored by the rule above.
+- The same-id branch of `placeEditedSession` in `nexus-src/src/casino-sync.mjs` still compares the two stamps when the pre-load change and the account session share an id. Session ids are random per session (`generateId` in `nexus-src/src/constants.js`), so the branch needs an id collision to run. It is left unchanged and recorded here.
 
 ## [0.63.0] - 2026-10-31
 

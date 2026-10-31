@@ -129,8 +129,9 @@ export function mergeRouletteSnapshots(leftValue,rightValue){
 // the shell opens the account scope, so such a change starts from the mount state (factory defaults), not
 // from the device copy. Only the fields that differ from the mount state are the change, and only those
 // fields are applied over the merged account state: settings field by field, savedSessions by union, and a
-// session by its modified stamp. A session takes the active slot only when it is newer than an active
-// session that holds work; the session it displaces is kept in saved sessions. Nothing is deduplicated.
+// session by its slot. A session takes the active slot whenever the active session holds work, without comparing
+// stamps across devices; the session it displaces is kept in saved sessions, a Game session with its Game mode.
+// Nothing is deduplicated.
 function sessionHasWork(session){
   return syncObject(session)&&!!((session.spins||[]).length||(session.tracks||[]).length||
     (session.buyIns||[]).length||(session.cashOuts||[]).length||session.sessionStartedAt);
@@ -143,19 +144,22 @@ function changedFields(next,base){
   });
 }
 
+// An edit that holds no session work (a label or a stamp on an empty session) changes no session. Otherwise a session
+// with a different id takes the active slot with no stamp comparison, so the result does not depend on either device's
+// clock. The session it displaces is kept in saved sessions when it holds work; a displaced Game session is kept with
+// mode 'game', as the save flow writes it, so it does not resume as a Live session.
 function placeEditedSession(appState,key,edited){
-  if(!syncObject(edited))return;
+  if(!syncObject(edited)||!sessionHasWork(edited))return;
   const current=appState[key];
   if(syncObject(current)&&current.id===edited.id){
     if(sessionModified(edited)>=sessionModified(current))appState[key]=edited;
     return;
   }
-  let keep=edited;
-  if(!sessionHasWork(current)||sessionModified(edited)>sessionModified(current)){
-    keep=sessionHasWork(current)?current:null;
-    appState[key]=edited;
+  appState[key]=edited;
+  if(sessionHasWork(current)){
+    const displaced=key==='gameSession'?{...current,mode:'game'}:current;
+    appState.savedSessions=mergeSavedSessions(appState.savedSessions,[displaced]);
   }
-  if(keep)appState.savedSessions=mergeSavedSessions(appState.savedSessions,[keep]);
 }
 
 function editedAppState(base,mountAppState,edit){

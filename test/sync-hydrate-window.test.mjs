@@ -240,3 +240,137 @@ test('hydration with no change before it pushes the merged device and account st
     world.teardown();
   }
 });
+
+// Round 2: a session change made before hydration takes the active slot whenever the account's active session holds
+// work, whatever the clocks say; a displaced Game session keeps its Game mode; an edit with no session work changes no
+// session; a saved-session change is merged by union.
+
+test('a Game session change made before hydration keeps the displaced account Game session in Game mode', async () => {
+  const remote = rouletteSnapshot({
+    savedSessions: [],
+    currentSession: sess('acct-live', { created: 1500, modified: 1600 }),
+    gameSession: sess('acct-game', { created: 1990, modified: 1995, spins: ['9'] }),
+    settings: { currency: 'GBP', defaultBuyIn: 250, onboarded: true },
+  }, { modifiedAt: 2000, resetAt: 0 });
+  const world = installWorld({ remote });
+  try {
+    const fresh = freshApp();
+    world.render(fresh);
+    await flush();
+
+    const played = clone(fresh);
+    played.gameSession.spins = ['4'];
+    played.gameSession.modified = 5000;
+    world.render(played);
+    world.releaseRead();
+    await flush();
+
+    const final = last(world.appStates);
+    assert.equal(final.gameSession.id, 'fresh-game', 'the Game change takes the Game slot');
+    assert.deepEqual(final.gameSession.spins, ['4']);
+    assert.equal(final.currentSession.id, 'acct-live', 'a Game change does not touch the Live session');
+    const displaced = final.savedSessions.find((item) => item.id === 'acct-game');
+    assert.ok(displaced, 'the displaced account Game session is kept');
+    assert.equal(displaced.mode, 'game', 'and keeps its Game mode, so it does not resume as a Live session');
+    assert.equal(world.writes.length, 1, 'the merged state is pushed once');
+  } finally {
+    world.teardown();
+  }
+});
+
+test('a change made before hydration takes the active slot when the account session is stamped later', async () => {
+  const remote = rouletteSnapshot({
+    savedSessions: [],
+    currentSession: sess('acct-active', { created: 8000, modified: 9000, spins: ['1', '2'] }),
+    gameSession: sess('acct-game', { created: 1990, modified: 1995 }),
+    settings: { currency: 'GBP', defaultBuyIn: 250, onboarded: true },
+  }, { modifiedAt: 9000, resetAt: 0 });
+  const world = installWorld({ remote });
+  try {
+    const fresh = freshApp();
+    world.render(fresh);
+    await flush();
+
+    const spun = clone(fresh);
+    spun.currentSession.spins = ['7'];
+    spun.currentSession.modified = 5000;
+    world.render(spun);
+    world.releaseRead();
+    await flush();
+
+    const final = last(world.appStates);
+    assert.equal(final.currentSession.id, 'fresh-current', 'the change takes the active slot whatever the account stamp says');
+    assert.deepEqual(final.currentSession.spins, ['7']);
+    const displaced = final.savedSessions.find((item) => item.id === 'acct-active');
+    assert.deepEqual(displaced && displaced.spins, ['1', '2'], 'the displaced account session is kept with its spins');
+  } finally {
+    world.teardown();
+  }
+});
+
+test('a label on the empty factory session with a newer stamp does not take the active slot', async () => {
+  const world = installWorld({ remote: accountSnapshot() });
+  try {
+    const fresh = freshApp();
+    world.render(fresh);
+    await flush();
+
+    const labelled = clone(fresh);
+    labelled.currentSession.label = 'Renamed';
+    labelled.currentSession.modified = 5000;
+    world.render(labelled);
+    world.releaseRead();
+    await flush();
+
+    const final = last(world.appStates);
+    assert.equal(final.currentSession.id, 'acct-active', 'an edit with no session work does not move the active slot');
+    assert.deepEqual(final.currentSession.spins, ['1', '2']);
+    assert.deepEqual(final.savedSessions.map((item) => item.id), ['old-saved'], 'no empty session is written into saved sessions');
+  } finally {
+    world.teardown();
+  }
+});
+
+test('a label on the empty factory session with an older stamp writes no empty session into saved sessions', async () => {
+  const world = installWorld({ remote: accountSnapshot() });
+  try {
+    const fresh = freshApp();
+    world.render(fresh);
+    await flush();
+
+    const labelled = clone(fresh);
+    labelled.currentSession.label = 'Renamed';
+    world.render(labelled);
+    world.releaseRead();
+    await flush();
+
+    const final = last(world.appStates);
+    assert.equal(final.currentSession.id, 'acct-active');
+    assert.deepEqual(final.savedSessions.map((item) => item.id), ['old-saved'], 'the empty factory session is not saved');
+  } finally {
+    world.teardown();
+  }
+});
+
+test('a saved-session change made before hydration is merged into the account saved sessions and pushed', async () => {
+  const world = installWorld({ remote: accountSnapshot() });
+  try {
+    const fresh = freshApp();
+    world.render(fresh);
+    await flush();
+
+    const saved = clone(fresh);
+    saved.savedSessions = [sess('device-saved', { created: 300, modified: 310, spins: ['8'] })];
+    world.render(saved);
+    world.releaseRead();
+    await flush();
+
+    const final = last(world.appStates);
+    assert.deepEqual(final.savedSessions.map((item) => item.id), ['old-saved', 'device-saved'], 'both saved lists are kept, in creation order');
+    assert.equal(final.currentSession.id, 'acct-active', 'a saved-session change does not move the active session');
+    assert.equal(world.writes.length, 1);
+    assert.deepEqual(world.writes[0].data.appState.savedSessions.map((item) => item.id), ['old-saved', 'device-saved']);
+  } finally {
+    world.teardown();
+  }
+});
