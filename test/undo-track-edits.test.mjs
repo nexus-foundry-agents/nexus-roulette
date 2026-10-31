@@ -107,6 +107,7 @@ async function mountApp(seed = () => ({})) {
   const effects = [];
   let cursor = 0;
   let dirty = true;
+  let confirmAnswer = null; // the answer every in-app confirm gets (answerConfirm), as the old window.confirm stub answered every call; null leaves it open
   let tree = null;
   const changed = (before, after) => !before || !after || after.some((value, i) => !Object.is(value, before[i]));
   const react = { ...React,
@@ -168,6 +169,9 @@ async function mountApp(seed = () => ({})) {
   async function flush() {
     for (let i = 0; i < 100; i++) {
       if (dirty) render();
+      // The in-app confirm: the dialog a press opened is answered as the test set it, as its confirm button would.
+      const asked = confirmAnswer !== null && collect(tree, (n) => n.type && n.type.name === 'ConfirmDialog')[0];
+      if (asked) asked.props.onAnswer(confirmAnswer);
       for (const effect of effects.splice(0)) effect();
       await flushPromises();
       if (!dirty && effects.length === 0) return;
@@ -267,6 +271,7 @@ async function mountApp(seed = () => ({})) {
   }
   const state = () => hooks[0].value.appState;
   return {
+    answerConfirm: (value) => { confirmAnswer = value; },
     ctx, flush, render, live, tab, tapGrid, tapSolution, solToggle, dragCard, pressTracker, trackerNode, addRow, undoButton,
     undoAvailable, undoNote, attemptUndo, pageProps, hooks, state,
     tracks: () => plain(state().currentSession.tracks),
@@ -303,7 +308,7 @@ function replaceLastSpin(app, value) {
 // The action made after the spin stays. Undo is pressed first (a handler that refuses does nothing), so a silent revert shows as
 // a change to the spins or the tracks. Then the refusal is checked as the Tracker draws it.
 async function assertKeptAfterUndo(app, expect) {
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.attemptUndo();
   assert.equal(app.state().currentSession.spins.length, expect.spins, 'Undo did not reverse the spin');
   assert.deepEqual(app.tracks(), expect.tracks, 'Undo did not drop the track change');
@@ -323,7 +328,7 @@ test('addTrack after a spin: Undo is refused and does not drop the new track', a
 
 test('closeTrack after a spin: Undo is refused and the track stays closed', async () => {
   const app = await mountLive([freshProgression(), freshProgression({ id: 'prog-2' })], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   await app.pressTracker((n) => n.type === 'button' && n.props.children === '×', 'the first track card has its × button');
   assert.equal(app.tracks()[0].state, 'closed', 'the track is closed after the spin');
@@ -332,7 +337,7 @@ test('closeTrack after a spin: Undo is refused and the track stays closed', asyn
 
 test('reactivateTrack after a spin: Undo is refused and the track stays active', async () => {
   const app = await mountLive([freshProgression(), freshProgression({ id: 'prog-2', state: 'closed', closedAtSpin: 0 })], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   await app.tab('Stats');
   app.pageProps('StatsPage').reactivateTrack('prog-2');
@@ -343,7 +348,7 @@ test('reactivateTrack after a spin: Undo is refused and the track stays active',
 
 test('moveTrack after a spin: Undo is refused and the track keeps its new place', async () => {
   const app = await mountLive([freshProgression(), freshProgression({ id: 'prog-2' })], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   await app.dragCard(0, 1);
   assert.deepEqual(app.tracks().map((t) => t.id), ['prog-2', 'prog-1'], 'the first track is moved after the spin');
@@ -352,7 +357,7 @@ test('moveTrack after a spin: Undo is refused and the track keeps its new place'
 
 test('a Solution bet added after a spin: Undo is refused and the bet stays', async () => {
   const app = await mountLiveWith((ctx) => [solutionTrack(ctx, ['17'])]);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapSolution('5');
   await app.solToggle('9');
   assert.deepEqual(app.tracks()[0].config.activeBets.map((b) => b.number).sort(), ['17', '9'], 'the bet is added after the spin');
@@ -361,7 +366,7 @@ test('a Solution bet added after a spin: Undo is refused and the bet stays', asy
 
 test('a Solution bet removed after a spin: Undo is refused and the bet stays removed', async () => {
   const app = await mountLiveWith((ctx) => [solutionTrack(ctx, ['17', '9'])]);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapSolution('5');
   await app.solToggle('9');
   assert.deepEqual(app.tracks()[0].config.activeBets.map((b) => b.number), ['17'], 'the bet is removed after the spin');
@@ -372,7 +377,7 @@ test('a Solution bet removed after a spin: Undo is refused and the bet stays rem
 
 test('a same-session replace of the tapped number refuses Undo, and Undo keeps the replaced spin', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   replaceLastSpin(app, '31');
   await app.flush();

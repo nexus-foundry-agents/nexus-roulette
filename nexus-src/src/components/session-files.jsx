@@ -39,7 +39,9 @@ function parkImportedSession(loaded) {
   return migrateParkPoints(loaded);
 }
 
-function pickSessionsFile(updApp, setTab) {
+// confirm is App's in-app dialog (useConfirm, ConfirmDialog.jsx); the import reports through it as a notice, never alert().
+function pickSessionsFile(updApp, setTab, confirm) {
+    const notify = (title, body) => confirm({title, body, confirmLabel:"OK", notice:true});
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json,application/json";
@@ -52,7 +54,7 @@ function pickSessionsFile(updApp, setTab) {
           const data = JSON.parse(ev.target.result);
           // Handle session exports and older whole-app snapshot files.
           const sessions = data.sessions || data.savedSessions || (data.appState && data.appState.savedSessions) || [];
-          if (!sessions.length) { alert("No sessions found in file."); return; }
+          if (!sessions.length) { notify("No sessions found in file."); return; }
           let added = 0, skipped = 0, lastAdded = null;
           updApp(s => {
             sessions.forEach(sess => {
@@ -77,9 +79,9 @@ function pickSessionsFile(updApp, setTab) {
             }
           });
           setTab(0);
-          alert(`Import complete!\n${added} session${added!==1?"s":""} added${skipped ? ", " + skipped + " already existed (skipped)" : ""}.\n\nLoaded "${lastAdded?lastAdded.name:""}".`);
+          notify("Import complete!", `${added} session${added!==1?"s":""} added${skipped ? ", " + skipped + " already existed (skipped)" : ""}.\n\nLoaded "${lastAdded?lastAdded.name:""}".`);
         } catch(err) {
-          alert("Failed to parse file: " + err.message);
+          notify("Failed to parse file", err.message);
         }
       };
       reader.readAsText(file);
