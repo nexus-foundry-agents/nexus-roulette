@@ -89,6 +89,33 @@ function computeTableForTrack(t) {
   return computeTable(1,36,t.config.roi,t.config.stopLoss/(t.config.unit||1));
 }
 
+// Per-spot breakdown for one level of a Custom Bet track: one entry per position, in the order given.
+// Money is in currency (chips × unit), the same units as the Return and Profit columns.
+//   betPerSpot — the stake on this spot this spin: baseAmount × c × unit
+//   payout     — what the spot pays if it hits: on its WORST covered number, the gross return of every
+//                position covering that number (overlaps count). Gross includes the stake.
+//   net        — payout − totalInvest × unit: what is left after the bankroll the level needs is paid back.
+// Pure: reads positions and levelRow and never writes to either.
+function computeSpotBreakdown(positions, levelRow, unit) {
+  const u = unit||1, c = levelRow.c;
+  const round = x => Math.round(x*1e6)/1e6; // clears floating-point noise so a zero net never shows as −0
+  const grossOn = {}; // number → chips returned if that number hits
+  positions.forEach(p => {
+    const gross = p.baseAmount*c*betPayoutMult(p.type);
+    betCoveredNumbers(p.type, p.target).forEach(n => {
+      const k = String(n);
+      grossOn[k] = (grossOn[k]||0) + gross;
+    });
+  });
+  const invested = levelRow.totalInvest*u;
+  return positions.map(p => {
+    const covered = betCoveredNumbers(p.type, p.target).map(String);
+    const worst = covered.length ? Math.min(...covered.map(n => grossOn[n])) : 0;
+    const payout = worst*u;
+    return {betPerSpot: round(p.baseAmount*c*u), payout: round(payout), net: round(payout-invested)};
+  });
+}
+
 function getCategory(val, dts, cts, row, evts) {
   if(val==="0"||val==="00") return "loss";
   const n=+val;
