@@ -350,22 +350,18 @@ export default function App() {
     updSess(s=>{
       const t=s.tracks.find(x=>x.id===id);
       if(!t) return;
-      // Check if anything actually changed
-      const changed = Object.keys(newCfg).some(k => JSON.stringify(newCfg[k]) !== JSON.stringify(t.config[k]));
-      if(!changed) return;
-      // A Solution track is edited in place: its held bets, their levels and the chased number are kept (editedTrackConfig).
-      // A Progression or Custom Bet track is too when its only change is the base (canEditInPlace, BaseBetInput.jsx).
-      const inPlace = canEditInPlace(t,newCfg);
-      if(inPlace) rebaseTrackPnl(t,newCfg.unit);
-      if(t.type==="solution") { t.config=editedTrackConfig(t.config,newCfg); return; }
-      if(inPlace) { t.config=editedTrackConfig(t.config,newCfg); return; }
-      // Park the original track, create new variation as active
-      t.state = "parked";
-      const mergedCfg = {...t.config, ...newCfg, activeBets: []};
-      const colorIdx = s.tracks.length % TRACK_COLORS.length;
-      const nt = newTrack(t.type, colorIdx, mergedCfg, pickTrackColor(t.type, mergedCfg, s.tracks));
+      // A Solution's held bets, levels and chase are the live ones (editedTrackConfig), so a panel left open while a bet was tapped is no change.
+      const sol=t.type==="solution";
+      const edited=sol?editedTrackConfig(t.config,newCfg):newCfg;
+      if(!Object.keys(edited).some(k => JSON.stringify(edited[k]) !== JSON.stringify(t.config[k]))) return;
+      // Every change parks the track it came from (its record stays) and starts a new active track with a fresh record. A Solution's
+      // held bets and chase move to the new track with their levels; the parked track keeps none, so resuming it cannot double them.
+      const mergedCfg=sol?{...t.config,...edited}:{...t.config,...edited,activeBets:[]};
+      if(sol) t.config={...t.config,activeBets:[],chaseNumber:null};
+      t.state="parked";
+      const nt=newTrack(t.type,s.tracks.length%TRACK_COLORS.length,mergedCfg,pickTrackColor(t.type,mergedCfg,s.tracks));
       nt.state = "active";
-      nt.createdAtSpin = s.spins.length;
+      nt.createdAtSpin = s.spins.length; nt.startedByEdit = true;
       s.tracks.push(nt);
     });
     setEditTrackId(null);
@@ -473,30 +469,10 @@ export default function App() {
     gameRecording.record({segment:String(val),...casinoWager,watched:casinoWager.staked===0});
   }
 
-  // -- Game Page --
-  // Declared inside App on purpose: a new component type on each render keeps the page remounting on every
-  // App render, as the inner function did before the split.
-  function GamePage() {
-    return (
-      <GamePageView
-        addOpen={addOpen} addTrack={addTrack} animNumber={animNumber} betResults={betResults}
-        clearTimerRef={clearTimerRef} closeTrack={closeTrack} colD={colD} colP={colP} cur={cur}
-        currency={currency} dozD={dozD} dozP={dozP} editTrackId={editTrackId} emDroughts={emDroughts}
-        endSession={endSession} recordGameSpin={recordGameSpin} gameResult={gameResult} gameSpinning={gameSpinning}
-        isLandscape={isLandscape} lastBets={lastBets} lastSpinDelta={lastSpinDelta} manualBets={manualBets}
-        nextColorIdx={nextColorIdx} nonClosedTracks={nonClosedTracks} parkToggle={parkToggle} pendingTrackCfg={pendingTrackCfg}
-        pendingTrackType={pendingTrackType} pnlVal={pnlVal} saveSession={saveSession} selectedChip={selectedChip}
-        sess={sess} setAddOpen={setAddOpen} setAnimNumber={setAnimNumber} setBetResults={setBetResults}
-        setEditTrackId={setEditTrackId} setGameResult={setGameResult} setGameSpinning={setGameSpinning} setLastBets={setLastBets}
-        setLastSpinDelta={setLastSpinDelta} setManualBets={setManualBets} setPendingTrackCfg={setPendingTrackCfg} setPendingTrackType={setPendingTrackType}
-        setSelectedChip={setSelectedChip} setUndoStack={setUndoStack} settings={settings} tapNumber={tapNumber}
-        updSess={updSess} updateTrackConfig={updateTrackConfig} wheelNums={wheelNums}
-      />
-    );
-  }
-
   // -- Tracker Page --
-  function TrackerPage() {
+  // The Live tracker body. App mounts it through the module-scope TrackerPage (below App), which receives this function as a
+  // prop, so the element type stays the same across App renders and the strip keeps its place and its state.
+  function renderTrackerPage() {
     const dts = primaryTrack&&primaryTrack.type==="fibonacci" ? primaryTrack.config.dozenTargets||[] : [];
     const cts = primaryTrack&&primaryTrack.type==="fibonacci" ? primaryTrack.config.colTargets||[] : [];
     const hasMix = dts.length>0&&cts.length>0;
@@ -543,7 +519,7 @@ export default function App() {
           <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
         </SpinCorrectionContext.Provider>
         {spinCorrection && spinCorrection.index<sess.spins.length && (
-          <SpinNumberPicker spinIndex={spinCorrection.index} spinCount={sess.spins.length} currentValue={sess.spins[spinCorrection.index]} roulette={sess.roulette} blockedReason={spinCorrectionBlock(sess)} onChoose={v=>applySpinCorrection(spinCorrection.index,v)} onClose={()=>setSpinCorrection(null)}/>
+          <SpinNumberPicker spinIndex={spinCorrection.index} spinCount={sess.spins.length} currentValue={sess.spins[spinCorrection.index]} roulette={sess.roulette} blockedReason={spinCorrectionBlockAt(sess,spinCorrection.index)} onChoose={v=>applySpinCorrection(spinCorrection.index,v)} onClose={()=>setSpinCorrection(null)}/>
         )}
 
         {/* Roulette Table for Live Mode */}
@@ -755,28 +731,8 @@ export default function App() {
       </div>
     );
   }
-  // Declared inside App for the same reason as GamePage.
-  function TablePage() {
-    return <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur} selectedLevel={selectedLevel} setSelectedLevel={setSelectedLevel}/>;
-  }
 
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
-
-  // -- Bankroll Edit --
-  function BankrollEdit({onClose}) {
-    const [val, setVal] = useState(sess.bankrollCurrent);
-    function save() { updSess(s=>{s.bankrollCurrent=val;}); onClose(); }
-    return (
-      <Modal onClose={onClose}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <div style={{fontSize:17,fontWeight:800,color:"#e2e8f0"}}>Edit Bankroll</div>
-          <button onClick={onClose} style={{background:"transparent",border:"none",color:"#64748b",fontSize:22,cursor:"pointer"}}>×</button>
-        </div>
-        <MoneyInput value={val} onChange={setVal} currCode={currency} label="Current Bankroll"/>
-        <button onClick={save} style={{width:"100%",marginTop:16,padding:"14px 0",borderRadius:12,border:"none",background:"#16a34a",color:"white",fontSize:15,fontWeight:800,cursor:"pointer"}}>Save</button>
-      </Modal>
-    );
-  }
 
   // -- Root --
   const TABS = ["Tracker","Full Table","Spin Log","Stats","Settings"];
@@ -833,7 +789,23 @@ export default function App() {
 
         {appMode==="sim" && <SimModePage simCfg={simCfg} setSimCfg={setSimCfg} simRunning={simRunning} setSimRunning={setSimRunning} simProgress={simProgress} setSimProgress={setSimProgress} simResults={simResults} setSimResults={setSimResults} simDone={simDone} setSimDone={setSimDone} simStopRef={simStopRef} currency={currency} cur={cur}/>}
 
-        {appMode==="game" && <GamePage/>}
+        {/* Game page: the module-scope view, mounted directly so its recent-numbers strip keeps its state across App renders. */}
+        {appMode==="game" && (
+          <GamePageView
+            addOpen={addOpen} addTrack={addTrack} animNumber={animNumber} betResults={betResults}
+            clearTimerRef={clearTimerRef} closeTrack={closeTrack} colD={colD} colP={colP} cur={cur}
+            currency={currency} dozD={dozD} dozP={dozP} editTrackId={editTrackId} emDroughts={emDroughts}
+            endSession={endSession} recordGameSpin={recordGameSpin} gameResult={gameResult} gameSpinning={gameSpinning}
+            isLandscape={isLandscape} lastBets={lastBets} lastSpinDelta={lastSpinDelta} manualBets={manualBets}
+            nextColorIdx={nextColorIdx} nonClosedTracks={nonClosedTracks} parkToggle={parkToggle} pendingTrackCfg={pendingTrackCfg}
+            pendingTrackType={pendingTrackType} pnlVal={pnlVal} saveSession={saveSession} selectedChip={selectedChip}
+            sess={sess} setAddOpen={setAddOpen} setAnimNumber={setAnimNumber} setBetResults={setBetResults}
+            setEditTrackId={setEditTrackId} setGameResult={setGameResult} setGameSpinning={setGameSpinning} setLastBets={setLastBets}
+            setLastSpinDelta={setLastSpinDelta} setManualBets={setManualBets} setPendingTrackCfg={setPendingTrackCfg} setPendingTrackType={setPendingTrackType}
+            setSelectedChip={setSelectedChip} setUndoStack={setUndoStack} settings={settings} tapNumber={tapNumber}
+            updSess={updSess} updateTrackConfig={updateTrackConfig} wheelNums={wheelNums}
+          />
+        )}
 
         {appMode==="live" && (
           <div style={{width:"100%",minWidth:0,overflow:"hidden"}}>
@@ -847,8 +819,8 @@ export default function App() {
                 <button key={t} onClick={()=>setTab(i)} style={{flex:1,padding:"9px 2px",borderRadius:9,border:"none",cursor:"pointer",background:tab===i?"#134e2a":"transparent",color:tab===i?"#86efac":"#64748b",fontSize:9,fontWeight:700,whiteSpace:"nowrap"}}>{t}</button>
               ))}
             </div>
-            {tab===0 && <TrackerPage/>}
-            {tab===1 && <TablePage/>}
+            {tab===0 && <TrackerPage render={renderTrackerPage}/>}
+            {tab===1 && <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur} selectedLevel={selectedLevel} setSelectedLevel={setSelectedLevel}/>}
             {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays}/>}
             {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={readBoardPhoto} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
             {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
@@ -862,7 +834,7 @@ export default function App() {
       {cashOutOpen && <CashOutModal maxAmount={sess.bankrollCurrent} currency={currency} currentBankroll={sess.bankrollCurrent} onCashOut={doCashOut} onClose={()=>setCashOutOpen(false)}/>}
       {currencyOpen && <CurrencyModal current={currency} bankroll={sess.bankrollCurrent} onSave={changeCurrency} onClose={()=>setCurrencyOpen(false)}/>}
       {changelogOpen && <ChangelogModal onClose={()=>setChangelogOpen(false)}/>}
-      {editBankroll && <BankrollEdit onClose={()=>setEditBankroll(false)}/>}
+      {editBankroll && <BankrollEdit initial={sess.bankrollCurrent} currency={currency} onSave={v=>updSess(s=>{s.bankrollCurrent=v;})} onClose={()=>setEditBankroll(false)}/>}
       {hardResetOpen && <HardResetModal onClose={()=>setHardResetOpen(false)} onExport={exportJSON}/>}
       {venueSheets.sheets}
 
@@ -887,5 +859,28 @@ export default function App() {
     </div>
   );
 }
+
+// -- Bankroll Edit --
+// Declared at module scope, not inside App: a component declared inside App is a new type on every App render, so an amount
+// typed here was lost whenever App updated. It starts from the bankroll it is given and saves through onSave.
+function BankrollEdit({initial, currency, onSave, onClose}) {
+  const [val, setVal] = useState(initial);
+  function save() { onSave(val); onClose(); }
+  return (
+    <Modal onClose={onClose}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontSize:17,fontWeight:800,color:"#e2e8f0"}}>Edit Bankroll</div>
+        <button onClick={onClose} style={{background:"transparent",border:"none",color:"#64748b",fontSize:22,cursor:"pointer"}}>×</button>
+      </div>
+      <MoneyInput value={val} onChange={setVal} currCode={currency} label="Current Bankroll"/>
+      <button onClick={save} style={{width:"100%",marginTop:16,padding:"14px 0",borderRadius:12,border:"none",background:"#16a34a",color:"white",fontSize:15,fontWeight:800,cursor:"pointer"}}>Save</button>
+    </Modal>
+  );
+}
+
+// -- Tracker Page element --
+// A stable component type at module scope. It holds no state and no hooks: it returns what App's renderTrackerPage() draws.
+// Declared inside App, the element would be a new type on each render and the strip would remount.
+function TrackerPage({render}) { return render(); }
 
 // -- Statistical Context Bar --

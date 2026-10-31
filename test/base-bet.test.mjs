@@ -167,60 +167,6 @@ test('a Solution table and a Custom Bet table at base 2.00 are 2 times their 1.0
   }
 });
 
-test('Edit Config base change keeps the level, held bets and history, and the new base applies from the next bet', async () => {
-  const { ctx } = await load();
-  const original = {
-    id: 'p1', type: 'fibonacci', color: '#f59e0b', state: 'active', level: 3, pnl: -42, wins: 1, sequences: 0,
-    bets: [{ spinIdx: 4, level: 2, outcome: 'loss', profit: -6, cat: 'loss' }],
-    config: progressionCfg(1, 200),
-  };
-  const newCfg = { ...original.config, unit: 2 };
-  assert.equal(ctx.canEditInPlace(original, newCfg), true, 'a base-only change is edited in place');
-
-  // The save App.jsx performs for an in-place edit: re-price the P&L, then replace the config.
-  const track = JSON.parse(JSON.stringify(original));
-  ctx.rebaseTrackPnl(track, newCfg.unit);
-  track.config = ctx.editedTrackConfig(track.config, newCfg);
-  assert.equal(track.id, original.id, 'the track is not recreated');
-  assert.equal(track.state, 'active', 'the track is not parked');
-  assert.equal(track.level, 3, 'the level is kept');
-  assert.deepEqual(track.bets, original.bets, 'the history is kept');
-  assert.equal(track.config.unit, 2);
-  assert.equal(track.pnl * track.config.unit, -42, 'the P&L already recorded keeps its money');
-
-  // The next bet is placed at the new base: a loss at level 3 costs the level's chips times 2.00.
-  const row = ctx.computeTableForTrack(track)[3];
-  const sess = ctx.newSession();
-  sess.tracks = [track];
-  const { totalDelta } = ctx.applySpin(sess, '0', true);
-  assert.equal(Math.round(totalDelta * 100), -Math.round(row.c * 2 * 100), 'the loss is priced at the new base');
-});
-
-test('a Solution base change is in place too: held bets, levels and the chased number are kept', async () => {
-  const { ctx } = await load();
-  const track = {
-    id: 's1', type: 'solution', color: '#fbbf24', state: 'active', level: 0, pnl: 10, wins: 0, sequences: 0, bets: [],
-    config: { type: 'solution', unit: 1, roi: 10, entryThreshold: 120, stopLoss: 200, activeBets: [{ number: '17', level: 2, invest: 0 }], chaseNumber: '17' },
-  };
-  assert.equal(ctx.canEditInPlace(track, { ...track.config, unit: 0.5 }), true);
-  const edit = { ...track.config, unit: 0.5 };
-  ctx.rebaseTrackPnl(track, edit.unit);
-  track.config = ctx.editedTrackConfig(track.config, edit);
-  assert.deepEqual(track.config.activeBets, [{ number: '17', level: 2, invest: 0 }]);
-  assert.equal(track.config.chaseNumber, '17');
-  assert.equal(track.pnl * track.config.unit, 10, 'the Solution P&L keeps its money');
-});
-
-test('a Progression or Custom Bet edit that changes anything besides the base still parks the track', async () => {
-  const { ctx } = await load();
-  const prog = { id: 'p2', type: 'fibonacci', config: progressionCfg(1, 200) };
-  assert.equal(ctx.canEditInPlace(prog, { ...prog.config, roi: 20 }), false, 'an ROI change parks the track, as before');
-  assert.equal(ctx.canEditInPlace(prog, { ...prog.config, unit: 5, stopLoss: 300 }), false, 'a base change with a stop-loss change parks it');
-  const cus = { id: 'c1', type: 'custom', config: { type: 'custom', unit: 1, roi: 15, betMode: 'flat', stopLoss: 200, positions: [straight('17', 1)] } };
-  assert.equal(ctx.canEditInPlace(cus, { ...cus.config, unit: 2 }), true);
-  assert.equal(ctx.canEditInPlace(cus, { ...cus.config, betMode: 'progression' }), false);
-});
-
 test('the table minimum warning never blocks: a base under the minimum is still applied, and the presets stay enabled', async () => {
   const { ctx } = await load();
   assert.equal(ctx.baseBelowTableMin(0.5, 10), true);
@@ -293,12 +239,10 @@ test('class search: no code compares the base to the old fixed list, and only th
   assert.equal((trackPanel.match(/<BaseBetInput\b/g) || []).length, 2, 'setup and Edit Config both mount the one control (rule 80)');
 });
 
-test('wiring: build.js registers the control before TrackPanel, and App.jsx saves through the shared helpers', async () => {
+test('wiring: build.js registers the control before TrackPanel, and App.jsx no longer edits a track in place', async () => {
   const build = await readFile(new URL('../nexus-src/build.js', import.meta.url), 'utf8');
   const app = await readFile(new URL('../nexus-src/src/App.jsx', import.meta.url), 'utf8');
   assert.ok(build.indexOf("'components/BaseBetInput.jsx'") > -1, 'registered in FILES');
   assert.ok(build.indexOf("'components/BaseBetInput.jsx'") < build.indexOf("'components/TrackPanel.jsx'"), 'before its first reader');
-  assert.match(app, /const inPlace = canEditInPlace\(t,newCfg\);\s*if\(inPlace\) rebaseTrackPnl\(t,newCfg\.unit\);/, 'the rebase runs before the save');
-  assert.ok(app.includes('if(t.type==="solution") { t.config=editedTrackConfig(t.config,newCfg); return; }'), 'the Solution save is unchanged');
-  assert.ok(app.includes('if(inPlace) { t.config=editedTrackConfig(t.config,newCfg); return; }'), 'a base-only Progression or Custom save is in place');
+  assert.doesNotMatch(app, /canEditInPlace|rebaseTrackPnl/, 'the in-place helpers are gone: every save parks the track (TRACK-EDIT-PARK)');
 });

@@ -7,6 +7,39 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-10-31
+
+### Changed
+
+- Every Edit Config save that changes anything parks the track it came from and starts a new active track with the saved config. This holds for every track type and every field, the base included. It reverses the in-place edits of The Solution (0.56.0) and of a base-only change to a Progression Bet or Custom Bet (0.58.0). The parked track keeps its full record: P&L, spins, levels and history. The new track starts a fresh record: P&L 0, no bets, no wins. A save that changes nothing does nothing.
+- The Solution: the new Solution track takes over the held bets, their current levels and the chased number, so a chase in progress continues without a break. The new track's P&L and spin record start fresh from the edit. The parked track keeps its record up to the edit and holds no bets from then on, so resuming it cannot put the same bets on the board twice.
+- An Edit Config panel that stays open while a held bet is tapped is not a change. The held bets and the chased number are always the live ones, so a save with nothing else changed does nothing.
+- `updateTrackConfig()` in `nexus-src/src/App.jsx` is the one save path. A Solution's save reads its held bets through `editedTrackConfig()` in `nexus-src/src/engine.js`, which now serves only that carry-over.
+- A correction to a spin played before the last edit is refused in the number picker, with the reason "This spin was played before you edited a track. Corrections can only change spins after the last edit." Nothing changes. Corrections to spins from the last edit onward work as before. The edit's spin count is recorded on the new track (`createdAtSpin`, with `startedByEdit` set by `updateTrackConfig()` in `nexus-src/src/App.jsx`). `spinCorrectionBlockAt()` in `nexus-src/src/spin-apply.js` makes the decision for both the picker and `correctSpin()`.
+
+### Removed
+
+- `canEditInPlace()`, `rebaseTrackPnl()` and `rebaseChips()` in `nexus-src/src/components/BaseBetInput.jsx`, and the in-place branches of `updateTrackConfig()` in `nexus-src/src/App.jsx`. No other code called them.
+
+### Fixed
+
+- The Game page, the Live tracker, the Full Table page and the Edit Bankroll sheet no longer reset when the app updates. Each was declared inside `App` in `nexus-src/src/App.jsx`, so every App render created a new component type and remounted it. A bet, a chip tap or each spin-animation tick therefore returned the recent-numbers strip to its newest 40 chips at scroll position 0, and cleared a bankroll amount being typed. The Game page and the Full Table page now mount their module-scope views directly (`GamePageView` in `nexus-src/src/components/GamePage.jsx`, `TablePageView` in `nexus-src/src/components/TablePage.jsx`). The Live tracker body stays in `App` as `renderTrackerPage()`, and `App` mounts it through a module-scope `TrackerPage` component that receives it as a prop, so the element type no longer changes on each render. Edit Bankroll is a module-scope component in `nexus-src/src/App.jsx` that takes its starting amount and saves through a prop. Nothing else changes: the page bodies are the same, and only the state they hold now survives an App render. `nexus-src/src/App.jsx` goes from 891 to 890 lines. The regression test is `test/page-remount.test.mjs`, which also holds the list of the nested components that remain (three board chips in `nexus-src/src/components/ui.jsx`, kept because they hold no state). No version or service worker cache change; both move at promotion.
+
+### Tests
+
+- `test/track-edit-park.test.mjs` (new): a base-only Progression edit and a Custom Bet edit park the track and leave its record unchanged; a Solution edit parks, carries the held bets and the chase with their levels, and starts a fresh P&L; a save with no change does nothing, including a Solution panel left open while a bet was tapped.
+- `test/base-bet.test.mjs`: the in-place tests for a Progression base change, a Solution base change and the canEditInPlace checks are replaced by the park tests above. The App wiring assertion that pinned the in-place branches now checks that the in-place helpers are gone.
+- `test/solution-pick.test.mjs`: the source assertion that a Solution edit is saved in place is replaced by the park wiring assertion.
+
+### Open
+
+- The visual checks of the strip, the Live page and the Edit Bankroll sheet at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
+- Open question for the operator: should a Solution edit carry the held bets into the new track (current) or leave them on the parked one?
+- A Solution edit that carries a bet above level 0 leaves that session unable to spin-correct: the replay starts carried bets at level 0 (`startingSolutionBets()` in `nexus-src/src/spin-apply.js`), so the replay does not reproduce the record and the correction is refused with its reason. Nothing is changed. Checked: a threshold-only edit with a held bet at level 3 is refused on this change; the original code accepted the same correction. Fixing this needs spin-apply.js, which this change does not edit.
+- Resolved by the ruling in Changed: a correction to a spin from before an edit is refused, so an edit of the base or of any other field no longer leaves the parked track's P&L and the bankroll stale. A park from the Park button is not an edit and is outside that ruling, and it keeps the stale gap: a Progression parked by its Park button, with its third spin (a hit) corrected to a miss, was accepted, and its P&L stayed at +2 and the bankroll stayed at 502 (checked on this change). This needs a ruling: refuse a correction before any park, or let `spin-apply.js` replay a parked track up to its park point.
+- The Edit Config panel is UNVERIFIED in a browser: no browser suite was run for this change.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 ## [0.63.0] - 2026-10-31
 
 ### Added

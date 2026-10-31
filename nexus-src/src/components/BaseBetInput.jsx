@@ -3,8 +3,8 @@
 // or Enter. A value that cannot be applied shows its reason and keeps the amount already applied; nothing is clamped or
 // truncated. The preview is the track's own table at the applied base (computeTableForTrack and formatChips), so it reads
 // the same as the progression table the track shows once it is added.
-// Both panels mount BaseBetInput (rule 80). App.jsx decides an Edit Config save with canEditInPlace and re-prices the stored
-// P&L with rebaseTrackPnl before it saves. Everything below BaseBetInput except the component is pure.
+// Both panels mount BaseBetInput (rule 80). An Edit Config save parks the track and starts a new one (App.jsx updateTrackConfig),
+// so a base is never re-priced in place. Everything below BaseBetInput except the component is pure.
 
 const BASE_MAX = 10000;      // the highest base, in the session's currency; the field states it
 const BASE_PREVIEW_H = 180;  // the preview box has this height whether or not it has rows (rule 82)
@@ -18,26 +18,6 @@ function baseRange(cur) { return {min: baseFloor(cur), max: BASE_MAX, noun: "bas
 
 // Whether a base sits under the table minimum. The minimum falls back to 1, as the rest of the app does. It never blocks.
 function baseBelowTableMin(unit, tableMinBet) { return unit < (tableMinBet || 1); }
-
-// Re-expresses a chip value at a new base, so that chips times the base is the same money. Pure.
-function rebaseChips(chips, oldUnit, newUnit) { return Math.round(chips * oldUnit / newUnit * 1e9) / 1e9; }
-
-// Whether an Edit Config save can be applied to the track itself, keeping its level, held bets and history. A Solution track
-// always could (its edits have been in place since 0.56.0). A Progression Bet or Custom Bet track can when the only change is
-// the base. Any other change to those two still parks the track and starts a new one, as it always has.
-function canEditInPlace(track, newCfg) {
-  if(track.type === "solution") return true;
-  return Object.keys(newCfg).every(k => k === "unit" || JSON.stringify(newCfg[k]) === JSON.stringify(track.config[k]));
-}
-
-// Re-prices the stored P&L of a track whose base is about to change (t is the draft updSess hands in; call it before the
-// config is replaced). P&L is held in chips and every money figure multiplies it by the track's base, so the chips are
-// re-expressed at the new base: the money recorded so far does not move, and the new base applies from the next bet. Mutates t.
-function rebaseTrackPnl(t, newUnit) {
-  const oldUnit = t.config.unit || 1;
-  const next = newUnit || oldUnit;
-  if(next !== oldUnit) t.pnl = rebaseChips(t.pnl || 0, oldUnit, next);
-}
 
 // The base-bet control. config is the track's config as the panel holds it; config.unit is the applied base.
 function BaseBetInput({type, config, currency, tableMinBet, onChange}) {
