@@ -288,7 +288,7 @@ test('a Stop whose Casino call throws restores the pause owner, so the next spin
   assert.equal(await until(() => /Press Stop again to discard 1 unsent spin/.test(view().problem)), true,
     'Stop did not offer the discard');
   view().stop(); // the Stop call to Casino throws
-  assert.equal(await until(() => view().problem === 'the Casino bridge refused the stop call.'), true,
+  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: discarded by Stop. Stop did not reach Casino: the Casino bridge refused the stop call.'), true,
     'the failure of Stop was not shown');
   assert.equal(view().session.status, 'running', 'a Stop that failed changed the session');
 

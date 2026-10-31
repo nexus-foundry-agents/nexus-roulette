@@ -55,8 +55,11 @@ function boardPhotoUrl(wheel) {
 // Standalone opens this tab; a frame asks the pinned shell directly during the click, without awaiting anything.
 function openBoardPhoto(loc, wheel, onResult) {
   if(window.parent !== window) {
+    // A call that throws reads as unavailable, as a refused call does, and nothing is left unhandled.
     return openCasinoReadBoard(wheel).then(function(result) {
       if(!result.ok && onResult) onResult({kind:"status",status:"unavailable"});
+    }, function() {
+      if(onResult) onResult({kind:"status",status:"unavailable"});
     });
   }
   loc.assign(boardPhotoUrl(wheel));
@@ -147,6 +150,11 @@ function useCasinoBoardReturn(wheel, setAppMode, setBoardReturn, syncStatus, ses
         setAppMode("live");
         const result = parseBoardReturn(BOARD_HASH_PREFIX + fragment, wheel);
         if(result) setBoardReturn(result);
+      }, function() {
+        // A read that threw is unavailable, as a read the shell refused is; the same guards apply and nothing is left unhandled.
+        if(!active || slot.consumed || syncStatus === "checking") return;
+        slot.consumed = true;
+        setBoardReturn({kind:"status",status:"unavailable"});
       });
     };
     casinoBridge.listeners.add(ready);

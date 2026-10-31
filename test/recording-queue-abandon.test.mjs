@@ -258,8 +258,10 @@ test('ROUND-5 LOW: a Stop whose Casino call throws shows the failure, and the ne
   view().record(spin('8')); // a spin made while the discard runs is refused and counted for the discard
   assert.equal(view().problem, '1 spin was not saved to Casino: recording is stopping.',
     'the spin made during the discard was not refused');
-  assert.equal(await until(() => view().problem === 'the Casino bridge refused the stop call. 1 spin was not saved to Casino: recording is stopping.'),
-    true, 'the failure of Stop was not shown');
+  // The discard's own count is stated first, in the discard's wording, then the failure, then the refusal made during the discard.
+  // The spin's send failed without an answer, so the discard counts it as may have been saved: its send may have reached Casino.
+  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: discarded by Stop. Stop did not reach Casino: the Casino bridge refused the stop call. 1 spin was not saved to Casino: recording is stopping.'),
+    true, 'the failure of Stop, with the count the discard dropped, was not shown');
   assert.equal(view().session.status, 'running', 'a Stop that failed changed the session');
   assert.equal(casino.server.spinCalls, 3, 'a spin made during the discard was sent');
 
@@ -274,6 +276,6 @@ test('ROUND-5 LOW: a Stop whose Casino call throws shows the failure, and the ne
   view().stop();
   assert.equal(await until(() => view().session && view().session.status === 'stopped'), true,
     'the next discard did not stop the recording');
-  assert.equal(view().problem, '1 spin may have been saved to Casino: recording was stopped.',
+  assert.equal(view().problem, '1 spin may have been saved to Casino: discarded by Stop.',
     'the next discard repeated a refusal from the Stop that failed');
 });
