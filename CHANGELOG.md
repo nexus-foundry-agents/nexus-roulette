@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-10-31
+
 ### Added
 
 - `solutionInRange()` and `solutionInRangeMember()` in `nexus-src/src/engine.js` are the one definition of which numbers are in range for The Solution: a straight number whose miss count is at or above the track's entry threshold, never a zero, listed coldest first. `test/solution-pick.test.mjs` pins the rule from first principles.

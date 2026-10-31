@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.55.0";
+const APP_VERSION = "0.56.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,11 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.56.0", date:"Oct 31, 2026", title:"The Solution Picks Your Number", changes:[
+    "Your Solution entry setting (for example 90) is now saved and used everywhere; before, it went back to 120 and hid numbers like your 33",
+    "Setting up a Solution track shows the 6 coldest numbers with misses and colour; tap one to chase it, and the card says Chasing 33 - 92 misses",
+    "Edit a Solution track to change its entry; editing no longer drops the bets it holds, and picking a new number never drops a held bet"
+  ]},
   { v:"0.55.0", date:"Oct 31, 2026", title:"Where You Play", changes:[
     "Starting a live session asks where you are playing: the casino, then the machine (maker, model, version) or the table and dealer; each is a list of what you used before, with Add new, and Skip",
     "Edit it any time; a dealer change mid-session is recorded from that spin on",
