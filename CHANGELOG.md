@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.69.0] - 2026-10-31
+
 ### Fixed
 
 - Undo last spin is refused after an Abandon Progression made after the spin it would reverse. The Undo button is disabled and the note beneath the track cards reads "Undo is off after a track was abandoned. Fix the number instead." Undo used to restore the session from before the spin and drop the abandon without a word. The check is in `undoBlockReason()` in `nexus-src/src/spin-apply.js`, beside the other Undo refusals. An abandon made before the spin is kept, as before.

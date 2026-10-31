@@ -1,1 +1,1 @@
-{"version":"0.68.0","date":"2026-10-31","notes":"Undo is refused after a buy-in or cash-out; every parked track remembers when it was parked."}
+{"version":"0.69.0","date":"2026-10-31","notes":"Undo no longer brings back an abandoned track, cleared numbers or an old session."}
