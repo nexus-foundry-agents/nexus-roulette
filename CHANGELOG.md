@@ -7,6 +7,26 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- Sessions browser (`nexus-src/src/components/SessionsPage.jsx`), opened from Stats with Browse sessions. It lists saved sessions newest first, grouped Today, Yesterday, then the date, with the venue line (or "No venue"), start time, duration, spin count, P&L and a current mark. One-tap filters for casino, machine or table, dealer, and This week or All; each filter offers only the values saved sessions hold. The grouping, filter and bulk-entry logic is pure, in `nexus-src/src/sessions-browse.js`, and is tested by `test/session-browser.test.mjs`.
+- Resume: a saved session becomes current with its tracks, levels, bets, droughts and venue exactly as saved (`resumeSavedSession()` in `nexus-src/src/session.js`). The session that was current is saved first. Switching away from a session with unsaved spins asks first, in the shared Modal. A Game session resumes into Game mode; a Live session resumes into Live mode.
+- Catch up after a resume: a card in the sessions sheet enters the numbers that came while the table was unwatched, in two ways. Type them in bulk (spaces or commas, oldest first; each number is checked for the wheel; repeats are kept as separate spins; one Add enters them through the board-add path `commitBoardAdd` in `nexus-src/src/board-return.mjs`), or read a board photo with the existing board-photo button. The card serves Live sessions only, because the board-add path writes the current Live session.
+- Session labels: a saved session can be renamed with an optional label of up to 60 characters. The label shows in the sessions list and on the Stats saved list. `renameSavedSession()` in `nexus-src/src/session.js` sets the label and stamps `modified`, so the sync merge keeps the renamed copy.
+
+### Changed
+
+- Stats: Resume on a saved session opens the sessions browser focused on that session. It no longer loads the session without saving the current one first. `loadSession()` in `nexus-src/src/App.jsx` is replaced by `resumeSaved()` and `renameSaved()`.
+- `migrateSessionVenue()` in `nexus-src/src/session.js` also normalises a saved session's label on load.
+
+### Open
+
+- The visual checks at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
+- Catch up is not offered for Game sessions. The board-add path writes only the Live session; a Game catch-up needs a ruling and a change to `nexus-src/src/board-return.mjs`.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+- The catch-up card's Read board photo button calls the same action as the spin tools' button, but it is a second button. One shared component needs `nexus-src/src/components/SpinTools.jsx`, outside this change.
+- A resume now stays on Stats with the sessions sheet open. The old Resume jumped to the Tracker. Where a resume should land is a ruling.
+
 ## [0.56.0] - 2026-10-31
 
 ### Added
