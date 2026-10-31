@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.57.0";
+const APP_VERSION = "0.58.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,13 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.58.0", date:"Oct 31, 2026", title:"Exact Base Bets and a Sessions Browser", changes:[
+    "Set your exact base bet on any track: tap 0.25, 0.50, 1, 2, 5 or 10, or type any amount up to 10,000",
+    "Changing only the base on a track keeps its level, bets and results so far",
+    "Browse sessions: grouped by day, filter by casino, machine or table, dealer and week",
+    "Resume a session exactly where you left it, then catch up by typing the numbers you missed (repeats kept) or reading a board photo",
+    "Rename a session so you can find it later"
+  ]},
   { v:"0.57.0", date:"Oct 31, 2026", title:"Every Number From a Board Add Shows", changes:[
     "A board Add of more than 30 numbers now shows them all on the recent strip, so repeats like 2, 2, 2 at the start are visible",
     "Those numbers were always saved and counted; only the strip was cutting off the oldest ones"

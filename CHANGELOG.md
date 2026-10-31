@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-10-31
+
 ### Added
 
 - Sessions browser (`nexus-src/src/components/SessionsPage.jsx`), opened from Stats with Browse sessions. It lists saved sessions newest first, grouped Today, Yesterday, then the date, with the venue line (or "No venue"), start time, duration, spin count, P&L and a current mark. One-tap filters for casino, machine or table, dealer, and This week or All; each filter offers only the values saved sessions hold. The grouping, filter and bulk-entry logic is pure, in `nexus-src/src/sessions-browse.js`, and is tested by `test/session-browser.test.mjs`.
