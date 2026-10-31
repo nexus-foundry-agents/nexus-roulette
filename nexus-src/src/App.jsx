@@ -42,7 +42,7 @@ export default function App() {
   useEffect(()=>{ setSelectedLevel(null); }, [selectedTrackId]); // a change of selected track clears the level pick (the Game tab sets it too)
   const [result, setResult] = useState(null);
   const [flashNum, setFlashNum] = useState(null);
-  const [prevSessState, setPrevSessState] = useState(null);
+  const [undoBind, setUndoBind] = useState(null); function setPrevSessState(snap){ setUndoBind(snap && {sessionId:snap.id, mode:appMode, sess:snap}); } // the Undo snapshot, with the session id and mode it was taken from
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
   const [highlightTrackId, setHighlightTrackId] = useState(null);
@@ -123,7 +123,7 @@ export default function App() {
   const [pendingTrackCfg, setPendingTrackCfg] = useState(defaultFibCfg());
 
   const sessKey = appMode==="game"?"gameSession":"currentSession";
-  const sess = appState[sessKey] || appState.currentSession;
+  const sess = appState[sessKey] || appState.currentSession; const prevSessState = undoBind && undoBind.sessionId===sess.id && undoBind.mode===appMode ? undoBind.sess : null; // the snapshot, only while its session and mode are the current ones
   const livePauseOffset = livePausedTotal + (livePausedAt ? (Date.now() - livePausedAt) : 0);
   const settings = appState.settings || defaultSettings();
   const saved = appState.savedSessions || [];
@@ -153,6 +153,7 @@ export default function App() {
     const live = appState.currentSession;
     if(appMode!=="live" || live.id!==clearUndo.sessionId || live.spins.length>0) setClearUndo(null);
   }, [clearUndo, appMode, appState.currentSession.id, appState.currentSession.spins.length]);
+  useEffect(() => { if(undoBind && !prevSessState) setUndoBind(null); }, [undoBind, prevSessState]); // a snapshot that stops matching is dropped, so a return to its session and mode cannot revive it
 
   // Keep the selected chip legal when the table minimum changes: snap up to the
   // smallest chip at or above the minimum so bets can never slip under it.
@@ -281,8 +282,7 @@ export default function App() {
   }
 
   function addTrack(type, config) { updSess(s=>{const t=newTrack(type,nextColorIdx,config,pickTrackColor(type,config,s.tracks)); t.createdAtSpin=s.spins.length; s.tracks.push(t);}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
-  // Undo last spin is refused when a track was edited or parked after the spin it would reverse (undoBlockReason, spin-apply.js).
-  const undoWhy = undoBlockReason(sess, prevSessState);
+  const undoWhy = undoBlockReason(sess, prevSessState); // refused after a track edit or park, money, an abandon, or any other change since the spin (spin-apply.js)
   function undoLastSpin() {
     if(!prevSessState || undoWhy) return;
     if(!window.confirm("Undo last tracked spin? This reverses the bankroll and progression but session time continues.")) return;
