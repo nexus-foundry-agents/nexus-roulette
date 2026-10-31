@@ -27,20 +27,24 @@ const BOARD_STATUS_LINES = {
 };
 const BOARD_STATUS_KEYS = Object.keys(BOARD_STATUS_LINES).concat(["canceled"]);
 
-// The optional reader field, after the numbers of a numbers return only: "#readboard=ok:8,31,3;by=cloud" or ";by=pc".
+// The optional reader field, after the numbers of a numbers return only: "#readboard=ok:8,31,3;by=cloud", ";by=pc" or ";by=gemini".
 const BOARD_READER_FIELD = ";by=";
 const BOARD_READER_HEIGHT = 16; // the reader line's reserved height (shared rule 82)
-// One factual line per reader. Any other value has no line.
-const BOARD_READER_LINES = {cloud: "Read by the cloud model", pc: "Read by your PC"};
+// A reader id is the provider that answered: lowercase letters, digits and hyphens, 1 to 32 characters. Anything else is no reader.
+const BOARD_READER_ID = /^[a-z0-9-]{1,32}$/;
+// One factual line per id this page names. "cloud" stays for returns that predate the provider ids.
+const BOARD_READER_LINES = {gemini: "Read by Google Gemini", openai: "Read by OpenAI", cloud: "Read by the cloud model", pc: "Read by your PC"};
 
-// True only for a value this page has a line for. Own keys only, so "constructor" or "__proto__" is not a reader.
+// True only for a reader id: a string that matches BOARD_READER_ID. "__proto__" has underscores and is not an id. "constructor"
+// is an id, and the line lookup reads own keys only, so it is a plain id and never Object's constructor.
 function isBoardReader(by) {
-  return typeof by === "string" && Object.prototype.hasOwnProperty.call(BOARD_READER_LINES, by);
+  return typeof by === "string" && BOARD_READER_ID.test(by);
 }
 
-// The reader line for a value, or "" when the value is absent or unknown.
+// The reader line for a value, or "" when the value is absent or not an id. A named id gets its line; any other id names itself.
 function boardReaderLine(by) {
-  return isBoardReader(by) ? BOARD_READER_LINES[by] : "";
+  if (!isBoardReader(by)) return "";
+  return Object.prototype.hasOwnProperty.call(BOARD_READER_LINES, by) ? BOARD_READER_LINES[by] : "Read by " + by;
 }
 
 // The page the button opens for a session's wheel. The American wheel only when the session says so (as getWheelNumbers).
@@ -75,12 +79,12 @@ function readBoardNumbers(body, wheel) {
 }
 
 // Contract with the Nexus Foundry reader (the shape it must send; a change lands here first):
-//   #readboard=ok:<numbers>              numbers in board order, most recent first; each one legal on the wheel
-//   #readboard=ok:<numbers>;by=cloud     the same, read by the hosted cloud model
-//   #readboard=ok:<numbers>;by=pc        the same, read by the user's PC
-//   #readboard=<status>                  a status key; a status takes no ;by= field
-// The ;by= field is optional. Absent or unknown (exact, lowercase only) means no reader line. It never makes a return
-// unreadable, and a numbers result without it has no reader key at all.
+//   #readboard=ok:<numbers>                  numbers in board order, most recent first; each one legal on the wheel
+//   #readboard=ok:<numbers>;by=<id>          the same, and the provider that answered: gemini, openai, cloud, pc, or another id
+//   #readboard=<status>                      a status key; a status takes no ;by= field
+// The <id> is exact: lowercase letters, digits and hyphens, 1 to 32 characters. The ;by= field is optional.
+// Absent, or a value that is not an id, means no reader line. An id this page does not name shows "Read by <id>".
+// The field never makes a return unreadable, and a numbers result without it has no reader key at all.
 // Parses a return hash. Returns {kind:"numbers", numbers[, reader]} or {kind:"status", status}, or null when the hash is a
 // return this reader does not know (an unknown status is ignored).
 function parseBoardReturn(hash, wheel) {
@@ -91,7 +95,7 @@ function parseBoardReturn(hash, wheel) {
   return BOARD_STATUS_KEYS.includes(raw) ? {kind: "status", status: raw} : null;
 }
 
-// Splits the reader field off a body. The value after ;by= is kept only when it is a known reader; otherwise the field is
+// Splits the reader field off a body. The value after ;by= is kept only when it is a reader id; otherwise the field is
 // dropped and the numbers parse as if it were never sent.
 function splitBoardReader(body) {
   const at = body.indexOf(BOARD_READER_FIELD);
@@ -100,7 +104,7 @@ function splitBoardReader(body) {
   return {body: body.slice(0, at), by: isBoardReader(by) ? by : null};
 }
 
-// The reader rides on a numbers result only. With no known reader the result is returned unchanged, with no reader key.
+// The reader rides on a numbers result only. With no reader id the result is returned unchanged, with no reader key.
 function withBoardReader(result, by) {
   return by && result.kind === "numbers" ? {...result, reader: by} : result;
 }

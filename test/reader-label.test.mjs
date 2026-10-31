@@ -102,22 +102,36 @@ test('numbers with repeats parse identically with and without the reader field',
   const ctx = await load();
   for (const list of ['16,16,4,4', '0,0,00,00', '7,7,7,7,7']) {
     const bare = plain(ctx.parseBoardReturn(`#readboard=ok:${list}`, 'american'));
-    const pc = plain(ctx.parseBoardReturn(`#readboard=ok:${list};by=pc`, 'american'));
     assert.deepEqual(bare, { kind: 'numbers', numbers: list.split(',') }, list);
-    assert.deepEqual(pc.numbers, bare.numbers, `${list}: the same numbers in the same order`);
-    assert.equal(pc.reader, 'pc', `${list}: the field is read`);
     assert.equal(hasOwn(ctx.parseBoardReturn(`#readboard=ok:${list}`, 'american'), 'reader'), false);
+    for (const by of ['pc', 'gemini']) {
+      const read = plain(ctx.parseBoardReturn(`#readboard=ok:${list};by=${by}`, 'american'));
+      assert.deepEqual(read.numbers, bare.numbers, `${list};by=${by}: the same numbers in the same order`);
+      assert.equal(read.reader, by, `${list};by=${by}: the field is read`);
+    }
   }
 });
 
-test('an unknown or empty reader value is ignored, never an error, and leaves no reader key', async () => {
+test('a value that is not a reader id is ignored, never an error, and leaves no reader key', async () => {
   const ctx = await load();
-  const unknown = ['gizmo', '', 'CLOUD', 'Pc', 'pc ', ' pc', 'cloud/', 'cloud;by=pc', 'constructor', '__proto__', 'toString'];
-  for (const by of unknown) {
+  // Not ids: empty, uppercase, a space, a trailing slash, a second field, underscores (__proto__), an over-long id, markup.
+  const invalid = ['', 'CLOUD', 'Pc', 'pc ', ' pc', 'cloud/', 'cloud;by=pc', 'gemini_2', '__proto__', 'toString', 'a b', '<x>', 'x'.repeat(33)];
+  for (const by of invalid) {
     const result = ctx.parseBoardReturn(`#readboard=ok:8,31,3;by=${by}`, 'european');
     assert.deepEqual(plain(result), { kind: 'numbers', numbers: ['8', '31', '3'] }, `by=${by}`);
     assert.equal(hasOwn(result, 'reader'), false, `by=${by}: no reader key`);
   }
+});
+
+test('any id that matches the pattern is read after the numbers, and the numbers are unchanged', async () => {
+  const ctx = await load();
+  // Known ids (gemini, openai, cloud, pc), an unknown id, a hyphenated id, "constructor" (a plain id), and the 32-character limit.
+  for (const by of ['gemini', 'openai', 'cloud', 'pc', 'gizmo', 'my-model-2', 'constructor', 'a'.repeat(32)]) {
+    assert.deepEqual(plain(ctx.parseBoardReturn(`#readboard=ok:8,31,3;by=${by}`, 'european')),
+      { kind: 'numbers', numbers: ['8', '31', '3'], reader: by }, by);
+  }
+  assert.deepEqual(plain(ctx.parseBoardReturn('#readboard=ok:16,4,0,00;by=openai', 'american')),
+    { kind: 'numbers', numbers: ['16', '4', '0', '00'], reader: 'openai' });
 });
 
 test('the reader field never changes whether the numbers are legal', async () => {
@@ -162,9 +176,14 @@ test('the review line reads the parsed reader and is the same reserved slot with
   const cases = [
     ['cloud', { reader: 'cloud' }, 'Read by the cloud model', true],
     ['pc', { reader: 'pc' }, 'Read by your PC', true],
+    ['gemini', { reader: 'gemini' }, 'Read by Google Gemini', true],
     ['absent', {}, '', false],
-    ['unknown', { reader: 'gizmo' }, '', false],
-    ['prototype key', { reader: 'constructor' }, '', false],
+    ['unknown valid id', { reader: 'gizmo' }, 'Read by gizmo', true],
+    ['constructor is a plain id', { reader: 'constructor' }, 'Read by constructor', true],
+    ['__proto__ is not an id', { reader: '__proto__' }, '', false],
+    ['uppercase is not an id', { reader: 'CLOUD' }, '', false],
+    ['too long is not an id', { reader: 'x'.repeat(33) }, '', false],
+    ['a space is not an id', { reader: 'a b' }, '', false],
     ['raw markup is never rendered', { reader: '<img src=x onerror=alert(1)>' }, '', false],
   ];
   const htmls = cases.map(([, extra]) => render(extra));
@@ -196,7 +215,8 @@ test('the review line reads the parsed reader and is the same reserved slot with
 
 test('each reader line is one short line', async () => {
   const ctx = await load();
-  for (const reader of ['cloud', 'pc']) {
+  // "Read by " is 8 characters and an id is at most 32, so every line fits in 40.
+  for (const reader of ['gemini', 'openai', 'cloud', 'pc', 'a'.repeat(32)]) {
     const html = ReactDOMServer.renderToStaticMarkup(React.createElement(ctx.BoardPhotoReview, {
       numbers: ['7'], roulette: 'american', reader, onAdd() {}, onCancel() {},
     }));
@@ -205,15 +225,33 @@ test('each reader line is one short line', async () => {
   }
 });
 
+test('each known id names its provider, and an unknown id names itself', async () => {
+  const ctx = await load();
+  const lineFor = (reader) => textOf(ReactDOMServer.renderToStaticMarkup(React.createElement(ctx.BoardPhotoReview, {
+    numbers: ['7'], roulette: 'american', reader, onAdd() {}, onCancel() {},
+  })).match(SLOT)[0]);
+  const expected = [
+    ['gemini', 'Read by Google Gemini'],
+    ['openai', 'Read by OpenAI'],
+    ['cloud', 'Read by the cloud model'],
+    ['pc', 'Read by your PC'],
+    ['gizmo', 'Read by gizmo'],
+    ['my-model-2', 'Read by my-model-2'],
+    ['constructor', 'Read by constructor'],
+  ];
+  for (const [reader, text] of expected) assert.equal(lineFor(reader), text, reader);
+});
+
 test('the parser comment states the return shape the Nexus Foundry reader must match', async () => {
   const photo = await readFile(new URL('components/BoardPhoto.jsx', SRC), 'utf8');
   const at = photo.indexOf('// Contract with the Nexus Foundry reader');
   assert.ok(at > 0, 'the contract note is in the file');
   assert.ok(at < photo.indexOf('function parseBoardReturn'), 'the note sits above the parser');
   const note = photo.slice(at, photo.indexOf('function parseBoardReturn'));
-  assert.match(note, /#readboard=ok:<numbers>;by=cloud/);
-  assert.match(note, /#readboard=ok:<numbers>;by=pc/);
-  assert.match(note, /absent or unknown/i);
+  assert.match(note, /#readboard=ok:<numbers>;by=<id>/);
+  assert.match(note, /gemini, openai, cloud, pc/, 'the note names the known ids');
+  assert.match(note, /1 to 32 characters/, 'the id length is stated');
+  assert.match(note, /Absent, or a value that is not an id, means no reader line/);
   assert.match(note, /status[^\n]*no ;by=/, 'a status takes no reader field');
 });
 
