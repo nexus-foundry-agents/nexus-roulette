@@ -362,22 +362,25 @@ function SettingsPage({ settings, updSettings, setCurrencyOpen, currency, cur, u
               {label:"Max Bet (per position)", key:"tableMaxBet", color:"#fbbf24"},
               {label:"Max Total (per spin)", key:"tableMaxTotal", color:"#f87171"},
             ].map(({label,key,color})=>{
-              const val=settings[key]||1;
+              const val=key==="tableMinBet"?tableMinimum(settings[key]):(settings[key]||1);
               function dec(){
                 if(key==="tableMinBet"){
+                  if(val===null)return;
                   if(val>10)return updApp(s=>{s.settings[key]=val<=100?val-5:val<=1000?val-25:val-1000;});
                   if(val>1)return updApp(s=>{s.settings[key]=val-1;});
                   if(val>0.5)return updApp(s=>{s.settings[key]=0.5;});
                   if(val>0.25)return updApp(s=>{s.settings[key]=0.25;});
+                  return updApp(s=>{s.settings[key]=null;});
                 } else {
                   updApp(s=>{s.settings[key]=Math.max(1,val<=10?val-1:val<=100?val-5:val<=1000?val-25:val-1000);});
                 }
               }
               function inc(){
+                if(key==="tableMinBet"&&val===null)return updApp(s=>{s.settings[key]=0.25;});
                 if(key==="tableMinBet"&&val<1)return updApp(s=>{s.settings[key]=val===0.25?0.5:1;});
                 updApp(s=>{s.settings[key]=val<10?val+1:val<100?val+5:val<1000?val+25:val+1000;});
               }
-              const displayVal=val<1?`${cur.symbol}${val.toFixed(2)}`:val<10?`${cur.symbol}${val}`:val>=1000?`${cur.symbol}${(val/1000).toFixed(val%1000===0?0:1)}K`:`${cur.symbol}${val}`;
+              const displayVal=val===null?"No minimum":val<1?`${cur.symbol}${val.toFixed(2)}`:val<10?`${cur.symbol}${val}`:val>=1000?`${cur.symbol}${(val/1000).toFixed(val%1000===0?0:1)}K`:`${cur.symbol}${val}`;
               return(
                 <div key={key}>
                   <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>{label}</div>

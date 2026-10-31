@@ -47,7 +47,7 @@ function OnboardingScreen({onComplete, initialBankroll}) {
   const [bankroll, setBankroll] = useState(initialBankroll || 500);
   const [buyIn, setBuyIn] = useState(100);
   const [currency, setCurrency] = useState("USD");
-  const [tableMinBet, setTableMinBet] = useState(10);
+  const [tableMinBet, setTableMinBet] = useState(null); // null: no table minimum until one is set; the Min Bet field starts at No minimum
   const [tableMaxBet, setTableMaxBet] = useState(500);
   const [tableMaxTotal, setTableMaxTotal] = useState(5000);
 
@@ -112,7 +112,7 @@ function OnboardingScreen({onComplete, initialBankroll}) {
         {step===3 && (
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{fontSize:17,fontWeight:700,color:"#e2e8f0",textAlign:"center"}}>Table Limits</div>
-            <div style={{fontSize:12,color:"#64748b",textAlign:"center"}}>Set your table's actual limits. A base bet below the Min Bet is allowed and shows a note; it is never blocked.</div>
+            <div style={{fontSize:12,color:"#64748b",textAlign:"center"}}>Set your table's actual limits. Leave Min Bet at No minimum if your table has none. A base bet below a Min Bet you set is refused, and you can change either one later.</div>
             {[
               {label:"Min Bet",              key:"minBet",   val:tableMinBet, set:setTableMinBet, color:"#4ade80"},
               {label:"Max Bet (per position)",key:"maxBet",  val:tableMaxBet, set:setTableMaxBet, color:"#fbbf24"},
@@ -120,17 +120,20 @@ function OnboardingScreen({onComplete, initialBankroll}) {
             ].map(({label,key,val,set,color})=>{
               function dec(){
                 if(key==="minBet"){
+                  if(val===null) return;
                   if(val>10) return set(val<=100?val-5:val<=1000?val-25:val-1000);
                   if(val>1)  return set(val-1);
                   if(val>0.5)return set(0.5);
                   if(val>0.25)return set(0.25);
+                  return set(null); // below the lowest step of the scale, the minimum goes back to none
                 } else { set(Math.max(1,val<=10?val-1:val<=100?val-5:val<=1000?val-25:val-1000)); }
               }
               function inc(){
+                if(key==="minBet"&&val===null) return set(0.25);
                 if(key==="minBet"&&val<1) return set(val===0.25?0.5:1);
                 set(val<10?val+1:val<100?val+5:val<1000?val+25:val+1000);
               }
-              const disp=val<1?`$${val.toFixed(2)}`:val>=1000?`$${(val/1000).toFixed(val%1000===0?0:1)}K`:`$${val}`;
+              const disp=val===null?"No minimum":val<1?`$${val.toFixed(2)}`:val>=1000?`$${(val/1000).toFixed(val%1000===0?0:1)}K`:`$${val}`;
               return(
                 <div key={key}>
                   <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>{label}</div>

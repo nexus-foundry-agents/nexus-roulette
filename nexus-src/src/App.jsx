@@ -158,7 +158,7 @@ export default function App() {
   // Keep the selected chip legal when the table minimum changes: snap up to the
   // smallest chip at or above the minimum so bets can never slip under it.
   useEffect(() => {
-    const tMin = settings.tableMinBet || 1;
+    const tMin = tableMinimum(settings.tableMinBet) || 0;
     if(selectedChip < tMin){
       const next = CHIP_DENOMS.find(c => c.val >= tMin);
       if(next) setSelectedChip(next.val);
@@ -524,7 +524,7 @@ export default function App() {
 
         {/* Roulette Table for Live Mode */}
         {(()=>{
-          const tMin = settings.tableMinBet||1;
+          const tMin = tableMinimum(settings.tableMinBet) || 0;
           const CHIPS = CHIP_DENOMS.filter(c=>c.val>=tMin);
           const liveTotalBet=liveManualBets.reduce((s,b)=>s+b.amount,0);
           const liveBoardBets={}; liveManualBets.forEach(b=>{const key=b.type==="straight"?"s:"+b.target:b.type+(b.target!==undefined?":"+b.target:"");liveBoardBets[key]=(liveBoardBets[key]||0)+b.amount;});
@@ -600,7 +600,7 @@ export default function App() {
                   </div>
                 </div>
                 {isEditing && (
-                  <EditTrackCfg track={t} currency={currency} tableMinBet={settings.tableMinBet||1} onSave={cfg=>updateTrackConfig(t.id,cfg)} onCancel={()=>setEditTrackId(null)}/>
+                  <EditTrackCfg track={t} currency={currency} tableMinBet={settings.tableMinBet} onSave={cfg=>updateTrackConfig(t.id,cfg)} onCancel={()=>setEditTrackId(null)}/>
                 )}
               </div>
             );
@@ -613,7 +613,7 @@ export default function App() {
           <div data-undo-note aria-hidden={!undoWhy} style={{minHeight:14,fontSize:10,color:"#fbbf24",visibility:undoWhy?"visible":"hidden"}}>{undoWhy}</div>
         </div>
 
-        {addOpen && <AddTrackPanel onAdd={addTrack} onClose={()=>setAddOpen(false)} nextColor={nextColorIdx} type={pendingTrackType} cfg={pendingTrackCfg} onTypeChange={(t)=>{setPendingTrackType(t);setPendingTrackCfg(t==="fibonacci"?defaultFibCfg():solDefaultCfg(settings));}} onCfgChange={setPendingTrackCfg} closedTracks={sess.tracks.filter(t=>t.state==="closed")} currency={currency} tableMinBet={settings.tableMinBet||1} droughts={sess.droughts} wheel={sess.roulette} solColor={pickTrackColor("solution",pendingTrackCfg,sess.tracks)} onEntryDefault={setSolEntryDefault}/>}
+        {addOpen && <AddTrackPanel onAdd={addTrack} onClose={()=>setAddOpen(false)} nextColor={nextColorIdx} type={pendingTrackType} cfg={pendingTrackCfg} onTypeChange={(t)=>{setPendingTrackType(t);setPendingTrackCfg(t==="fibonacci"?defaultFibCfg():solDefaultCfg(settings));}} onCfgChange={setPendingTrackCfg} closedTracks={sess.tracks.filter(t=>t.state==="closed")} currency={currency} tableMinBet={settings.tableMinBet} droughts={sess.droughts} wheel={sess.roulette} solColor={pickTrackColor("solution",pendingTrackCfg,sess.tracks)} onEntryDefault={setSolEntryDefault}/>}
 
         {!primaryTrack && !addOpen && (
           <div style={{background:"#1e2d3d",borderRadius:14,padding:"20px",textAlign:"center",border:"1px dashed #2d4057"}}>
