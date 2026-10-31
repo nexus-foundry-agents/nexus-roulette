@@ -7,6 +7,17 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Changed
+
+- The recent-numbers strip on the Live page shows every spin of the session, newest first, with no limit. It draws the newest 40 chips first, and loads the next 40 when the reader scrolls to within one strip width of the oldest chip drawn, until every spin is shown. A new spin still appears at the front at once. The strip's scrollbar is hidden; two pager buttons, Newer at the left and Older at the right, scroll it by about one strip width. Their space is reserved and only their visibility changes. The long-press correction and the track colour borders work on every chip, including the ones loaded later. The strip's height is unchanged. Before this change it showed only its newest 40 spins (`RECENT_STRIP_LIMIT` in `nexus-src/src/components/SpinTools.jsx`).
+- Clearing the numbers returns the strip to its first page of 40 chips.
+
+### Open
+
+- The visual checks of the strip (the hidden scrollbar, the pager buttons and the scroll at 360 and 390 px) are UNVERIFIED: no browser suite was run for this change.
+- The Game-mode recent-numbers ticker in `nexus-src/src/components/GamePage.jsx` still shows only its newest 30 spins. It is outside this change's files.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 ### Added
 
 - Gold for the coldest number in each dozen and column. On the board, the number with the highest loss level in each of the six sections is gold: gold number text and a small gold corner pip. The F10 outline is unchanged, so gold and the outline read separately. Each section tile shows its coldest number or numbers and their loss level in gold, in a row with a reserved slot, and its detail view lists the section's numbers coldest first with the coldest in gold. The rule is `sectionColdest()` in `nexus-src/src/tlv.js`: ties return every tied number, and nothing is gold when the highest loss level is 0. 0 and 00 are never in a section.

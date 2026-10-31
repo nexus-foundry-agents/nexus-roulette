@@ -269,16 +269,18 @@ test('framed: the real recording sends each added spin once, oldest first, and C
   assert.equal(app.acked(), HIS_SPINS.length, 'Casino acknowledged every spin');
 });
 
-// What the reporter sees on the live page after Add: the recent-numbers strip, rendered from the App's own props.
-test("after the reporter's Add, the recent-numbers strip shows all 32 numbers the add entered", async () => {
+// What the reporter sees on the live page after Add: the recent-numbers strip, rendered from the App's own props. The
+// strip draws its first page of forty chips, and the board holds 32, so every number the add entered is drawn at once.
+test("after the reporter's Add, the recent-numbers strip's first page shows all 32 numbers the add entered", async () => {
   const app = await addFromHash(HIS_HASH);
   const strip = app.strip();
   assert.ok(strip, 'the live page mounts the recent-numbers strip');
   const real = await bundle(React);
   const html = ReactDOMServer.renderToStaticMarkup(React.createElement(real.RecentNumbersStrip, strip.props));
   const chips = [...html.matchAll(/width:28px;height:28px;[^"]*">([^<]*)<\/div>/g)].map((m) => m[1]);
-  assert.deepEqual(chips, HIS_BOARD, 'every number the add entered is on the strip, both leading 2s included');
-  assert.equal(textOf(html), chips.join(''));
+  assert.deepEqual(chips, HIS_BOARD, 'every number the add entered is on the first page of the strip, both leading 2s included');
+  // The strip's own <style> rule (the hidden webkit scrollbar) is not a number, so it is taken out before the text is read.
+  assert.equal(textOf(html.replace(/<style>[\s\S]*?<\/style>/, '')), chips.join(''));
 });
 
 test('the account sync merge keeps every repeated spin, whichever snapshot is newer', async () => {
