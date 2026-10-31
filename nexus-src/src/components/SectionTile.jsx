@@ -32,9 +32,14 @@ function CornerBadge({tier}) {
 // One tile. `r` is a sectionReadout; `onOpen(key)` opens the section's detail view. A tap on the tile is the only action.
 function SectionTile({r, onOpen}) {
   const pctText = typeof r.streakPct === "number" ? r.streakPct.toFixed(1) + "%" : "";
+  // The coldest row (F18): the coldest number or numbers and their loss level, in gold. Its slot is always rendered. With no
+  // coldest number (every loss level 0) only its visibility changes, and the placeholder reserves the same width (rule 82).
+  const hasColdest = r.coldest.level > 0;
+  const coldestText = hasColdest ? r.coldest.numbers.join(", ") + " · " + r.coldest.level : "00 · 00";
+  const coldestAria = hasColdest ? ", coldest " + r.coldest.numbers.join(", ") + " at loss level " + r.coldest.level : "";
   return (
     <button type="button" aria-haspopup="dialog" onClick={() => onOpen(r.key)}
-      aria-label={r.label + " " + r.range + ": losing streak " + r.streak + ", TLV " + r.tlv + ". Tap for details."}
+      aria-label={r.label + " " + r.range + ": losing streak " + r.streak + ", TLV " + r.tlv + coldestAria + ". Tap for details."}
       style={{position:"relative",flex:1,minWidth:0,height:TILE_H,boxSizing:"border-box",overflow:"hidden",background:"#1e2d3d",borderRadius:12,padding:"5px 4px",border:"1px solid " + r.colorBd,color:"#e2e8f0",fontFamily:"inherit",textAlign:"center",cursor:"pointer",display:"flex",flexDirection:"column"}}>
       <CornerBadge tier={r.streakTier}/>
       <div style={{height:11,lineHeight:"11px",fontSize:8,color:r.colorTx,fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",paddingRight:24}}>{r.label}</div>
@@ -62,6 +67,10 @@ function SectionTile({r, onOpen}) {
       <div style={{height:12,lineHeight:"12px",display:"flex",alignItems:"center",justifyContent:"center",gap:3,whiteSpace:"nowrap"}}>
         <span style={{fontSize:7,color:"#64748b",fontWeight:700}}>P95+</span>
         <span style={{fontSize:8,fontWeight:700,color:"#e2e8f0"}}>{r.cold + " of 12"}</span>
+      </div>
+      <div aria-hidden={hasColdest ? undefined : true} style={{height:10,lineHeight:"10px",display:"flex",alignItems:"center",justifyContent:"center",gap:3,minWidth:0,whiteSpace:"nowrap",visibility:hasColdest ? "visible" : "hidden"}}>
+        <span style={{fontSize:7,color:"#64748b",fontWeight:700}}>COLDEST</span>
+        <span style={{fontSize:8,fontWeight:800,color:COLDEST_GOLD,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{coldestText}</span>
       </div>
     </button>
   );
@@ -120,8 +129,8 @@ function SectionDetail({r, onClose}) {
         </div>
         {r.perNumber.map((row) => (
           <div key={row.number} style={{display:"grid",gridTemplateColumns:"0.8fr 1fr 1.2fr 0.8fr",gap:4,fontSize:12,height:24,lineHeight:"24px",borderBottom:"1px solid #1f2937",fontVariantNumeric:"tabular-nums"}}>
-            <div style={{fontWeight:700}}>{row.number}</div>
-            <div>{row.loss}</div>
+            <div style={{fontWeight:700,color:row.gold ? COLDEST_GOLD : undefined}}>{row.number}</div>
+            <div style={{color:row.gold ? COLDEST_GOLD : undefined}}>{row.loss}</div>
             <div>{typeof row.pct === "number" ? row.pct.toFixed(1) : ""}</div>
             <div style={{color:TIER_COLORS[row.tier]||"#64748b",fontWeight:700}}>{tierTag(row.tier)}</div>
           </div>
