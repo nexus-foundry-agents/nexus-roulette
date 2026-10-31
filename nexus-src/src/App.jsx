@@ -64,9 +64,9 @@ export default function App() {
   const [clearOpen, setClearOpen] = useState(false);
   const [clearUndo, setClearUndo] = useState(null); // {sessionId, snapshot} while Undo for Clear numbers is offered
   const [spinCorrection, setSpinCorrection] = useState(null); // {index} while the number picker for a recent spin is open
-  const {boardReturn, setBoardReturn, setBoardAdd, addBoardNumbers} = useBoardPhotoReturn(
+  const {boardReturn, setBoardReturn, setBoardAdd, addBoardNumbers, readBoardPhoto} = useBoardPhotoReturn(
     appState.currentSession, appMode, setAppMode, casinoSync.status, boardDecision, commitBoardAdd,
-    {setPrevSessState, setResult, setLastSpinDelta, setFlashNum, liveRecording, vibration:(appState.settings||{}).vibration});
+    {setPrevSessState, setResult, setLastSpinDelta, setFlashNum, liveRecording, gameRecording, vibration:(appState.settings||{}).vibration});
 
   // Save UI state when page is hidden (tab switch, app background)
   React.useEffect(()=>{
@@ -537,7 +537,7 @@ export default function App() {
           <span style={{flex:"1 1 0",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12,color:sess.venue?"#cbd5e1":"#64748b"}}>{venueLine(sess.venue)||"No venue recorded"}</span>
           <button onClick={()=>venueSheets.openEdit("current")} style={{flex:"0 0 auto",padding:"5px 10px",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>{sess.venue?"Edit venue":"Add venue"}</button>
         </div>
-        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)}/>
+        <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={readBoardPhoto}/>
         <BoardPhotoStatus result={boardReturn}/>
         <SpinCorrectionContext.Provider value={openSpinCorrection}>
           <RecentNumbersStrip spins={sess.spins} trackOverlays={trackOverlays}/>
@@ -850,7 +850,7 @@ export default function App() {
             {tab===0 && <TrackerPage/>}
             {tab===1 && <TablePage/>}
             {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays}/>}
-            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
+            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={readBoardPhoto} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
             {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
           </div>
         )}
