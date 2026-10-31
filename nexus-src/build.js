@@ -22,6 +22,8 @@ const FILES = [
   'engine.js',
   // Session factories — depends on engine
   'session.js',
+  // Sessions browser, pure helpers (F13): day grouping, the filters, the value lists and the bulk-entry parse. Depends on session.js and engine.js.
+  'sessions-browse.js',
   // Spin application — the one settlement path for a live tap and for the replay that corrects a spin. Depends on engine + constants + session.
   'spin-apply.js',
   // Simulation engine — depends on engine + constants
@@ -42,6 +44,9 @@ const FILES = [
   // Grids — depends on engine + constants + ui
   'components/grids.jsx',
   'components/ResultFlash.jsx',
+  // Base bet (F16): the one base-size control for the track setup and Edit Config. Depends on engine (computeTableForTrack,
+  // editedTrackConfig), constants (CURRENCIES, UNITS, getCurrency, formatMoney, formatChips) and ui (FieldLabel).
+  'components/BaseBetInput.jsx',
   // Track panels — depends on grids + ui + engine
   'components/TrackPanel.jsx',
   // The Solution picker: the coldest numbers, one component for the track setup, the Solution panel and the candidate card.
@@ -60,6 +65,8 @@ const FILES = [
   'board-return.mjs',
   // Sim UI — depends on simulation + ui + engine
   'components/SimModePage.jsx',
+  // Sessions browser sheet (F13), mounted by StatsPage. Depends on ui (Modal, FieldLabel), BoardPhoto (BOARD_MAX_NUMBERS), constants (RED) and sessions-browse.js.
+  'components/SessionsPage.jsx',
   // Secondary pages split from App.jsx before the Casino bridge was added.
   'components/SecondaryPages.jsx',
   // Exact-origin Casino recording client and wager accounting.

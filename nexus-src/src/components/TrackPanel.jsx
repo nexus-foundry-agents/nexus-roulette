@@ -14,7 +14,6 @@ function EntryThresholdStepper({value, onChange}) {
 
 function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
   const cur = getCurrency(currency||"USD");
-  const tMin = tableMinBet||1;
   const [cfg, setCfg] = useState({...track.config});
   function upCfg(k,v){setCfg(c=>({...c,[k]:v}));}
   function toggleArr(key,val,max){
@@ -29,14 +28,7 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
         <FieldLabel>Now Betting</FieldLabel>
         <BetTargets type={track.type} config={cfg} compact/>
       </div>
-      <div style={{display:"flex",gap:8}}>
-        {UNITS.map(u=>{
-          const sel=cfg.unit===u;
-          const numTargets=((cfg.evenTargets||[]).length||((cfg.dozenTargets||[]).length+(cfg.colTargets||[]).length))||1;
-          const invalid=u*numTargets<tMin;
-          return <button key={u} onClick={()=>!invalid&&upCfg("unit",u)} style={{flex:1,padding:"7px 0",borderRadius:9,border:"2px solid "+(sel?"#86efac":invalid?"#1e2d3d":"#2d4057"),background:sel?"#134e2a":"#0f1923",color:sel?"#86efac":invalid?"#374151":"#64748b",fontSize:12,fontWeight:700,cursor:invalid?"not-allowed":"pointer",opacity:invalid?0.4:1}} title={invalid?`Below table min`:undefined}>{cur.symbol}{u.toFixed(2)}{invalid?<span style={{fontSize:7,color:"#f87171",marginLeft:2}}>✗</span>:null}</button>;
-        })}
-      </div>
+      <BaseBetInput type={track.type} config={cfg} currency={currency} tableMinBet={tableMinBet} onChange={v=>upCfg("unit",v)}/>
       <ROIStepper value={cfg.roi} onChange={v=>upCfg("roi",v)}/>
       <div>
         <FieldLabel>Stop Loss</FieldLabel>
@@ -87,7 +79,6 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
 
 function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCfgChange, closedTracks, currency, tableMinBet, droughts, wheel, solColor, onEntryDefault}) {
   const cur = getCurrency(currency||"USD");
-  const tMin = tableMinBet||1;
   function upCfg(k,v) { onCfgChange(c=>({...c,[k]:v})); }
   // The Solution's Entry Threshold stepper sets this track's threshold and saves it as the default for the next Solution track.
   function setEntry(v) { upCfg("entryThreshold",v); if(onEntryDefault) onEntryDefault(v); }
@@ -140,14 +131,7 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
           }} style={{flex:1,padding:"9px 0",borderRadius:9,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:isSel?"#134e2a":"#0f1923",color:isSel?"#86efac":"#64748b",outline:"2px solid "+(isSel?"#22c55e":"#2d4057")}}>{l}</button>;
         })}
       </div>
-      <div style={{display:"flex",gap:8}}>
-        {UNITS.map(u => {
-          const sel=cfg.unit===u;
-          const numTargets=((cfg.evenTargets||[]).length||((cfg.dozenTargets||[]).length+(cfg.colTargets||[]).length))||1;
-          const invalid=u*numTargets<tMin;
-          return <button key={u} onClick={()=>!invalid&&upCfg("unit",u)} style={{flex:1,padding:"9px 0",borderRadius:10,border:"2px solid "+(sel?"#86efac":invalid?"#1e2d3d":"#2d4057"),background:sel?"#134e2a":"#0f1923",color:sel?"#86efac":invalid?"#374151":"#64748b",fontSize:13,fontWeight:700,cursor:invalid?"not-allowed":"pointer",opacity:invalid?0.4:1}} title={invalid?"Below table min":undefined}>{cur.symbol}{u.toFixed(2)}{invalid?<span style={{fontSize:8,color:"#f87171",marginLeft:2}}>✗</span>:null}</button>;
-        })}
-      </div>
+      <BaseBetInput type={type} config={cfg} currency={currency} tableMinBet={tableMinBet} onChange={v=>upCfg("unit",v)}/>
       <ROIStepper value={cfg.roi} onChange={v=>upCfg("roi",v)} disabled={type==="fibonacci"&&((cfg.betMode||"progression")==="flat"||(cfg.evenTargets||[]).length>0)}/>
       <div>
         <FieldLabel>Stop Loss ({cur.symbol})</FieldLabel>

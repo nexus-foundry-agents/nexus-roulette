@@ -354,7 +354,11 @@ export default function App() {
       const changed = Object.keys(newCfg).some(k => JSON.stringify(newCfg[k]) !== JSON.stringify(t.config[k]));
       if(!changed) return;
       // A Solution track is edited in place: its held bets, their levels and the chased number are kept (editedTrackConfig).
+      // A Progression or Custom Bet track is too when its only change is the base (canEditInPlace, BaseBetInput.jsx).
+      const inPlace = canEditInPlace(t,newCfg);
+      if(inPlace) rebaseTrackPnl(t,newCfg.unit);
       if(t.type==="solution") { t.config=editedTrackConfig(t.config,newCfg); return; }
+      if(inPlace) { t.config=editedTrackConfig(t.config,newCfg); return; }
       // Park the original track, create new variation as active
       t.state = "parked";
       const mergedCfg = {...t.config, ...newCfg, activeBets: []};
@@ -430,10 +434,13 @@ export default function App() {
     if(settings.vibration!==false && navigator.vibrate) navigator.vibrate(15);
   }
 
-  function loadSession(id) {
-    updApp(s=>{const f=s.savedSessions.find(x=>x.id===id);if(f)s.currentSession=JSON.parse(JSON.stringify(f));});
-    setTab(0);
+  // F13: resume a saved session. The current session of the active mode is saved first; the saved copy becomes current in its own mode.
+  function resumeSaved(id) {
+    const target = saved.find(x=>x.id===id); if(!target) return;
+    updApp(s=>{Object.assign(s, resumeSavedSession(s, id, appMode, Date.now()));});
+    setAppMode(savedSessionMode(target));
   }
+  function renameSaved(id, label) { updApp(s=>{Object.assign(s, renameSavedSession(s, id, label, Date.now()));}); }
 
   function tearSession() {
     if(!window.confirm("Tear this session?")) return;
@@ -843,7 +850,7 @@ export default function App() {
             {tab===0 && <TrackerPage/>}
             {tab===1 && <TablePage/>}
             {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays}/>}
-            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} loadSession={loadSession} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
+            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
             {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
           </div>
         )}
