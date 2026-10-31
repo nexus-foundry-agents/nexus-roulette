@@ -102,6 +102,7 @@ async function mountApp() {
   const effects = [];
   let cursor = 0;
   let dirty = true;
+  let confirmAnswer = null; // the answer every in-app confirm gets (answerConfirm), as the old window.confirm stub answered every call; null leaves it open
   let tree = null;
   const changed = (before, after) => !before || !after || after.some((value, i) => !Object.is(value, before[i]));
   const react = { ...React,
@@ -159,6 +160,9 @@ async function mountApp() {
   async function flush() {
     for (let i = 0; i < 100; i++) {
       if (dirty) render();
+      // The in-app confirm: the dialog a press opened is answered as the test set it, as its confirm button would.
+      const asked = confirmAnswer !== null && collect(tree, (n) => n.type && n.type.name === 'ConfirmDialog')[0];
+      if (asked) asked.props.onAnswer(confirmAnswer);
       for (const effect of effects.splice(0)) effect();
       await flushPromises();
       if (!dirty && effects.length === 0) return;
@@ -260,6 +264,7 @@ async function mountApp() {
   }
   const state = () => hooks[0].value.appState;
   return {
+    answerConfirm: (value) => { confirmAnswer = value; },
     ctx, flush, live, tapGrid, tapSolution, abandon, endSession, tab, pressInPage, undoButton, undoNote, undo, state,
     tracks: () => plain(state().currentSession.tracks),
     restoreSession(over) {
@@ -287,7 +292,7 @@ const ABANDON_REASON = 'Undo is off after a track was abandoned. Fix the number 
 test('Undo after an Abandon Progression is refused with its reason, and the abandon stays', async () => {
   const app = await mountLive([freshProgression()], []);
   await app.tapGrid(MISS);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.abandon();
   const abandoned = app.tracks();
   assert.equal(abandoned[0].bets[abandoned[0].bets.length - 1].type, 'abandon', 'the abandon is recorded');
@@ -303,7 +308,7 @@ test('Undo after an Abandon Progression is refused with its reason, and the aban
 
 test('an abandon made before a spin is kept by Undo of that spin, and Undo is still offered', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.abandon();
   const abandoned = app.tracks();
   await app.tapGrid(MISS);
@@ -320,7 +325,7 @@ test('Clear History on the Spin Log tab leaves no Undo offered, so the cleared s
   const app = await mountLive([freshProgression()], []);
   await app.tapGrid(MISS);
   await app.tab('Spin Log');
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.pressInPage('SpinPage', 'Clear History', 5000);
   assert.equal(app.state().currentSession.spins.length, 0, 'the spins are cleared');
 
@@ -332,7 +337,7 @@ test('End Session after a spin that moved no money leaves no Undo offered, so th
   const app = await mountLive([idleSolution()], []);
   await app.tapSolution(MISS);
   assert.equal(app.state().currentSession.spins.length, 1, 'the spin is recorded');
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.endSession();
   assert.equal(app.state().currentSession.spins.length, 0, 'the session has ended and a new one is current');
 
@@ -342,7 +347,7 @@ test('End Session after a spin that moved no money leaves no Undo offered, so th
 test('End Session after a spin that moved money leaves no Undo offered', async () => {
   const app = await mountLive([freshProgression()], []);
   await app.tapGrid(MISS);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.endSession();
   assert.equal(app.state().currentSession.spins.length, 0, 'the session has ended and a new one is current');
 
@@ -353,7 +358,7 @@ test('Tear session after a tracked spin leaves no Undo offered, so the torn sess
   const app = await mountLive([freshProgression()], []);
   await app.tapGrid(MISS);
   await app.tab('Stats');
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.pressInPage('StatsPage', 'Tear', 6000);
   assert.equal(app.state().currentSession.spins.length, 0, 'the session is torn');
 
@@ -365,7 +370,7 @@ test('New session after a tracked spin leaves no Undo offered, so the replaced s
   const app = await mountLive([freshProgression()], []);
   await app.tapGrid(MISS);
   await app.tab('Stats');
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.pressInPage('StatsPage', 'New', 6000);
   assert.equal(app.state().currentSession.spins.length, 0, 'the new session is empty');
 

@@ -56,7 +56,7 @@ async function loadSlice() {
       },
       body: { appendChild() {}, removeChild() {} },
     },
-    alert: (message) => { captured.alerts.push(String(message)); },
+    alert: () => { throw new Error('a native browser dialog was opened'); },
     FileReader: class { readAsText(file) { this.onload({ target: { result: file.text } }); } },
   };
   sandbox.module = { exports: {} };
@@ -293,7 +293,8 @@ test('export and import carry the venue and the dealer changes unchanged; a sess
   assert.ok(exported.sessions[1].metrics, 'metrics are still added');
 
   const state = { savedSessions: [], currentSession: legacySession({ id: 'cur', spins: [] }), gameSession: legacySession({ id: 'g', spins: [] }), settings: {} };
-  ctx.pickSessionsFile((fn) => fn(state), () => {});
+  const notices = [];
+  ctx.pickSessionsFile((fn) => fn(state), () => {}, (opts) => { notices.push(opts); return Promise.resolve(true); });
   const input = captured.inputs[captured.inputs.length - 1];
   input.onchange({ target: { files: [{ text: captured.blobs[captured.blobs.length - 1].text }] } });
   const imported = plain(state.savedSessions);
@@ -301,7 +302,15 @@ test('export and import carry the venue and the dealer changes unchanged; a sess
   assert.deepEqual(imported[1].venue, venued.venue);
   assert.deepEqual(imported[1].dealerChanges, venued.dealerChanges);
   assert.deepEqual(plain(state.currentSession.venue), venued.venue, 'the last imported session becomes the current one, venue included');
-  assert.match(captured.alerts[captured.alerts.length - 1], /Import complete/);
+  const done = notices[notices.length - 1];
+  assert.equal(done.title, 'Import complete!', 'the import reports through the in-app dialog');
+  assert.equal(done.notice, true, 'the report is a notice: one OK button, no Cancel');
+  assert.match(done.body, /2 sessions added/);
+
+  // A file that does not parse reports through the same dialog, never alert().
+  input.onchange({ target: { files: [{ text: '{not json' }] } });
+  assert.equal(notices[notices.length - 1].title, 'Failed to parse file');
+  assert.equal(notices[notices.length - 1].notice, true);
 });
 
 test('no odds or house-edge commentary in the venue code', async () => {

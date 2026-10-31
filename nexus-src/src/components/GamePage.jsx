@@ -4,7 +4,7 @@
 // take the tracks as an argument, and the recent-numbers ticker is now the shared RecentNumbersStrip.
 function GamePageView({
   addOpen, addTrack, animNumber, betResults, clearTimerRef, closeTrack, colD, colP, cur,
-  currency, dozD, dozP, editTrackId, emDroughts, endSession, recordGameSpin, gameResult, gameSpinning,
+  currency, dozD, dozP, editTrackId, emDroughts, endSession, confirm, recordGameSpin, gameResult, gameSpinning,
   isLandscape, lastBets, lastSpinDelta, manualBets, nextColorIdx, nonClosedTracks, parkToggle, pendingTrackCfg,
   pendingTrackType, pnlVal, saveSession, selectedChip, sess, setAddOpen, setAnimNumber, setBetResults,
   setEditTrackId, setGameResult, setGameSpinning, setLastBets, setLastSpinDelta, setManualBets, setPendingTrackCfg, setPendingTrackType,
@@ -225,7 +225,7 @@ function GamePageView({
                   <div style={{display:"flex",gap:5}}>
                     <button onClick={()=>parkToggle(t.id)} style={{flex:1,padding:"4px 0",borderRadius:6,border:"1px solid #2d4057",background:t.state==="parked"?"#134e2a":"#1e2d3d",color:t.state==="parked"?"#4ade80":"#94a3b8",fontSize:9,fontWeight:700,cursor:"pointer"}}>{t.state==="parked"?"▶ Resume":"⏸ Park"}</button>
                     <button onClick={()=>setEditTrackId(isEditing?null:t.id)} style={{padding:"4px 8px",borderRadius:6,border:"1px solid "+(isEditing?"#60a5fa":"#1e3a5f"),background:isEditing?"#1e3a5f":"transparent",color:"#60a5fa",fontSize:9,cursor:"pointer"}}>✏️ Edit</button>
-                    <button onClick={()=>{if(window.confirm("Close track?"))closeTrack(t.id);}} style={{padding:"4px 8px",borderRadius:6,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:9,cursor:"pointer"}}>×</button>
+                    <button onClick={async()=>{if(!await confirm({title:"Close track?", confirmLabel:"Close track"}))return;closeTrack(t.id);}} style={{padding:"4px 8px",borderRadius:6,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:9,cursor:"pointer"}}>×</button>
                   </div>
                 </div>
                 {isEditing && (
@@ -244,7 +244,7 @@ function GamePageView({
         {sess.sessionStartedAt && (
           <div style={{display:"flex",gap:8,marginTop:4}}>
             <button onClick={saveSession} style={{flex:1,padding:11,borderRadius:10,border:"none",background:"#16a34a",color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>Save</button>
-            <button onClick={()=>{if(window.confirm("End session and save?"))endSession();}} style={{flex:1,padding:11,borderRadius:10,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:13,fontWeight:700,cursor:"pointer"}}>End Session</button>
+            <button onClick={async()=>{if(!await confirm({title:"End session and save?", confirmLabel:"End and save"}))return;endSession();}} style={{flex:1,padding:11,borderRadius:10,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:13,fontWeight:700,cursor:"pointer"}}>End Session</button>
           </div>
         )}
       </div>

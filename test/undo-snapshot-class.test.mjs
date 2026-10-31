@@ -107,6 +107,7 @@ async function mountApp(seed = () => ({})) {
   const effects = [];
   let cursor = 0;
   let dirty = true;
+  let confirmAnswer = null; // the answer every in-app confirm gets (answerConfirm), as the old window.confirm stub answered every call; null leaves it open
   let tree = null;
   const changed = (before, after) => !before || !after || after.some((value, i) => !Object.is(value, before[i]));
   const react = { ...React,
@@ -168,6 +169,9 @@ async function mountApp(seed = () => ({})) {
   async function flush() {
     for (let i = 0; i < 100; i++) {
       if (dirty) render();
+      // The in-app confirm: the dialog a press opened is answered as the test set it, as its confirm button would.
+      const asked = confirmAnswer !== null && collect(tree, (n) => n.type && n.type.name === 'ConfirmDialog')[0];
+      if (asked) asked.props.onAnswer(confirmAnswer);
       for (const effect of effects.splice(0)) effect();
       await flushPromises();
       if (!dirty && effects.length === 0) return;
@@ -286,6 +290,7 @@ async function mountApp(seed = () => ({})) {
   }
   const state = () => hooks[0].value.appState;
   return {
+    answerConfirm: (value) => { confirmAnswer = value; },
     ctx, flush, render, live, tab, tapGrid, gameTap, pressInPage, undoButton, undoAvailable, undoNote, attemptUndo, undo,
     resumeSaved, saveSession, importSessions, completeOnboarding, sheet, undoSlot, pageProps, hooks, state,
     tracks: () => plain(state().currentSession.tracks),
@@ -329,7 +334,7 @@ test('JSON import: Undo is not offered after an import loads a session, and the 
 
 test('Restart Onboarding with a new wheel: Undo is not offered, and Undo does not turn the wheel back', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   const bankroll = app.state().currentSession.bankrollCurrent;
   await app.tab('Settings');
@@ -356,7 +361,7 @@ test('Game/Live mode switch: a snapshot taken in Game is not offered in Live, an
 
 test('a snapshot whose session id does not match is never applied, even when something sets it', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   const before = plain(app.state().currentSession);
   const slot = app.undoSlot();
@@ -383,7 +388,7 @@ test('a venue recorded after the spin (Save on the start sheet) refuses Undo wit
 
 test('Skip on the start sheet leaves Undo offered, and Undo reverts the spin', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   app.sheet('Where are you playing?').props.onDismiss();
   await app.flush();
@@ -394,7 +399,7 @@ test('Skip on the start sheet leaves Undo offered, and Undo reverts the spin', a
 
 test('Save of the session after a spin leaves Undo offered, as before, and Undo still reverts the spin', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid(MISS);
   await app.tab('Stats');
   await app.saveSession();
