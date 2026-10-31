@@ -7,6 +7,33 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- `solutionInRange()` and `solutionInRangeMember()` in `nexus-src/src/engine.js` are the one definition of which numbers are in range for The Solution: a straight number whose miss count is at or above the track's entry threshold, never a zero, listed coldest first. `test/solution-pick.test.mjs` pins the rule from first principles.
+
+### Changed
+
+- The Experimental simulation's The Solution enrols and resolves numbers through `solutionInRangeMember()` in `nexus-src/src/simulation.js`, the same predicate the live Solution uses. The enrolment order and the results are unchanged.
+- The Solution picker (`nexus-src/src/components/SolutionPicker.jsx`) lists the six coldest numbers, each with its miss count and single-number percentile tier (P75 green, P95 yellow, P98 red). It appears in the track setup, on the Solution panel and in the candidate card. Numbers at or past the entry threshold are marked "in range"; ties keep wheel order. One tap on a number makes it the chased number and adds its bet. Every bet the track already holds stays, with its level, until its × removes it. A number below the entry threshold enters at once, and the card says "below entry (misses/threshold)". In the track setup nothing is held yet, so a tap there replaces the pending choice; with exactly one number in range, the setup preselects it. A live track does not place a bet on its own.
+- The Solution track card and the panel header read "Chasing 33 - 92 misses", recounted after every spin. After the chased number hits they read "33 hit - pick the next number", even if other bets are still held. Active Bets lists every held bet with its level and ×; the chased one is marked CHASING. Adding several bets from the in-range list is still an explicit tap, and it does not change the chased number.
+- The Solution's Tap Winning Number grid marks the chased number with the track's colour ring and a CHASE label. Every held bet keeps its level badge. The last hit keeps its JUST HIT colouring. The number just tapped flashes, as it does on the progression grid.
+- Edit Config on a Solution track has an Entry Threshold stepper, the same control the track setup uses. Saving it changes that track in place: its held bets, levels and chased number are kept, the in-range list and the picker update at once, and the threshold never changes how a bet settles, so it takes effect from the next spin. Before this change, saving any edit on a Solution track parked it and started a new track with no bets; a Solution edit no longer does that. Progression and Custom Bet edits are unchanged.
+- The live in-range list and candidate list in `nexus-src/src/App.jsx` call `solutionInRange()`, the same predicate the simulation uses.
+
+### Fixed
+
+- Changing the roulette type in Settings, or restarting onboarding, kept the spin history but reset every drought count to zero. The counts are now recounted from the kept spins (`droughtsFromSpins()` in `nexus-src/src/engine.js`), so the board matches the history at once.
+- The Solution's default entry threshold was a literal 120 wherever it was used. The candidate card and every new Solution track ignored any other value, so a default of 90 set in the track setup was not applied there and was back at 120 the next time the setup opened. The default is now one setting, `settings.solEntryDefault`, read by `solEntryDefault()` and `solDefaultCfg()` in `nexus-src/src/engine.js`. The setup's Entry Threshold stepper saves it, and new Solution tracks, the candidate card and the picker read it. A Solution track keeps the threshold it was created with.
+
+### Open
+
+- A live report says The Solution showed the last number to hit rather than the coldest. The picker and the chase line (see Changed) show the chosen number. The on-device check is UNVERIFIED: no browser suite was run for this change.
+- The default entry threshold has no Settings row. `nexus-src/src/components/SecondaryPages.jsx` is outside this change's lines, so the stepper in the track setup is the only place that sets it. `defaultSolCfg()` in `nexus-src/src/session.js` still holds a literal 120; the app overrides it with `solDefaultCfg()`.
+- The picker's tier colours are the operator's ruling (green P75, yellow P95, red P98), which he states match the F10 board outlines. The F10 outline code is not in this tree, so that match is not verified here. The drought tiles use `TIER_COLORS` in `nexus-src/src/components/SectionTile.jsx` (amber P75, orange P95, red P98). Aligning the tiles is a separate later change.
+- A bet placed partway through a session (a chase tap, or a + in the in-range list) replays from the track's creation spin at level 0, so a spin correction on that track is refused. The refusal changes nothing, but its message says a ghost spin was logged, which is not the cause. Reproduced: a track holding 17 from spin 0 is corrected at spin 2 with 33 chased from spin 5, and the correction is refused; without the 33 tap it is accepted. The cause is `startingSolutionBets` in `nexus-src/src/spin-apply.js`, outside this change's files. A ruling is needed: record the spin each bet was placed, and replay each bet from that spin.
+- The brief asked that the American 00 be a Solution target only on the American wheel. The current rule, in both the live panel and the simulation, never offers either zero as a Solution target. The current rule is kept; a ruling is needed.
+- Head start for unseen numbers is a display estimate only. The in-range list uses the stored miss count, not the head-start estimate. A ruling is needed on whether the Solution should use the estimate.
+
 ## [0.55.0] - 2026-10-31
 
 ### Added
