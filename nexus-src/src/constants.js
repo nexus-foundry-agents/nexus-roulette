@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.71.0";
+const APP_VERSION = "0.72.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,9 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.72.0", date:"Oct 31, 2026", title:"Nothing Lost While Loading", changes:[
+    "A spin or setting you change while your account is still loading is kept and saved, instead of being overwritten when it finishes loading"
+  ]},
   { v:"0.71.0", date:"Oct 31, 2026", title:"Undo Stays With Its Session", changes:[
     "Undo only works on the session it was made in: resuming a session, importing one, restarting setup or switching Live and Game turns it off instead of bringing back something old"
   ]},
