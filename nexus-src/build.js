@@ -34,6 +34,9 @@ const FILES = [
   // Section TLV readings (sum of the 12 loss levels of a dozen or column, its average, maximum, count at P95 and history).
   // Depends on percentile.js and constants. The tiles and the detail view read them.
   'tlv.js',
+  // Real vs simulated (F12): the venue grouping, the counts, the dozen and column streaks and the simulated reference. Depends on
+  // session.js (normalizeVenue, dealerSegments), constants.js (getWheelNumbers, dozenOf, columnOf) and percentile.js (streakPercentile, streakLabel).
+  'real-vs-sim.js',
   // Base UI — depends on constants
   'roulette-bets.mjs',
   // Shared money parser (MONEYINPUT-SILENT-STRIP): the one reader for every typed amount, used by MoneyInput (ui.jsx) and
@@ -70,6 +73,8 @@ const FILES = [
   'components/SimModePage.jsx',
   // Sessions browser sheet (F13), mounted by StatsPage. Depends on ui (Modal, FieldLabel), BoardPhoto (BOARD_MAX_NUMBERS), constants (RED) and sessions-browse.js.
   'components/SessionsPage.jsx',
+  // Real vs simulated sheet (F12), mounted by StatsPage. Depends on ui (Modal, FieldLabel), SessionsPage (SessionsChip), constants (RED), real-vs-sim.js and streak-percentiles.js.
+  'components/RealVsSimPage.jsx',
   // Secondary pages split from App.jsx before the Casino bridge was added.
   'components/SecondaryPages.jsx',
   // Exact-origin Casino recording client and wager accounting.
