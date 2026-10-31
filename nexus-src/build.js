@@ -77,6 +77,9 @@ const FILES = [
   'components/RealVsSimPage.jsx',
   // Secondary pages split from App.jsx before the Casino bridge was added.
   'components/SecondaryPages.jsx',
+  // Casino spin queue: the spins Casino has not confirmed yet, sent in order with one number and one request id each. Depends on nothing
+  // above it; casino-recording.mjs reads its functions from the bundle scope.
+  'casino-spin-queue.mjs',
   // Exact-origin Casino recording client and wager accounting.
   'casino-recording.mjs',
   // Local-first, revision-aware account synchronization through the pinned shell bridge.
