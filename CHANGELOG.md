@@ -7,6 +7,29 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Changed
+
+- Undo last spin is refused after a buy-in, cash-out or bankroll change made after the spin. The Undo button is disabled and the note beneath the track cards reads "Undo is off after a buy-in, cash-out or bankroll change. Fix the number instead." A money move made before the spin is kept by Undo, as before.
+- Undo last spin is refused after a ghost spin, or a spin no track settled, recorded after the spin it would reverse. The note reads "Undo is off after a ghost spin or an untracked spin. Fix the number instead."
+- A bankroll edit made with the Bank button is recorded on the session as `bankrollEdits` (when, the bankroll before and the bankroll after), so Undo can see it. A save that leaves the bankroll as it was records nothing.
+
+### Fixed
+
+- A track parked by an Edit Config save records its park point at the edit's spin count (`updateTrackConfig()` in `nexus-src/src/App.jsx`), so the load migration no longer moves it and a correction after the edit stays accepted after a reload.
+- An import that parks active tracks gives each parked track a park point at the imported session's spin count (`parkImportedSession()` in `nexus-src/src/components/session-files.jsx`). Corrections to spins before the import are refused, as they are after a Park button press.
+- A parked track with no park point gets one on load: the session's spin count at load. This covers parks made before 0.66.0, in the live sessions and in every saved session. The rule is conservative, so no spin before the load can be corrected into a record the park has already fixed. A park point already stamped is never moved, so later loads change nothing (`migrateParkPoints()` in `nexus-src/src/session.js`).
+- Undo last spin no longer silently reverts a buy-in, cash-out, bankroll edit, currency conversion or ghost spin made after the spin. It used to restore the whole session from before the spin.
+
+### Tests
+
+- `test/track-edit-park.test.mjs`: Undo after a spin and then a buy-in, cash-out, bankroll edit or ghost spin is refused with its reason and changes nothing; a money move made before a spin does not block Undo of it; a buy-in made before Clear numbers does not block Undo of a later spin; a bankroll save of the same amount records nothing and refuses nothing; an import parks its active tracks with park points at the imported spin count and keeps an existing one; the load migration gives a parked track with no park point the spin count at load, for the live and saved sessions, and never moves a park point it already has.
+
+### Open
+
+- Undo last spin still reverts an Abandon Progression made after the spin. It changes a track's P&L but not the bankroll, so the money check does not see it. Found by reading the code; not run. Outside this change.
+- Settings' "Clear all spins from session history" removes the spins without clearing the Undo snapshot, so Undo can bring the cleared spins back. Found by reading the code; not run. Outside this change.
+- End Session, Tear session and New session replace the current session without clearing the Undo snapshot. Undo can then restore the replaced session's state from before the last spin; the money check refuses it only when the new session's starting bankroll or money records differ. Found by reading `App.jsx`; not run. Outside this change.
+
 ## [0.66.0] - 2026-10-31
 
 ### Changed
