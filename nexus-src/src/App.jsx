@@ -133,6 +133,10 @@ export default function App() {
 
   useEffect(() => { saveApp(appState); }, [appState]);
 
+  // Confirmations are the in-app dialog (ConfirmDialog.jsx), drawn at the foot of App. sessNow is the session as the latest render drew
+  // it: a confirm waits on a person, so the action that follows reads it, not the render the confirm was asked from.
+  const [confirm, confirmDialog] = useConfirm();
+  const sessNow = React.useRef(null); sessNow.current = sess;
   // Storage failures surface as a banner, never a blocking browser dialog
   const [saveError, setSaveError] = useState(null);
   useEffect(() => {
@@ -284,10 +288,12 @@ export default function App() {
   function addTrack(type, config) { updSess(s=>{const t=newTrack(type,nextColorIdx,config,pickTrackColor(type,config,s.tracks)); t.createdAtSpin=s.spins.length; s.tracks.push(t);}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
   const undoSpin = prevSessState ? undoBind.spin : undefined; // the tapped number the snapshot recorded
   const undoWhy = undoBlockReason(sess, prevSessState, undoSpin); // refused after a track edit, park or other track change, money, an abandon, or any other change since the spin (spin-apply.js)
-  function undoLastSpin() {
+  async function undoLastSpin() {
     if(!prevSessState || undoWhy) return;
-    if(!window.confirm("Undo last tracked spin? This reverses the bankroll and progression but session time continues.")) return;
-    const preservedStart = sess.sessionStartedAt;
+    if(!await confirm({title:"Undo last tracked spin?", body:"This reverses the bankroll and progression but session time continues.", confirmLabel:"Undo", danger:true})) return;
+    const now = sessNow.current; // read after the dialog: a change made while it was open refuses the Undo
+    if(undoBlockReason(now, prevSessState, undoSpin)) return;
+    const preservedStart = now.sessionStartedAt;
     updApp(s => { s[sessKey] = prevSessState; s[sessKey].sessionStartedAt = preservedStart; });
     setPrevSessState(null);
   }
@@ -438,8 +444,8 @@ export default function App() {
   }
   function renameSaved(id, label) { updApp(s=>{Object.assign(s, renameSavedSession(s, id, label, Date.now()));}); }
 
-  function tearSession() {
-    if(!window.confirm("Tear this session?")) return;
+  async function tearSession() {
+    if(!await confirm({title:"Tear this session?", confirmLabel:"Tear", danger:true})) return;
     updApp(s=>{s.currentSession=newSession(s.currentSession.roulette,s.currentSession.bankroll);}); setPrevSessState(null);
     liveRecording.stop();
     setTab(0);
@@ -462,7 +468,7 @@ export default function App() {
 
   function exportJSON() { exportSessionsJSON(saved); }
 
-  function importJSON() { pickSessionsFile(updApp, setTab); }
+  function importJSON() { pickSessionsFile(updApp, setTab, confirm); }
 
   // Game-mode spin recording. GamePageView calls it once per spin.
   function recordGameSpin(val, casinoWager) {
@@ -505,7 +511,7 @@ export default function App() {
             }
           </div>
           {sess.sessionStartedAt && (
-            <button onClick={()=>{if(window.confirm("End session and save?"))venueSheets.requestEnd();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
+            <button onClick={async()=>{if(!await confirm({title:"End session and save?", confirmLabel:"End and save"}))return;venueSheets.requestEnd();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
           )}
         </div>
         {/* Venue line (F11): one row whether or not a venue is recorded, so the header does not move when one is added. */}
@@ -596,7 +602,7 @@ export default function App() {
                   <div style={{display:"flex",gap:5}}>
                     <button onClick={e=>{e.stopPropagation();parkToggle(t.id);}} style={{flex:1,padding:"4px 0",borderRadius:6,border:"1px solid #2d4057",background:t.state==="parked"?"#134e2a":"#1e2d3d",color:t.state==="parked"?"#4ade80":"#94a3b8",fontSize:9,fontWeight:700,cursor:"pointer"}}>{t.state==="parked"?"▶ Resume":"⏸ Park"}</button>
                     <button onClick={e=>{e.stopPropagation();setEditTrackId(isEditing?null:t.id);}} style={{padding:"4px 8px",borderRadius:6,border:"1px solid "+(isEditing?"#60a5fa":"#1e3a5f"),background:isEditing?"#1e3a5f":"transparent",color:"#60a5fa",fontSize:9,cursor:"pointer"}}>✏️ Edit</button>
-                    <button onClick={e=>{e.stopPropagation();if(window.confirm("Close track?"))closeTrack(t.id);}} style={{padding:"4px 8px",borderRadius:6,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:9,cursor:"pointer"}}>×</button>
+                    <button onClick={async e=>{e.stopPropagation();if(!await confirm({title:"Close track?", confirmLabel:"Close track"}))return;closeTrack(t.id);}} style={{padding:"4px 8px",borderRadius:6,border:"1px solid #7f1d1d",background:"transparent",color:"#f87171",fontSize:9,cursor:"pointer"}}>×</button>
                   </div>
                 </div>
                 {isEditing && (
@@ -712,10 +718,8 @@ export default function App() {
             <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1}}>Abandon Progression</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               {nonClosedTracks.filter(t=>t.state==="active").map(t=>{
-                const tbl=computeTableForTrack(t);
-                const row=tbl[Math.min(t.level,tbl.length-1)];
                 return(
-                  <button key={t.id} onClick={()=>{if(window.confirm(`Abandon progression at level ${t.level}?`))updSess(s=>{const tr=s.tracks.find(x=>x.id===t.id);if(tr){tr.pnl-=row?row.totalInvest:0;tr.bets.push({type:"abandon",level:tr.level});tr.level=0;}});}}
+                  <button key={t.id} onClick={async()=>{if(!await confirm({title:`Abandon progression at level ${t.level}?`, confirmLabel:"Abandon", danger:true}))return;updSess(s=>{const tr=s.tracks.find(x=>x.id===t.id);if(tr){const tb=computeTableForTrack(tr);const row=tb[Math.min(tr.level,tb.length-1)];tr.pnl-=row?row.totalInvest:0;tr.bets.push({type:"abandon",level:tr.level});tr.level=0;}});}}
                     style={{flex:1,padding:"8px 10px",borderRadius:9,border:"1px solid "+(t.color+"66"),background:"#0f1923",color:t.color,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
                     <div style={{width:8,height:8,borderRadius:"50%",background:t.color,flexShrink:0}}/>
                     {TRACK_ICONS[t.type]} {betTargetText(t.type,t.config,false,2)} · Lvl {t.level}
@@ -793,7 +797,7 @@ export default function App() {
             addOpen={addOpen} addTrack={addTrack} animNumber={animNumber} betResults={betResults}
             clearTimerRef={clearTimerRef} closeTrack={closeTrack} colD={colD} colP={colP} cur={cur}
             currency={currency} dozD={dozD} dozP={dozP} editTrackId={editTrackId} emDroughts={emDroughts}
-            endSession={endSession} recordGameSpin={recordGameSpin} gameResult={gameResult} gameSpinning={gameSpinning}
+            endSession={endSession} confirm={confirm} recordGameSpin={recordGameSpin} gameResult={gameResult} gameSpinning={gameSpinning}
             isLandscape={isLandscape} lastBets={lastBets} lastSpinDelta={lastSpinDelta} manualBets={manualBets}
             nextColorIdx={nextColorIdx} nonClosedTracks={nonClosedTracks} parkToggle={parkToggle} pendingTrackCfg={pendingTrackCfg}
             pendingTrackType={pendingTrackType} pnlVal={pnlVal} saveSession={saveSession} selectedChip={selectedChip}
@@ -819,9 +823,9 @@ export default function App() {
             </div>
             {tab===0 && <TrackerPage render={renderTrackerPage}/>}
             {tab===1 && <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur} selectedLevel={selectedLevel} setSelectedLevel={setSelectedLevel}/>}
-            {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays} onClearHistory={()=>setPrevSessState(null)}/>}
+            {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays} confirm={confirm} onClearHistory={()=>setPrevSessState(null)}/>}
             {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} resumeSaved={resumeSaved} renameSaved={renameSaved} addCatchUp={setBoardAdd} readPhoto={readBoardPhoto} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
-            {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
+            {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} confirm={confirm} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
           </div>
         )}
 
@@ -835,6 +839,7 @@ export default function App() {
       {editBankroll && <BankrollEdit initial={sess.bankrollCurrent} currency={currency} onSave={v=>updSess(s=>{if(v!==s.bankrollCurrent)s.bankrollEdits=(s.bankrollEdits||[]).concat([{at:Date.now(),from:s.bankrollCurrent,to:v}]);s.bankrollCurrent=v;})} onClose={()=>setEditBankroll(false)}/>}
       {hardResetOpen && <HardResetModal onClose={()=>setHardResetOpen(false)} onExport={exportJSON}/>}
       {venueSheets.sheets}
+      {confirmDialog}
 
       {/* Floating feedback button */}
       <button onClick={()=>setFeedbackOpen(true)} style={{position:"fixed",top:12,left:12,width:36,height:36,borderRadius:"50%",border:"none",background:"#1e2d3d",color:"#94a3b8",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:900}}>🐛</button>

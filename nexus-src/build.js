@@ -46,6 +46,8 @@ const FILES = [
   // Depends on percentile.js for the Percentile counter; ui and grids use it.
   'components/NumberDrought.jsx',
   'components/ui.jsx',
+  // The one confirm (NO-NATIVE-DIALOGS): ConfirmDialog and useConfirm, built on Modal (ui.jsx). App and the pages that confirm use it.
+  'components/ConfirmDialog.jsx',
   'components/RouletteIcon.jsx',
   // Grids — depends on engine + constants + ui
   'components/grids.jsx',

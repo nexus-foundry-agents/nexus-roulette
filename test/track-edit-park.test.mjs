@@ -121,6 +121,7 @@ async function mountApp() {
   const effects = [];
   let cursor = 0;
   let dirty = true;
+  let confirmAnswer = null; // the answer every in-app confirm gets (answerConfirm), as the old window.confirm stub answered every call; null leaves it open
   let tree = null;
   const changed = (before, after) => !before || !after || after.some((value, i) => !Object.is(value, before[i]));
   const react = { ...React,
@@ -180,6 +181,9 @@ async function mountApp() {
   async function flush() {
     for (let i = 0; i < 100; i++) {
       if (dirty) render();
+      // The in-app confirm: the dialog a press opened is answered as the test set it, as its confirm button would.
+      const asked = confirmAnswer !== null && collect(tree, (n) => n.type && n.type.name === 'ConfirmDialog')[0];
+      if (asked) asked.props.onAnswer(confirmAnswer);
       for (const effect of effects.splice(0)) effect();
       await flushPromises();
       if (!dirty && effects.length === 0) return;
@@ -270,6 +274,7 @@ async function mountApp() {
   }
   const state = () => hooks[0].value.appState;
   return {
+    answerConfirm: (value) => { confirmAnswer = value; },
     ctx, flush, live, openEdit, save, parkButton, openPicker, state, tapGrid, undoButton, undoNote, undo,
     // A press of a root-page control (the header's Buy In, Cash Out and Bank buttons), found by a predicate on its node.
     async press(match) {
@@ -686,7 +691,7 @@ test('Clear numbers takes the park point with the spins, and Undo of Clear puts 
 
 test('Undo after a spin and then an edit is refused: the edit and the spin both stay', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   assert.equal(app.state().currentSession.spins.length, 1, 'the tap settled one spin');
   const panel = await app.openEdit('prog-1');
@@ -700,7 +705,7 @@ test('Undo after a spin and then an edit is refused: the edit and the spin both 
 
 test('Undo after a spin and then a Park is refused: the park stays, and so does the spin', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   await app.parkButton('prog-1');
   assert.equal(app.tracks()[0].state, 'parked');
@@ -723,14 +728,14 @@ test('a refused Undo is disabled and its reason is drawn in the reserved note sl
 
 test('Undo still works when nothing changed since the spin, and a park made before the spin is kept by it', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   await app.undo();
   assert.equal(app.state().currentSession.spins.length, 0, 'Undo reverts the spin');
   assert.equal(app.tracks()[0].pnl, 0, 'and its P&L');
 
   const two = await mountLive([freshProgression(), freshProgression({ id: 'prog-2' })], []);
-  two.ctx.confirm = () => true;
+  two.answerConfirm(true);
   await two.parkButton('prog-1');
   await two.tapGrid('7');
   await two.undo();
@@ -748,7 +753,7 @@ test('the refusal reasons live in spin-apply.js only, and the Undo handler and p
 
 test('Undo of a spin keeps an edit made before that spin: the boundary is strictly after the spin, so only later changes refuse', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   const panel = await app.openEdit('prog-1');
   await app.save(panel, { ...plain(panel.props.track.config), unit: 2 });
   assert.equal(app.tracks().length, 2, 'the edit is made before the spin');
@@ -786,7 +791,7 @@ async function setBankroll(app, value) {
 
 test('Undo after a spin and then a buy-in is refused with the money reason: the buy-in and the spin both stay', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   await buyIn(app, 100);
   assert.equal(app.state().currentSession.buyIns.length, 1, 'the buy-in is recorded');
@@ -799,7 +804,7 @@ test('Undo after a spin and then a buy-in is refused with the money reason: the 
 
 test('Undo after a spin and then a cash-out is refused the same way', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   await cashOut(app, 40);
   assert.equal(app.state().currentSession.cashOuts.length, 1, 'the cash-out is recorded');
@@ -812,7 +817,7 @@ test('Undo after a spin and then a cash-out is refused the same way', async () =
 
 test('Undo after a spin and then a bankroll edit is refused the same way', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   await setBankroll(app, 650);
   assert.equal(app.state().currentSession.bankrollCurrent, 650, 'the bankroll is edited');
@@ -827,7 +832,7 @@ test('Undo after a spin and then a bankroll edit is refused the same way', async
 // The arm of the bankroll test: a save that leaves the bankroll as it was is not a money move, so it refuses nothing.
 test('a bankroll save that leaves the bankroll as it was is not a money move: Undo stays available and nothing is recorded', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   const current = app.state().currentSession.bankrollCurrent;
   await setBankroll(app, current);
@@ -838,7 +843,7 @@ test('a bankroll save that leaves the bankroll as it was is not a money move: Un
 
 test('Undo after a spin and then a ghost spin is refused with the spin reason: the ghost spin and the spin both stay', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   await app.ghost('9');
   assert.equal(app.state().currentSession.spins.length, 2, 'the ghost spin is recorded after the tracked one');
@@ -852,7 +857,7 @@ test('Undo after a spin and then a ghost spin is refused with the spin reason: t
 // The arms of the money tests: a buy-in or cash-out made before the spin is part of what Undo puts back, so it refuses nothing.
 test('a buy-in or cash-out made before a spin does not block Undo of that spin, and both stay', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await buyIn(app, 100);
   await cashOut(app, 40);
   await app.tapGrid('7');
@@ -868,7 +873,7 @@ test('a buy-in or cash-out made before a spin does not block Undo of that spin, 
 // spin index 1; with the count back at zero it must not refuse Undo of a spin played after the clear.
 test('a buy-in made before Clear numbers does not block Undo of a spin played after the clear', async () => {
   const app = await mountLive([freshProgression()], []);
-  app.ctx.confirm = () => true;
+  app.answerConfirm(true);
   await app.tapGrid('7');
   await buyIn(app, 100);
   await app.clear();

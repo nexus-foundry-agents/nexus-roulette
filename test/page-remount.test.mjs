@@ -217,7 +217,8 @@ async function mountApp() {
   host.Blob = Blob;
   host.CustomEvent = class { constructor(type, options) { this.type = type; this.detail = options && options.detail; } };
   host.crypto = { randomUUID: () => 'test-uuid' };
-  host.confirm = () => false;
+  // NO-NATIVE-DIALOGS: every confirm is the in-app dialog. A native browser dialog opened in this page is a failure, not an answer.
+  host.confirm = host.alert = host.prompt = () => { throw new Error('a native browser dialog was opened'); };
   host.HTMLIFrameElement = class {}; // react-dom asks whether the active element is an iframe
   host.__runDue = () => {
     const due = env.timers.filter((timer) => !timer.done && timer.delay <= 0);

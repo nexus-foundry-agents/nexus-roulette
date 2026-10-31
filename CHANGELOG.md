@@ -7,6 +7,26 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Changed
+
+- Every confirmation in Roulette is the app's own dialog, never the browser's `window.confirm`. Nine sites now open `ConfirmDialog` (`nexus-src/src/components/ConfirmDialog.jsx`), built on the shared `Modal` in `nexus-src/src/components/ui.jsx`: Undo last tracked spin, Tear this session, End session and save (the Tracker header and the Game page), Close track (the Tracker and the Game page), Abandon progression, Clear all spins from session history, and Restart onboarding. Each confirm button names its action: Undo, Tear, End and save, Close track, Abandon, Clear or Restart. Undo, Tear, Abandon, Clear and Restart are styled as danger.
+- Cancel closes the dialog without acting, and so does a press that begins and ends on the backdrop. The backdrop rule is the one `Modal` already applies: a drag that leaves the dialog does not close it.
+- `useConfirm()` in `nexus-src/src/components/ConfirmDialog.jsx` is the one confirm. `App` calls it once and renders the dialog it returns. The pages that confirm receive `confirm` as a prop. A call made while a dialog is open refuses the earlier call, so no question is answered unseen.
+- Undo last tracked spin reads the session again after the dialog closes. A change made while the dialog was open (for example a sync from Casino) refuses the Undo, as a change after the spin already does, so the restore cannot overwrite that change.
+- The session import no longer uses the browser's `alert()`. Its three messages (Import complete, No sessions found in file, Failed to parse file) open the same in-app dialog as a notice: one OK button and no Cancel.
+- Abandon progression takes the track's total invested from the track as it is when confirmed, not from the render the dialog was opened from.
+
+### Tests
+
+- Added `test/no-native-dialogs.test.mjs`. No file under `nexus-src/src` calls `window.confirm`, `window.alert` or `window.prompt` (bare, or through `window`, `globalThis` or `self`) anywhere. The nine confirm sites await the one confirm. `ConfirmDialog` is built on `Modal` and mounted once. `build.js` lists it before its callers. Through the real App, each of Tear, Close track, Restart onboarding, Clear history, Abandon progression and Undo proceeds on confirm and does nothing on cancel. An Undo confirmed after the session changed, or after another session took its slot, is refused and the new state stays.
+- Updated the tests that answered `window.confirm` with `app.ctx.confirm = () => true`: `test/track-edit-park.test.mjs`, `test/undo-other-gaps.test.mjs`, `test/undo-track-edits.test.mjs` and `test/undo-snapshot-class.test.mjs`. Their harnesses now answer the dialog a press opens, as the confirm button would. `test/page-remount.test.mjs` traps any native dialog instead of declining one. `test/venue-session.test.mjs` traps `alert()` and checks the import's messages arrive as in-app notices, including the parse failure.
+
+### Open
+
+- `@nexus-foundry/nf-ui` 0.4.0 has no dialog component. The shared confirm lives in Roulette for now. Moving it into nf-ui is a separate item.
+- The visual checks of the dialog at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
+- The version, `APP_VERSION` and the `sw.js` CACHE name are not bumped; they move at promotion.
+
 ## [0.75.0] - 2026-10-31
 
 ### Fixed
