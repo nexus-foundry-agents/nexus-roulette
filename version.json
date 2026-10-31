@@ -1,1 +1,1 @@
-{"version":"0.73.0","date":"2026-10-31","notes":"No table minimum unless you set one; a base below your minimum is refused with a clear message; Undo never reverses a track change."}
+{"version":"0.74.0","date":"2026-10-31","notes":"Restarting setup and choosing No minimum now really clears your table minimum."}
