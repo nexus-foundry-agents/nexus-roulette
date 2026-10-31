@@ -1,5 +1,5 @@
   // -- Spin Log Page --
-function SpinPage({ sess, updSess, trackOverlays }) {
+function SpinPage({ sess, updSess, trackOverlays, onClearHistory }) {
     const [showAll, setShowAll] = useState(false);
     const displaySpins = showAll ? [...sess.spins].reverse() : [...sess.spins].reverse().slice(0,60);
     return (
@@ -7,7 +7,7 @@ function SpinPage({ sess, updSess, trackOverlays }) {
         <Card>
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
             <span style={{fontSize:12,color:"#64748b",flex:1}}>Total Spins: <strong style={{color:"#e2e8f0"}}>{sess.spins.length}</strong></span>
-            {sess.spins.length>0 && <button onClick={()=>{if(window.confirm("Clear all spins from session history?"))updSess(s=>{s.spins=[];s.droughts=initDroughts(s.roulette);resetDealerChanges(s);});}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#1e2d3d",color:"#f87171",fontSize:12,cursor:"pointer"}}>Clear History</button>}
+            {sess.spins.length>0 && <button onClick={()=>{if(window.confirm("Clear all spins from session history?")){updSess(s=>{s.spins=[];s.droughts=initDroughts(s.roulette);resetDealerChanges(s);});onClearHistory();}}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#1e2d3d",color:"#f87171",fontSize:12,cursor:"pointer"}}>Clear History</button>}
           </div>
           {sess.spins.length===0
             ? <div style={{textAlign:"center",padding:"20px 0",color:"#475569",fontSize:12}}>No spins logged yet. Enter numbers on the Tracker tab.</div>
