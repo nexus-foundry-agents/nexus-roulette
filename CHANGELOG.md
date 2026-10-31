@@ -7,6 +7,25 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- `MoneyInput` (the bankroll, buy-in and cash-out fields in `nexus-src/src/components/ui.jsx`) no longer changes what was typed without a message. It used to strip non-numeric characters, read `-5` as `5` and round to cents on blur. It now keeps the text as typed. On blur or Enter a valid amount applies. An amount that cannot be read, is negative, has more than 2 decimal places, is outside its range or has cents in a currency with no minor unit shows its reason under the field and keeps the amount already applied. A 3-decimal entry is refused, never rounded.
+- The Table Limits copy in `nexus-src/src/components/modals.jsx` said "This controls which unit bet sizes are valid" and "warns when a progression would exceed the max". Both were stale. A base below the Min Bet is allowed and shows a note, and no max-bet warning exists in the code. The copy now states only the Min Bet behaviour.
+
+### Changed
+
+- The amount parser is one shared module, `nexus-src/src/money-parse.js` (`parseMoneyAmount(text, currCode, range)`), used by `BaseBetInput.jsx` and `MoneyInput`. `parseBaseAmount()` is removed. The base is read with `baseRange()`, which keeps the base's limits (0.01 to 10,000, or 1 to 10,000 in a currency with no minor unit) and its messages.
+- `MoneyInput` takes an optional `range` ({min, max, noun}). Its default is the range every current caller has: 0 or more, no upper bound. Its field is a text field, so "1,000" and "$5" are read rather than emptied.
+- Callers and their ranges, unchanged: Cash Out (`modals.jsx`), 0 or more, capped at the bankroll by the parent (see Open); Starting Bankroll, Default Buy In and the Buy In amount (`modals.jsx`); Default Buy In (`SecondaryPages.jsx`); Starting Bankroll (`SimModePage.jsx`); Current Bankroll (`App.jsx`). All are 0 or more with no upper bound.
+
+### Open
+
+- The visual checks are UNVERIFIED: no browser suite was run for this change.
+- Cash Out: `modals.jsx` clamps a typed amount above the bankroll to the bankroll with no message (`setAmount(Math.min(v,maxAmount))`). That is outside this change's files. It needs its own item so the field can show the cap.
+- The Buy In modal accepts 0 into the field, and its button does nothing at 0, because `handleBuyIn` requires more than 0. Not changed here.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion. The rebuilt `index.html` therefore has new bytes under the current version, which `deploy.sh` refuses until that step.
+- The in-app release notes list in `nexus-src/src/constants.js` is not updated; it belongs to the release step.
+
 ## [0.58.0] - 2026-10-31
 
 ### Added
