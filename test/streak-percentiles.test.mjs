@@ -297,6 +297,22 @@ test('percentTag: P and the whole part; an empty tag for no percentile', async (
   assert.equal(ctx.percentTag(undefined), '');
 });
 
+test('outlineTier: the highest tier reached, at each boundary; null below P75 and for no percentile', async () => {
+  const { ctx } = await load();
+  assert.equal(ctx.outlineTier(74.9), null);
+  assert.equal(ctx.outlineTier(75), 'p75');
+  assert.equal(ctx.outlineTier(94.9), 'p75');
+  assert.equal(ctx.outlineTier(95), 'p95');
+  assert.equal(ctx.outlineTier(97.9), 'p95');
+  assert.equal(ctx.outlineTier(98), 'p98');
+  assert.equal(ctx.outlineTier(100), 'p98');
+  assert.equal(ctx.outlineTier(0), null);
+  assert.equal(ctx.outlineTier(null), null);
+  assert.equal(ctx.outlineTier(undefined), null);
+  assert.equal(ctx.outlineTier(NaN), null);
+  assert.equal(ctx.outlineTier('98'), null, 'only a number reads as a tier');
+});
+
 // -- Counter setting --
 
 test('Counter shows: Spins by default, one tap flips it, and a saved setting with no key reads as Spins', async () => {

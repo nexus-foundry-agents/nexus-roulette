@@ -1,11 +1,16 @@
 # Changelog
 
-Last Updated: 2026-10-30
+Last Updated: 2026-10-31
 
 Notable code and documentation changes are recorded here. Release versions are assigned only when
 `develop` is promoted to `main`; feature-branch work remains under Unreleased.
 
 ## [Unreleased]
+
+### Added
+
+- Each number square on the roulette board, on the Live page and the Game page, 0 and 00 included, gets a subtle outline from its current losing streak's percentile on the wheel in use: green from the 75th percentile, yellow from the 95th and red from the 98th, the highest tier reached winning. The outline is a 2 px ring drawn outside the square, so the board's layout, its borders and the tap area are unchanged.
+- Settings has a "Percentile outlines" switch, next to "Counter shows". It is on by default and is saved with the other settings.
 
 ## [0.53.0] - 2026-10-31
 

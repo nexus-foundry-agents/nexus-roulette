@@ -329,3 +329,147 @@ test('placing bets is unchanged: a corner tap on a number square is still not a 
   assert.equal(bets.length, 1);
   assert.notEqual(bets[0][0], 'straight');
 });
+
+// -- Percentile outlines: a square's outline from its single-number percentile (F10) --
+const OUTLINE = { p75: '#16a34a', p95: '#fbbf24', p98: '#f87171' };
+// The bands are written from the raw percentile here, so the expectations do not run through outlineTier.
+const BANDS = {
+  none: (p) => p < 75,
+  p75: (p) => p >= 75 && p < 95,
+  p95: (p) => p >= 95 && p < 98,
+  p98: (p) => p >= 98,
+};
+// The shortest losing streak that reads in a band of this number's single-number percentile on the wheel.
+function bandLength(ctx, label, wheel, band) {
+  for (let len = 0; len <= 400; len += 1) {
+    if (BANDS[band](ctx.streakPercentile('straight:' + label, wheel, len))) return len;
+  }
+  throw new Error(`no length of ${label} on ${wheel} reads in ${band}`);
+}
+const pocketLabels = (wheel) => ['0', ...Array.from({ length: 36 }, (_, i) => String(i + 1)), ...(wheel === 'american' ? ['00'] : [])];
+const outlineBoard = (roulette, droughts, extra = {}) => ({
+  roulette, droughts, spins: [], spinning: false, onBet: NOOP, showDroughts: true, ...extra,
+});
+// The number squares only, keyed by their label. The column and dozen buttons also carry keys 0, 1 and 2, so a square
+// is the keyed button whose first child is the number's face, and that face's first child is the label.
+function squaresByLabel(node, out = new Map()) {
+  if (Array.isArray(node)) { node.forEach((n) => squaresByLabel(n, out)); return out; }
+  if (!node || typeof node !== 'object' || !node.props) return out;
+  if (node.key != null && typeof node.props.onClick === 'function') {
+    const face = Array.isArray(node.props.children) ? node.props.children[0] : node.props.children;
+    if (face && face.props && Array.isArray(face.props.children) && face.props.children[0] === String(node.key)) {
+      out.set(String(node.key), node);
+    }
+  }
+  squaresByLabel(node.props.children, out);
+  return out;
+}
+
+test('percentile outlines: every square, 0 and 00 included, takes the outline of its own single-number band, on both wheels', async () => {
+  const { ctx } = await load();
+  const bands = ['none', 'p75', 'p95', 'p98'];
+  for (const roulette of ['american', 'european']) {
+    const labels = pocketLabels(roulette);
+    const assigned = Object.fromEntries(labels.map((label, i) => [label, bands[i % bands.length]]));
+    const droughts = Object.fromEntries(labels.map((label) => [label, bandLength(ctx, label, roulette, assigned[label])]));
+    const squares = squaresByLabel(ctx.RouletteBoard(outlineBoard(roulette, droughts)));
+    assert.equal(squares.size, labels.length, `${roulette}: one square per pocket`);
+    for (const label of labels) {
+      const band = assigned[label];
+      const { style } = squares.get(label).props;
+      assert.equal(style.outline, band === 'none' ? undefined : `2px solid ${OUTLINE[band]}`, `${roulette} ${label} (${band})`);
+      assert.equal(style.outlineOffset, band === 'none' ? undefined : 0, `${roulette} ${label} outline offset`);
+    }
+  }
+});
+
+test('percentile outlines: the setting off draws none; a saved setting with no key, or on, draws them', async () => {
+  const { ctx } = await load();
+  const droughts = { '17': bandLength(ctx, '17', 'american', 'p98') };
+  const outlineOf = (extra) => squaresByLabel(ctx.RouletteBoard(outlineBoard('american', droughts, extra))).get('17').props.style.outline;
+  assert.equal(outlineOf({}), `2px solid ${OUTLINE.p98}`, 'no key reads as on');
+  assert.equal(outlineOf({ percentileOutlines: true }), `2px solid ${OUTLINE.p98}`);
+  assert.equal(outlineOf({ percentileOutlines: false }), undefined, 'off draws nothing');
+});
+
+test('percentile outlines: a square with each band has the same box as one without, in the markup the browser gets (no border, size or layout change)', async () => {
+  const { ctx } = await load();
+  const squareStyle = (html, label) => {
+    const m = html.match(new RegExp(`<div style="([^"]*)">(?=<div style="display:flex;flex-direction:column;align-items:center">${label}<div)`));
+    assert.ok(m, `the ${label} square is in the markup`);
+    return m[1];
+  };
+  const withoutOutline = (style) => style.split(';').filter((decl) => !decl.startsWith('outline')).join(';');
+  for (const label of ['17', '0', '00']) {
+    const none = squareStyle(await render('RouletteBoard', outlineBoard('american', {})), label);
+    assert.doesNotMatch(none, /outline/, `${label} with no band has no outline`);
+    for (const band of ['p75', 'p95', 'p98']) {
+      const html = await render('RouletteBoard', outlineBoard('american', { [label]: bandLength(ctx, label, 'american', band) }));
+      const style = squareStyle(html, label);
+      assert.ok(style.includes(`outline:2px solid ${OUTLINE[band]}`), `${label} ${band}: ${style}`);
+      assert.equal(withoutOutline(style), none, `${label} ${band}: the box is the same as without an outline`);
+    }
+  }
+});
+
+test('percentile outlines: an outlined square still takes a tap anywhere in it (picking a hit), with no overlay on it', async () => {
+  const { ctx } = await load();
+  const droughts = {
+    '17': bandLength(ctx, '17', 'american', 'p98'),
+    '0': bandLength(ctx, '0', 'american', 'p75'),
+    '00': bandLength(ctx, '00', 'american', 'p95'),
+  };
+  const bets = [];
+  const squares = squaresByLabel(ctx.RouletteBoard(outlineBoard('american', droughts, {
+    pickNumbers: true, onBet: (type, target) => bets.push([type, target]),
+  })));
+  for (const label of ['17', '0', '00']) {
+    const square = squares.get(label);
+    assert.ok(square.props.style.outline, `${label} is outlined`);
+    tapAt(square, 0.5, 0.92); // on the counter, the bottom edge
+    tapAt(square, 0.05, 0.05); // a corner
+    tapAt(square, 0.5, 0.5); // the centre
+  }
+  assert.deepEqual(bets, [
+    ['straight', '17'], ['straight', '17'], ['straight', '17'],
+    ['straight', '0'], ['straight', '0'], ['straight', '0'],
+    ['straight', '00'], ['straight', '00'], ['straight', '00'],
+  ]);
+});
+
+test('Settings: Percentile outlines sits under Counter shows, reads ON with no key and OFF when off, and is on by default', async () => {
+  const { ctx } = await load();
+  const cur = ctx.getCurrency('USD');
+  const sess = plain(ctx.newSession('american', 500));
+  const page = (settings) => render('SettingsPage', {
+    settings, updSettings: NOOP, setCurrencyOpen: NOOP, currency: 'USD', cur, updSess: NOOP, sess,
+    setChangelogOpen: NOOP, updApp: NOOP, importJSON: NOOP, setHardResetOpen: NOOP,
+  });
+  // Settings as saved before the key existed.
+  const legacy = await page({ currency: 'USD', defaultBuyIn: 100, onboarded: true, vibration: true, tableMinBet: 10, tableMaxBet: 500, tableMaxTotal: 10000 });
+  const off = await page({ ...ctx.defaultSettings(), percentileOutlines: false });
+  const toggleAfter = (html, label) => html.slice(html.indexOf(label)).match(/>(ON|OFF)<\/button>/)[1];
+
+  assert.ok(legacy.indexOf('Counter shows') < legacy.indexOf('Percentile outlines'));
+  const between = legacy.slice(legacy.indexOf('Counter shows'), legacy.indexOf('Percentile outlines'));
+  assert.equal(between.split('<span').length - 1, 1, 'no other row sits between the two');
+
+  assert.equal(toggleAfter(legacy, 'Percentile outlines'), 'ON', 'a missing key reads as on');
+  assert.equal(toggleAfter(off, 'Percentile outlines'), 'OFF');
+  assert.equal(ctx.defaultSettings().percentileOutlines, true);
+  const secondary = await readFile(new URL('components/SecondaryPages.jsx', SRC), 'utf8');
+  assert.match(secondary, /s\.settings\.percentileOutlines=s\.settings\.percentileOutlines===false/, 'the tap flips the one saved key');
+});
+
+test('wiring: the Live page and the Game page each pass the Percentile outlines setting to their roulette board', async () => {
+  let boards = 0;
+  for (const file of ['App.jsx', 'components/GamePage.jsx']) {
+    const text = await readFile(new URL(file, SRC), 'utf8');
+    for (const m of text.matchAll(/<RouletteBoard\b/g)) {
+      const tag = text.slice(m.index, text.indexOf('/>', m.index));
+      assert.match(tag, /percentileOutlines=\{settings\.percentileOutlines\}/, `${file} RouletteBoard at ${m.index}`);
+      boards += 1;
+    }
+  }
+  assert.equal(boards, 2, 'one roulette board on the Live page and one on the Game page');
+});

@@ -291,6 +291,10 @@ function SettingsPage({ settings, updSettings, setCurrencyOpen, currency, cur, u
               <span style={{fontSize:13,color:"#94a3b8"}}>Counter shows</span>
               <button onClick={()=>updApp(s=>{s.settings.counterShows=nextCounterShows(s.settings.counterShows);})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.counterShows==="percentile"?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.counterShows==="percentile"?"Percentile":"Spins"}</button>
             </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
+              <span style={{fontSize:13,color:"#94a3b8"}}>Percentile outlines</span>
+              <button onClick={()=>updApp(s=>{s.settings.percentileOutlines=s.settings.percentileOutlines===false;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.percentileOutlines!==false?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.percentileOutlines!==false?"ON":"OFF"}</button>
+            </div>
           </div>
         </Card>
         <Card>

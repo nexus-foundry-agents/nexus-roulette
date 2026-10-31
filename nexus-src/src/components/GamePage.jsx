@@ -152,7 +152,7 @@ function GamePageView({
             if(t.type==="solution") { (t.config.activeBets||[]).forEach(b=>{if(!stratBets["s:"+b.number])stratBets["s:"+b.number]=t.color;}); }
             if(t.type==="custom") { (t.config.positions||[]).forEach(function(p){var pk=p.type==="straight"?"s:"+p.target:p.type+(p.target!==undefined?":"+p.target:"");if(!stratBets[pk])stratBets[pk]=t.color;}); }
           });
-          return <RouletteBoard roulette={sess.roulette} winningNumber={gameSpinning?null:gameResult} stratBets={stratBets} spinning={false} onBet={placeBet} boardBets={boardBets} chipColor={(CHIPS.find(c=>c.val===selectedChip)||CHIPS[0]).color} betResults={betResults} stratChips={computeStratChips(nonClosedTracks)} landscape={isLandscape} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true} counterShows={settings.counterShows}/>;
+          return <RouletteBoard roulette={sess.roulette} winningNumber={gameSpinning?null:gameResult} stratBets={stratBets} spinning={false} onBet={placeBet} boardBets={boardBets} chipColor={(CHIPS.find(c=>c.val===selectedChip)||CHIPS[0]).color} betResults={betResults} stratChips={computeStratChips(nonClosedTracks)} landscape={isLandscape} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true} counterShows={settings.counterShows} percentileOutlines={settings.percentileOutlines}/>;
         })()}
 
         {/* Chips + controls (compact, matching Live mode) */}
