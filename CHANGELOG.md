@@ -7,6 +7,17 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- Real vs simulated (F12): a Real vs simulated button on the Stats page opens a sheet that compares what was logged at each casino, machine or table, and dealer with the simulated wheel. For the chosen venue it shows the spins observed, a number grid of observed counts against a simulated reference (the spins on that wheel divided by its pockets), and a dozen and column table with hits, the reference hits, the longest completed losing streak and its percentile against the simulated streak distribution in `nexus-src/src/streak-percentiles.js`. A completed losing streak is consecutive spins without a hit, ended by a hit, counted within one session and, for a table, within one dealer's spins; a streak still running at the end is not counted. The venue picker offers casino, then machine or table, then dealer, and lists only the values logged sessions hold. A venue with fewer than 100 spins says how many were logged. The logic is pure, in `nexus-src/src/real-vs-sim.js`; the sheet is `nexus-src/src/components/RealVsSimPage.jsx`, mounted from `nexus-src/src/components/SecondaryPages.jsx`; the tests are in `test/real-vs-sim.test.mjs`.
+
+### Open
+
+- The visual checks of the sheet at 360 and 390 px (no horizontal scroll, and no layout movement as the venue changes) are UNVERIFIED: no browser suite was run for this change.
+- The venue chip rows are laid out again in `RealVsSimPage.jsx`, next to the Sessions sheet's chip rows in `SessionsPage.jsx`, which use the same `SessionsChip`. The shared row belongs in one component; `SessionsPage.jsx` is outside this change, so it is not edited here.
+- Each chip row holds two lines and scrolls inside them when more chips do not fit, so the sheet's height does not change with the venue. The applied choice stays in its row, shown pressed, rather than leaving the list (a filter that hides its own applied value gives no sign of what is applied); tapping it changes nothing.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 ### Changed
 
 - Catch up card (`nexus-src/src/components/SessionsPage.jsx`): its "Read board photo" button is the shared `ReadBoardPhotoButton` in `nexus-src/src/components/SpinTools.jsx`, the same component the Live spin tools mount, with the same handler from `nexus-src/src/App.jsx`. The card defines no photo button of its own.
