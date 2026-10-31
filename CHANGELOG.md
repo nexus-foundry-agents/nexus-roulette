@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.67.0] - 2026-10-31
+
 ### Fixed
 
 - A Stop whose call to Casino throws now restores the pause owner it replaced, as a refused Stop already does. The owner stayed "manual", so the next spin was sent with a pause. `discardAndStop()` in `nexus-src/src/casino-recording.mjs`.
