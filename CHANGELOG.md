@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.72.0] - 2026-10-31
+
 ### Fixed
 
 - Account sync: a change made before the account state has loaded (a spin or a settings change) is no longer dropped when the state loads. It is merged over the loaded account state and pushed. Repeated spin numbers stay separate spins. The rule is in `nexus-src/src/casino-sync.mjs`.

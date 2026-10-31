@@ -1,1 +1,1 @@
-{"version":"0.71.0","date":"2026-10-31","notes":"Undo only ever applies to the session it came from; resuming, importing or switching modes never brings back an old one."}
+{"version":"0.72.0","date":"2026-10-31","notes":"A spin or setting changed while your account is still loading is kept, never overwritten."}
