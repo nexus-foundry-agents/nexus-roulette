@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-10-31
+
 ### Fixed
 
 - `MoneyInput` (the bankroll, buy-in and cash-out fields in `nexus-src/src/components/ui.jsx`) no longer changes what was typed without a message. It used to strip non-numeric characters, read `-5` as `5` and round to cents on blur. It now keeps the text as typed. On blur or Enter a valid amount applies. An amount that cannot be read, is negative, has more than 2 decimal places, is outside its range or has cents in a currency with no minor unit shows its reason under the field and keeps the amount already applied. A 3-decimal entry is refused, never rounded.
