@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.52.0";
+const APP_VERSION = "0.53.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,11 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.53.0", date:"Oct 31, 2026", title:"TLV Tiles and a Cleaner Tap", changes:[
+    "Each dozen and column tile shows its losing streak with a percentile badge (P25 to P98), its Total Loss Value with a small graph, the average and highest loss level, and how many of its numbers are cold",
+    "Tap a tile for a full-screen chart of that section with every number's loss level and percentile",
+    "Picking the hit: a tap anywhere in a number square counts, so the counter under the number never blocks it"
+  ]},
   { v:"0.52.0", date:"Oct 30, 2026", title:"Streak Percentiles and the Spot Planner", changes:[
     "Every number, outside bet, dozen and column shows where its current losing streak sits (P50 to P98), from a 1000 x 1,000,000-spin simulation; the Stats page has the full table",
     "Settings: the counter under each number can show the percentile instead of the spin count",

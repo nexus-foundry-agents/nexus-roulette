@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-10-31
+
 ### Added
 
 - Each dozen and column tile on the drought panel, on the Live page and the Game page, shows six readings at once with no tap. The section's current losing streak is the largest number, with a corner badge for the highest percentile tier it has reached (P25, P50, P75, P95 or P98) and its exact percentile in a small label. Below it: the section's total loss level (TLV) with a small sparkline of TLV since the current losing streak began (the last 50 spins when there is no streak); the average loss level, which is TLV divided by 12 to one decimal, with its tier; the maximum single-number loss level in the section, which is its coldest number, with its single-number tier; the count of the section's numbers at or above their single-number P95; and the TLV's own tier. TLV is the sum of the loss levels of the section's 12 numbers.
