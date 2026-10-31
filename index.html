@@ -2236,6 +2236,8 @@ function defaultSettings() {
     defaultBuyIn: 100,
     onboarded: false,
     vibration: true,
+    showDroughtCounts: true,
+    headStartUnseen: false,
     tableMinBet: 10,
     tableMaxBet: 500,
     tableMaxTotal: 10000
@@ -3543,11 +3545,51 @@ function detectRouletteGridBet(numStr, offsetX, offsetY, cellW, cellH) {
   };
 }
 
+// ===== components/NumberDrought.jsx =====
+// -- Number drought count --
+// The count printed small under a number on the roulette board and the progression grid. ONE
+// implementation for both boards. The slot is always rendered and `on` only changes its visibility, so a
+// cell is the same size with the count on or off (rule 82). The text is fixed-height and nowrap, so a
+// longer count such as ~99 cannot wrap onto a second line and grow the cell.
+
+// The text a number's count shows. Pure and display only: it reads droughts and never writes them.
+//   - A number that has come up this session (it is in spins) shows its true drought, head start or not.
+//   - An unseen number shows its true drought, or, with the head start on, its drought plus the wheel
+//     size, marked "~" as an estimate (for example ~41).
+// `wheelSize` is the length of the wheel's own number list (getWheelNumbers), never a constant.
+function displayDrought(num, droughts, spins, wheelSize, headStart) {
+  var plain = droughts && droughts[num] || 0;
+  var unseen = !(spins || []).some(function (s) {
+    return String(s) === String(num);
+  });
+  if (headStart === true && unseen) return "~" + (plain + wheelSize);
+  return String(plain);
+}
+
+// `view` carries the board's shared inputs once: droughts, spins, wheelSize, headStart and on.
+function NumberDrought(_ref) {
+  var num = _ref.num,
+    view = _ref.view;
+  return /*#__PURE__*/React.createElement("div", {
+    "aria-hidden": view.on ? undefined : true,
+    style: {
+      fontSize: 7,
+      fontWeight: 400,
+      lineHeight: "8px",
+      height: 8,
+      color: "#aab6c6",
+      textAlign: "center",
+      whiteSpace: "nowrap",
+      visibility: view.on ? "visible" : "hidden"
+    }
+  }, displayDrought(num, view.droughts, view.spins, view.wheelSize, view.headStart));
+}
+
 // ===== components/ui.jsx =====
 // -- Base UI Components --
-function Card(_ref) {
-  var children = _ref.children,
-    style = _ref.style;
+function Card(_ref2) {
+  var children = _ref2.children,
+    style = _ref2.style;
   return /*#__PURE__*/React.createElement("div", {
     style: _objectSpread({
       background: "#1e2d3d",
@@ -3558,8 +3600,8 @@ function Card(_ref) {
     }, style || {})
   }, children);
 }
-function FieldLabel(_ref2) {
-  var children = _ref2.children;
+function FieldLabel(_ref3) {
+  var children = _ref3.children;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
@@ -3574,13 +3616,13 @@ function FieldLabel(_ref2) {
 // Reads out every bet a strategy places, colour-coded to match the pickers, the
 // drought cards and the board. Shown on every track so you never have to work
 // out which dozen or column a coloured dot stands for.
-function BetTargets(_ref3) {
-  var type = _ref3.type,
-    config = _ref3.config,
-    compact = _ref3.compact,
-    showRanges = _ref3.showRanges,
-    max = _ref3.max,
-    style = _ref3.style;
+function BetTargets(_ref4) {
+  var type = _ref4.type,
+    config = _ref4.config,
+    compact = _ref4.compact,
+    showRanges = _ref4.showRanges,
+    max = _ref4.max,
+    style = _ref4.style;
   var all = betTargetList(type, config);
   if (all.length === 0) {
     return /*#__PURE__*/React.createElement("div", {
@@ -3652,9 +3694,9 @@ function BetTargets(_ref3) {
 // starts inside the dialog and releases on the backdrop arrives here as a backdrop click. The press
 // flag (started on the backdrop, primary button) and the release flag (ended on the backdrop) reject
 // both that case and a press that starts on the backdrop and releases inside the dialog.
-function Modal(_ref4) {
-  var children = _ref4.children,
-    onClose = _ref4.onClose;
+function Modal(_ref5) {
+  var children = _ref5.children,
+    onClose = _ref5.onClose;
   var downOnBackdrop = React.useRef(false);
   var upOnBackdrop = React.useRef(false);
   return /*#__PURE__*/React.createElement("div", {
@@ -3701,11 +3743,11 @@ function Modal(_ref4) {
     }
   }, children));
 }
-function MoneyInput(_ref5) {
-  var value = _ref5.value,
-    onChange = _ref5.onChange,
-    currCode = _ref5.currCode,
-    label = _ref5.label;
+function MoneyInput(_ref6) {
+  var value = _ref6.value,
+    onChange = _ref6.onChange,
+    currCode = _ref6.currCode,
+    label = _ref6.label;
   var _useState = (0, _react.useState)(String(value)),
     _useState2 = _slicedToArray(_useState, 2),
     raw = _useState2[0],
@@ -3773,10 +3815,10 @@ function MoneyInput(_ref5) {
     }
   })));
 }
-function ROIStepper(_ref6) {
-  var value = _ref6.value,
-    onChange = _ref6.onChange,
-    disabled = _ref6.disabled;
+function ROIStepper(_ref7) {
+  var value = _ref7.value,
+    onChange = _ref7.onChange,
+    disabled = _ref7.disabled;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -3853,12 +3895,12 @@ function ROIStepper(_ref6) {
     }, p, "%");
   })));
 }
-function DCard(_ref7) {
-  var label = _ref7.label,
-    range = _ref7.range,
-    drought = _ref7.drought,
-    colorBd = _ref7.colorBd,
-    colorTx = _ref7.colorTx;
+function DCard(_ref8) {
+  var label = _ref8.label,
+    range = _ref8.range,
+    drought = _ref8.drought,
+    colorBd = _ref8.colorBd,
+    colorTx = _ref8.colorTx;
   var bd = droughtBadge(drought);
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3906,11 +3948,11 @@ function DCard(_ref7) {
 }
 
 // Self-contained clock that won't cause parent re-renders
-function SessionClock(_ref8) {
-  var startedAt = _ref8.startedAt,
-    endedAt = _ref8.endedAt,
-    style = _ref8.style,
-    pauseOffset = _ref8.pauseOffset;
+function SessionClock(_ref9) {
+  var startedAt = _ref9.startedAt,
+    endedAt = _ref9.endedAt,
+    style = _ref9.style,
+    pauseOffset = _ref9.pauseOffset;
   var _useState5 = (0, _react.useState)(Date.now()),
     _useState6 = _slicedToArray(_useState5, 2),
     now = _useState6[0],
@@ -3932,22 +3974,34 @@ function SessionClock(_ref8) {
 }
 
 // -- Roulette Table Board --
-function RouletteBoard(_ref9) {
-  var roulette = _ref9.roulette,
-    winningNumber = _ref9.winningNumber,
-    stratBets = _ref9.stratBets,
-    spinning = _ref9.spinning,
-    onBet = _ref9.onBet,
-    boardBets = _ref9.boardBets,
-    chipColor = _ref9.chipColor,
-    betResults = _ref9.betResults,
-    stratChips = _ref9.stratChips,
-    landscape = _ref9.landscape;
+function RouletteBoard(_ref0) {
+  var roulette = _ref0.roulette,
+    winningNumber = _ref0.winningNumber,
+    stratBets = _ref0.stratBets,
+    spinning = _ref0.spinning,
+    onBet = _ref0.onBet,
+    boardBets = _ref0.boardBets,
+    chipColor = _ref0.chipColor,
+    betResults = _ref0.betResults,
+    stratChips = _ref0.stratChips,
+    landscape = _ref0.landscape,
+    droughts = _ref0.droughts,
+    showDroughts = _ref0.showDroughts,
+    spins = _ref0.spins,
+    headStart = _ref0.headStart;
   var isAmerican = roulette === "american";
   var sb = stratBets || {};
   var bb = boardBets || {};
   var br = betResults || {};
   var sChipsMap = stratChips || {};
+  // Drought count under every number (NumberDrought). Display only: droughts is read, never written.
+  var droughtView = {
+    droughts: droughts || {},
+    spins: spins || [],
+    wheelSize: getWheelNumbers(roulette).length,
+    headStart: headStart === true,
+    on: showDroughts !== false
+  };
   var canBet = !!onBet && !spinning && !betResults;
   var BOARD_ROWS = ROULETTE_BOARD_ROWS;
   var g = 2;
@@ -4007,12 +4061,26 @@ function RouletteBoard(_ref9) {
       }
     });
   }
+
+  // A number and its drought count, stacked. The count's slot is always reserved (NumberDrought).
+  function numberFace(label) {
+    return React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center"
+      }
+    }, label, React.createElement(NumberDrought, {
+      num: label,
+      view: droughtView
+    }));
+  }
   var chipSize = landscape ? 24 : 16;
   var chipFs = landscape ? 11 : 8;
   var stratSize = landscape ? 20 : 14;
-  function BetChip(_ref0) {
-    var amount = _ref0.amount,
-      posKey = _ref0.posKey;
+  function BetChip(_ref1) {
+    var amount = _ref1.amount,
+      posKey = _ref1.posKey;
     if (!amount) return null;
     var lbl = amount >= 1000 ? amount / 1000 + "k" : amount >= 100 ? amount.toFixed(0) : amount >= 1 ? amount % 1 !== 0 ? amount.toFixed(2) : amount.toFixed(0) : amount < 1 ? amount * 100 + "¢" : "";
     var fs = landscape ? lbl.length > 3 ? 8 : lbl.length > 2 ? 9 : chipFs : lbl.length > 3 ? 6 : lbl.length > 2 ? 7 : chipFs;
@@ -4045,8 +4113,8 @@ function RouletteBoard(_ref9) {
       }
     }, lbl);
   }
-  function StratChipBadge(_ref1) {
-    var chips = _ref1.chips;
+  function StratChipBadge(_ref10) {
+    var chips = _ref10.chips;
     if (!chips || chips.length === 0) return null;
     return React.createElement("div", {
       style: {
@@ -4231,7 +4299,7 @@ function RouletteBoard(_ref9) {
         cursor: canBet ? "pointer" : "default",
         border: betBorder || numStyle(num, isZero).border
       })
-    }, numStr, winStr === numStr && !spinning && React.createElement(Mkr), sChips && React.createElement(StratChipBadge, {
+    }, numberFace(numStr), winStr === numStr && !spinning && React.createElement(Mkr), sChips && React.createElement(StratChipBadge, {
       chips: sChips
     }), bb[betKey] && React.createElement(BetChip, {
       amount: bb[betKey],
@@ -4373,7 +4441,7 @@ function RouletteBoard(_ref9) {
       boxShadow: winStr === "0" ? "0 0 10px #fbbf24" : "none",
       cursor: canBet ? "pointer" : "default"
     }
-  }, "0", winStr === "0" && !spinning && React.createElement(Mkr), bb["s:0"] && React.createElement(BetChip, {
+  }, numberFace("0"), winStr === "0" && !spinning && React.createElement(Mkr), bb["s:0"] && React.createElement(BetChip, {
     amount: bb["s:0"],
     posKey: "s:0"
   })), isAmerican && React.createElement("div", {
@@ -4401,7 +4469,7 @@ function RouletteBoard(_ref9) {
       boxShadow: winStr === "00" ? "0 0 10px #fbbf24" : "none",
       cursor: canBet ? "pointer" : "default"
     }
-  }, "00", winStr === "00" && !spinning && React.createElement(Mkr), bb["s:00"] && React.createElement(BetChip, {
+  }, numberFace("00"), winStr === "00" && !spinning && React.createElement(Mkr), bb["s:00"] && React.createElement(BetChip, {
     amount: bb["s:00"],
     posKey: "s:00"
   }))), /*#__PURE__*/React.createElement("div", {
@@ -4611,8 +4679,8 @@ function RouletteBoard(_ref9) {
 
 // ===== components/RouletteIcon.jsx =====
 // -- Roulette Wheel SVG Icon --
-function RouletteIcon(_ref10) {
-  var size = _ref10.size;
+function RouletteIcon(_ref11) {
+  var size = _ref11.size;
   var s = size || 32;
   return /*#__PURE__*/React.createElement("svg", {
     width: s,
@@ -4856,14 +4924,19 @@ function RouletteIcon(_ref10) {
 
 // ===== components/grids.jsx =====
 // -- Number Grids --
-function FibGrid(_ref11) {
-  var onNumber = _ref11.onNumber,
-    onGhost = _ref11.onGhost,
-    dozenTargets = _ref11.dozenTargets,
-    colTargets = _ref11.colTargets,
-    fibRow = _ref11.fibRow,
-    trackOverlays = _ref11.trackOverlays,
-    flashNum = _ref11.flashNum;
+function FibGrid(_ref12) {
+  var onNumber = _ref12.onNumber,
+    onGhost = _ref12.onGhost,
+    dozenTargets = _ref12.dozenTargets,
+    colTargets = _ref12.colTargets,
+    fibRow = _ref12.fibRow,
+    trackOverlays = _ref12.trackOverlays,
+    flashNum = _ref12.flashNum,
+    roulette = _ref12.roulette,
+    droughts = _ref12.droughts,
+    showDroughts = _ref12.showDroughts,
+    spins = _ref12.spins,
+    headStart = _ref12.headStart;
   var rows = Array.from({
     length: 12
   }, function (_, r) {
@@ -4871,6 +4944,14 @@ function FibGrid(_ref11) {
   });
   var dts = dozenTargets || [0],
     cts = colTargets || [];
+  // Drought count under every number (NumberDrought). Display only: droughts is read, never written.
+  var droughtView = {
+    droughts: droughts || {},
+    spins: spins || [],
+    wheelSize: getWheelNumbers(roulette).length,
+    headStart: headStart === true,
+    on: showDroughts !== false
+  };
   var pressTimer = React.useRef(null);
   function numCell(val) {
     var isZ = val === "0" || val === "00";
@@ -4906,7 +4987,7 @@ function FibGrid(_ref11) {
         return clearTimeout(pressTimer.current);
       },
       style: {
-        padding: "8px 0",
+        padding: "5px 0",
         borderRadius: 7,
         border: "1px solid " + (isFlash ? "#ffffff" : cs.bd),
         background: isFlash ? "#ffffff22" : cs.bg,
@@ -4917,7 +4998,14 @@ function FibGrid(_ref11) {
         minHeight: 42,
         transition: "background 0.1s,border 0.1s"
       }
-    }, /*#__PURE__*/React.createElement("div", null, val), overlays.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        lineHeight: "14px"
+      }
+    }, val), /*#__PURE__*/React.createElement(NumberDrought, {
+      num: val,
+      view: droughtView
+    }), overlays.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         justifyContent: "center",
@@ -4954,7 +5042,7 @@ function FibGrid(_ref11) {
         return onNumber(v);
       },
       style: {
-        padding: "11px 0",
+        padding: "7px 0",
         borderRadius: 8,
         border: "1px solid #1f2937",
         background: "#1a0a0a",
@@ -4963,7 +5051,10 @@ function FibGrid(_ref11) {
         fontWeight: 800,
         cursor: "pointer"
       }
-    }, v);
+    }, /*#__PURE__*/React.createElement("div", null, v), /*#__PURE__*/React.createElement(NumberDrought, {
+      num: v,
+      view: droughtView
+    }));
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
@@ -5001,11 +5092,11 @@ function FibGrid(_ref11) {
         textTransform: "uppercase",
         padding: "1px 0 2px"
       }
-    }, DOZEN_LABELS[dz]), rows.slice(dz * 4, dz * 4 + 4).map(function (_ref12) {
-      var _ref13 = _slicedToArray(_ref12, 3),
-        a = _ref13[0],
-        b = _ref13[1],
-        c = _ref13[2];
+    }, DOZEN_LABELS[dz]), rows.slice(dz * 4, dz * 4 + 4).map(function (_ref13) {
+      var _ref14 = _slicedToArray(_ref13, 3),
+        a = _ref14[0],
+        b = _ref14[1],
+        c = _ref14[2];
       return /*#__PURE__*/React.createElement("div", {
         key: a,
         style: {
@@ -5025,11 +5116,11 @@ function FibGrid(_ref11) {
       flexWrap: "wrap",
       marginTop: 4
     }
-  }, [["jackpot", "#fbbf24", "Jackpot"], ["win", "#4ade80", "Win"], ["breakeven", "#a3e635", "Breakeven"], ["partial-loss", "#f97316", "Partial Loss"], ["loss", "#374151", "Total Loss"]].map(function (_ref14) {
-    var _ref15 = _slicedToArray(_ref14, 3),
-      c = _ref15[0],
-      col = _ref15[1],
-      l = _ref15[2];
+  }, [["jackpot", "#fbbf24", "Jackpot"], ["win", "#4ade80", "Win"], ["breakeven", "#a3e635", "Breakeven"], ["partial-loss", "#f97316", "Partial Loss"], ["loss", "#374151", "Total Loss"]].map(function (_ref15) {
+    var _ref16 = _slicedToArray(_ref15, 3),
+      c = _ref16[0],
+      col = _ref16[1],
+      l = _ref16[2];
     return /*#__PURE__*/React.createElement("div", {
       key: c,
       style: {
@@ -5052,14 +5143,14 @@ function FibGrid(_ref11) {
     }, l));
   })));
 }
-function SolGrid(_ref16) {
-  var onNumber = _ref16.onNumber,
-    droughts = _ref16.droughts,
-    entry = _ref16.entry,
-    maxLvl = _ref16.maxLvl,
-    activeBets = _ref16.activeBets,
-    wheelNums = _ref16.wheelNums,
-    trackOverlays = _ref16.trackOverlays;
+function SolGrid(_ref17) {
+  var onNumber = _ref17.onNumber,
+    droughts = _ref17.droughts,
+    entry = _ref17.entry,
+    maxLvl = _ref17.maxLvl,
+    activeBets = _ref17.activeBets,
+    wheelNums = _ref17.wheelNums,
+    trackOverlays = _ref17.trackOverlays;
   var activeSet = new Set((activeBets || []).map(function (b) {
     return b.number;
   }));
@@ -5175,10 +5266,10 @@ function SolGrid(_ref16) {
 
 // ===== components/ResultFlash.jsx =====
 // -- Result Flash Overlay --
-function ResultFlash(_ref17) {
-  var result = _ref17.result,
-    cur = _ref17.cur,
-    onDismiss = _ref17.onDismiss;
+function ResultFlash(_ref18) {
+  var result = _ref18.result,
+    cur = _ref18.cur,
+    onDismiss = _ref18.onDismiss;
   (0, _react.useEffect)(function () {
     var t = setTimeout(onDismiss, 3000);
     return function () {
@@ -5302,12 +5393,12 @@ function ResultFlash(_ref17) {
 
 // ===== components/TrackPanel.jsx =====
 // -- Track Config Panels (Edit + Add) --
-function EditTrackCfg(_ref18) {
-  var track = _ref18.track,
-    currency = _ref18.currency,
-    tableMinBet = _ref18.tableMinBet,
-    onSave = _ref18.onSave,
-    onCancel = _ref18.onCancel;
+function EditTrackCfg(_ref19) {
+  var track = _ref19.track,
+    currency = _ref19.currency,
+    tableMinBet = _ref19.tableMinBet,
+    onSave = _ref19.onSave,
+    onCancel = _ref19.onCancel;
   var cur = getCurrency(currency || "USD");
   var tMin = tableMinBet || 1;
   var _useState7 = (0, _react.useState)(_objectSpread({}, track.config)),
@@ -5552,17 +5643,17 @@ function EditTrackCfg(_ref18) {
     }
   }, "Cancel")));
 }
-function AddTrackPanel(_ref19) {
-  var onAdd = _ref19.onAdd,
-    onClose = _ref19.onClose,
-    nextColor = _ref19.nextColor,
-    type = _ref19.type,
-    cfg = _ref19.cfg,
-    onTypeChange = _ref19.onTypeChange,
-    onCfgChange = _ref19.onCfgChange,
-    closedTracks = _ref19.closedTracks,
-    currency = _ref19.currency,
-    tableMinBet = _ref19.tableMinBet;
+function AddTrackPanel(_ref20) {
+  var onAdd = _ref20.onAdd,
+    onClose = _ref20.onClose,
+    nextColor = _ref20.nextColor,
+    type = _ref20.type,
+    cfg = _ref20.cfg,
+    onTypeChange = _ref20.onTypeChange,
+    onCfgChange = _ref20.onCfgChange,
+    closedTracks = _ref20.closedTracks,
+    currency = _ref20.currency,
+    tableMinBet = _ref20.tableMinBet;
   var cur = getCurrency(currency || "USD");
   var tMin = tableMinBet || 1;
   function upCfg(k, v) {
@@ -5666,10 +5757,10 @@ function AddTrackPanel(_ref19) {
       display: "flex",
       gap: 8
     }
-  }, [["flat", "➡️ Flat"], ["fibonacci", "📈 Progression Bet"], ["solution", "🎯 The Solution"]].map(function (_ref20) {
-    var _ref21 = _slicedToArray(_ref20, 2),
-      m = _ref21[0],
-      l = _ref21[1];
+  }, [["flat", "➡️ Flat"], ["fibonacci", "📈 Progression Bet"], ["solution", "🎯 The Solution"]].map(function (_ref21) {
+    var _ref22 = _slicedToArray(_ref21, 2),
+      m = _ref22[0],
+      l = _ref22[1];
     var isSel = m === "solution" ? type === "solution" : type === "fibonacci" && m === "flat" === ((cfg.betMode || "progression") === "flat");
     return /*#__PURE__*/React.createElement("button", {
       key: m,
@@ -6012,12 +6103,12 @@ function AddTrackPanel(_ref19) {
 
 // ===== components/modals.jsx =====
 // -- Modal Dialogs --
-function CashOutModal(_ref22) {
-  var maxAmount = _ref22.maxAmount,
-    currency = _ref22.currency,
-    currentBankroll = _ref22.currentBankroll,
-    onCashOut = _ref22.onCashOut,
-    onClose = _ref22.onClose;
+function CashOutModal(_ref23) {
+  var maxAmount = _ref23.maxAmount,
+    currency = _ref23.currency,
+    currentBankroll = _ref23.currentBankroll,
+    onCashOut = _ref23.onCashOut,
+    onClose = _ref23.onClose;
   var _useState9 = (0, _react.useState)(Math.min(100, maxAmount)),
     _useState0 = _slicedToArray(_useState9, 2),
     amount = _useState0[0],
@@ -6148,9 +6239,9 @@ function CashOutModal(_ref22) {
 }
 
 // -- Onboarding --
-function OnboardingScreen(_ref23) {
-  var onComplete = _ref23.onComplete,
-    initialBankroll = _ref23.initialBankroll;
+function OnboardingScreen(_ref24) {
+  var onComplete = _ref24.onComplete,
+    initialBankroll = _ref24.initialBankroll;
   var _useState1 = (0, _react.useState)(0),
     _useState10 = _slicedToArray(_useState1, 2),
     step = _useState10[0],
@@ -6270,11 +6361,11 @@ function OnboardingScreen(_ref23) {
       color: "#e2e8f0",
       textAlign: "center"
     }
-  }, "Which table are you playing?"), [["american", "🇺🇸 American", "Has 0 and 00"], ["european", "🇪🇺 European", "Has 0 only"]].map(function (_ref24) {
-    var _ref25 = _slicedToArray(_ref24, 3),
-      v = _ref25[0],
-      label = _ref25[1],
-      sub = _ref25[2];
+  }, "Which table are you playing?"), [["american", "🇺🇸 American", "Has 0 and 00"], ["european", "🇪🇺 European", "Has 0 only"]].map(function (_ref25) {
+    var _ref26 = _slicedToArray(_ref25, 3),
+      v = _ref26[0],
+      label = _ref26[1],
+      sub = _ref26[2];
     return /*#__PURE__*/React.createElement("button", {
       key: v,
       onClick: function onClick() {
@@ -6428,12 +6519,12 @@ function OnboardingScreen(_ref23) {
     val: tableMaxTotal,
     set: setTableMaxTotal,
     color: "#f87171"
-  }].map(function (_ref26) {
-    var label = _ref26.label,
-      key = _ref26.key,
-      val = _ref26.val,
-      set = _ref26.set,
-      color = _ref26.color;
+  }].map(function (_ref27) {
+    var label = _ref27.label,
+      key = _ref27.key,
+      val = _ref27.val,
+      set = _ref27.set,
+      color = _ref27.color;
     function dec() {
       if (key === "minBet") {
         if (val > 10) return set(val <= 100 ? val - 5 : val <= 1000 ? val - 25 : val - 1000);
@@ -6553,10 +6644,10 @@ function OnboardingScreen(_ref23) {
       flexDirection: "column",
       gap: 6
     }
-  }, Object.entries(CURRENCIES).map(function (_ref27) {
-    var _ref28 = _slicedToArray(_ref27, 2),
-      code = _ref28[0],
-      cur = _ref28[1];
+  }, Object.entries(CURRENCIES).map(function (_ref28) {
+    var _ref29 = _slicedToArray(_ref28, 2),
+      code = _ref29[0],
+      cur = _ref29[1];
     return /*#__PURE__*/React.createElement("button", {
       key: code,
       onClick: function onClick() {
@@ -6642,12 +6733,12 @@ function OnboardingScreen(_ref23) {
 }
 
 // -- Buy In Modal --
-function BuyInModal(_ref29) {
-  var defaultAmount = _ref29.defaultAmount,
-    currency = _ref29.currency,
-    currentBankroll = _ref29.currentBankroll,
-    onBuyIn = _ref29.onBuyIn,
-    onClose = _ref29.onClose;
+function BuyInModal(_ref30) {
+  var defaultAmount = _ref30.defaultAmount,
+    currency = _ref30.currency,
+    currentBankroll = _ref30.currentBankroll,
+    onBuyIn = _ref30.onBuyIn,
+    onClose = _ref30.onClose;
   var _useState25 = (0, _react.useState)(defaultAmount || 100),
     _useState26 = _slicedToArray(_useState25, 2),
     amount = _useState26[0],
@@ -6759,11 +6850,11 @@ function BuyInModal(_ref29) {
 }
 
 // -- Currency Change Modal --
-function CurrencyModal(_ref30) {
-  var current = _ref30.current,
-    bankroll = _ref30.bankroll,
-    onSave = _ref30.onSave,
-    onClose = _ref30.onClose;
+function CurrencyModal(_ref31) {
+  var current = _ref31.current,
+    bankroll = _ref31.bankroll,
+    onSave = _ref31.onSave,
+    onClose = _ref31.onClose;
   var _useState27 = (0, _react.useState)(current),
     _useState28 = _slicedToArray(_useState27, 2),
     selected = _useState28[0],
@@ -6812,10 +6903,10 @@ function CurrencyModal(_ref30) {
       gap: 5,
       marginBottom: 16
     }
-  }, Object.entries(CURRENCIES).map(function (_ref31) {
-    var _ref32 = _slicedToArray(_ref31, 2),
-      code = _ref32[0],
-      cur = _ref32[1];
+  }, Object.entries(CURRENCIES).map(function (_ref32) {
+    var _ref33 = _slicedToArray(_ref32, 2),
+      code = _ref33[0],
+      cur = _ref33[1];
     return /*#__PURE__*/React.createElement("button", {
       key: code,
       onClick: function onClick() {
@@ -6929,8 +7020,8 @@ function CurrencyModal(_ref30) {
 }
 
 // -- Changelog Modal --
-function ChangelogModal(_ref33) {
-  var onClose = _ref33.onClose;
+function ChangelogModal(_ref34) {
+  var onClose = _ref34.onClose;
   return /*#__PURE__*/React.createElement(Modal, {
     onClose: onClose
   }, /*#__PURE__*/React.createElement("div", {
@@ -7012,9 +7103,9 @@ function ChangelogModal(_ref33) {
     })));
   })));
 }
-function HardResetModal(_ref34) {
-  var onClose = _ref34.onClose,
-    onExport = _ref34.onExport;
+function HardResetModal(_ref35) {
+  var onClose = _ref35.onClose,
+    onExport = _ref35.onExport;
   var _useState31 = (0, _react.useState)(0),
     _useState32 = _slicedToArray(_useState31, 2),
     step = _useState32[0],
@@ -7198,15 +7289,15 @@ var LONG_PRESS_SLOP_PX = 8;
 
 // App provides the function that opens the picker for a spin index. Outside App it is null and a press does nothing.
 var SpinCorrectionContext = React.createContext(null);
-function SpinTools(_ref35) {
-  var spinCount = _ref35.spinCount,
-    confirmOpen = _ref35.confirmOpen,
-    undoVisible = _ref35.undoVisible,
-    onAsk = _ref35.onAsk,
-    onCancel = _ref35.onCancel,
-    onConfirm = _ref35.onConfirm,
-    onUndo = _ref35.onUndo,
-    onReadPhoto = _ref35.onReadPhoto;
+function SpinTools(_ref36) {
+  var spinCount = _ref36.spinCount,
+    confirmOpen = _ref36.confirmOpen,
+    undoVisible = _ref36.undoVisible,
+    onAsk = _ref36.onAsk,
+    onCancel = _ref36.onCancel,
+    onConfirm = _ref36.onConfirm,
+    onUndo = _ref36.onUndo,
+    onReadPhoto = _ref36.onReadPhoto;
   var hasSpins = spinCount > 0;
   var noun = spinCount === 1 ? "spin" : "spins";
   var confirmBody = "Removes the ".concat(spinCount, " ").concat(noun, " from this session. Each track's bets and progression level restart at zero. Bankroll, buy-ins, cash-outs and track profit and loss are not changed. Undo stays available until the next spin, or for 15 seconds.");
@@ -7348,14 +7439,14 @@ function SpinTools(_ref35) {
 // went down. A move past the slop, a release, or a cancel (the browser takes over for a scroll or swipe) ends the
 // press without firing. Releasing after the press fired does nothing more, so a long-press never also taps.
 // The timer functions are looked up when a press starts, not when the strip renders, so rendering never needs them.
-function createLongPress(_ref36) {
-  var onLongPress = _ref36.onLongPress,
-    _ref36$delayMs = _ref36.delayMs,
-    delayMs = _ref36$delayMs === void 0 ? LONG_PRESS_MS : _ref36$delayMs,
-    _ref36$slopPx = _ref36.slopPx,
-    slopPx = _ref36$slopPx === void 0 ? LONG_PRESS_SLOP_PX : _ref36$slopPx,
-    setTimer = _ref36.setTimer,
-    clearTimer = _ref36.clearTimer;
+function createLongPress(_ref37) {
+  var onLongPress = _ref37.onLongPress,
+    _ref37$delayMs = _ref37.delayMs,
+    delayMs = _ref37$delayMs === void 0 ? LONG_PRESS_MS : _ref37$delayMs,
+    _ref37$slopPx = _ref37.slopPx,
+    slopPx = _ref37$slopPx === void 0 ? LONG_PRESS_SLOP_PX : _ref37$slopPx,
+    setTimer = _ref37.setTimer,
+    clearTimer = _ref37.clearTimer;
   var timer = null,
     origin = null;
   function cancel() {
@@ -7391,9 +7482,9 @@ function createLongPress(_ref36) {
 // Recent numbers, newest first, up to RECENT_STRIP_LIMIT. The container is always rendered at its reserved
 // height: with no numbers it is an empty slot, so the first spin and a clear both leave the layout where it is.
 // Chip i is the spin at index spins.length - 1 - i. Pressing and holding one asks App for the picker; nothing else.
-function RecentNumbersStrip(_ref37) {
-  var spins = _ref37.spins,
-    trackOverlays = _ref37.trackOverlays;
+function RecentNumbersStrip(_ref38) {
+  var spins = _ref38.spins,
+    trackOverlays = _ref38.trackOverlays;
   var openCorrection = React.useContext(SpinCorrectionContext);
   var latestOpen = React.useRef(openCorrection);
   latestOpen.current = openCorrection;
@@ -7476,15 +7567,15 @@ function RecentNumbersStrip(_ref37) {
 // and the note says why. The caller supplies the title, the note and the label each button's aria-label is built from.
 // The list and its look are this one component's, whichever surface opens it (the recent-numbers correction and the
 // board photo review). The shared Modal draws it over the page and dismisses it, so opening it moves nothing.
-function NumberPicker(_ref38) {
-  var title = _ref38.title,
-    note = _ref38.note,
-    blocked = _ref38.blocked,
-    label = _ref38.label,
-    currentValue = _ref38.currentValue,
-    roulette = _ref38.roulette,
-    onChoose = _ref38.onChoose,
-    onClose = _ref38.onClose;
+function NumberPicker(_ref39) {
+  var title = _ref39.title,
+    note = _ref39.note,
+    blocked = _ref39.blocked,
+    label = _ref39.label,
+    currentValue = _ref39.currentValue,
+    roulette = _ref39.roulette,
+    onChoose = _ref39.onChoose,
+    onClose = _ref39.onClose;
   var numbers = getWheelNumbers(roulette);
   return /*#__PURE__*/React.createElement(Modal, {
     onClose: onClose
@@ -7555,14 +7646,14 @@ function NumberPicker(_ref38) {
 
 // The number picker for one recent spin (the long-press correction). Choosing a number corrects that spin at once. When
 // blockedReason is set the session cannot be corrected, so every number is disabled and the reason is shown.
-function SpinNumberPicker(_ref39) {
-  var spinIndex = _ref39.spinIndex,
-    spinCount = _ref39.spinCount,
-    currentValue = _ref39.currentValue,
-    roulette = _ref39.roulette,
-    blockedReason = _ref39.blockedReason,
-    onChoose = _ref39.onChoose,
-    onClose = _ref39.onClose;
+function SpinNumberPicker(_ref40) {
+  var spinIndex = _ref40.spinIndex,
+    spinCount = _ref40.spinCount,
+    currentValue = _ref40.currentValue,
+    roulette = _ref40.roulette,
+    blockedReason = _ref40.blockedReason,
+    onChoose = _ref40.onChoose,
+    onClose = _ref40.onClose;
   var spinNo = spinIndex + 1;
   return /*#__PURE__*/React.createElement(NumberPicker, {
     title: "Correct spin ".concat(spinNo, " of ").concat(spinCount),
@@ -7723,8 +7814,8 @@ function boardAddOrder(numbersBoardOrder) {
 }
 
 // The status line under the spin tools. Its slot is always reserved (shared rule 82): with nothing to say it is empty.
-function BoardPhotoStatus(_ref40) {
-  var result = _ref40.result;
+function BoardPhotoStatus(_ref41) {
+  var result = _ref41.result;
   var line = result && result.kind === "status" ? BOARD_STATUS_LINES[result.status] || "" : "";
   return /*#__PURE__*/React.createElement("div", {
     role: "status",
@@ -7746,11 +7837,11 @@ function BoardPhotoStatus(_ref40) {
 // The review of the numbers a photo read returned, in board order, most recent first. Each number can be corrected with
 // the same number picker the recent-numbers strip uses (NumberPicker, SpinTools.jsx). Add passes the list up in board
 // order and App enters it oldest first. Cancel, and a press on the backdrop, add nothing.
-function BoardPhotoReview(_ref41) {
-  var numbers = _ref41.numbers,
-    roulette = _ref41.roulette,
-    onAdd = _ref41.onAdd,
-    onCancel = _ref41.onCancel;
+function BoardPhotoReview(_ref42) {
+  var numbers = _ref42.numbers,
+    roulette = _ref42.roulette,
+    onAdd = _ref42.onAdd,
+    onCancel = _ref42.onCancel;
   var _React$useState = React.useState(numbers),
     _React$useState2 = _slicedToArray(_React$useState, 2),
     list = _React$useState2[0],
@@ -8143,12 +8234,12 @@ function NotificationEnablePage() {
     }
   }, "Return to Roulette")));
 }
-function StatContextBar(_ref42) {
-  var simResults = _ref42.simResults,
-    simCfg = _ref42.simCfg,
-    sess = _ref42.sess,
-    cur = _ref42.cur,
-    pnlVal = _ref42.pnlVal;
+function StatContextBar(_ref43) {
+  var simResults = _ref43.simResults,
+    simCfg = _ref43.simCfg,
+    sess = _ref43.sess,
+    cur = _ref43.cur,
+    pnlVal = _ref43.pnlVal;
   // Match live tracks to sim strategies by type+roi+stopLoss
   var liveTracks = sess.tracks.filter(function (t) {
     return t.state !== "closed";
@@ -8219,14 +8310,14 @@ function StatContextBar(_ref42) {
       letterSpacing: 1,
       marginBottom: 2
     }
-  }, "vs Simulation Benchmark"), bars.map(function (_ref43, i) {
-    var t = _ref43.t,
-      status = _ref43.status,
-      statusColor = _ref43.statusColor,
-      statusIcon = _ref43.statusIcon,
-      pctRank = _ref43.pctRank,
-      stats = _ref43.stats,
-      livePnl = _ref43.livePnl;
+  }, "vs Simulation Benchmark"), bars.map(function (_ref44, i) {
+    var t = _ref44.t,
+      status = _ref44.status,
+      statusColor = _ref44.statusColor,
+      statusIcon = _ref44.statusIcon,
+      pctRank = _ref44.pctRank,
+      stats = _ref44.stats,
+      livePnl = _ref44.livePnl;
     return /*#__PURE__*/React.createElement("div", {
       key: t.id,
       style: {
@@ -8277,11 +8368,11 @@ function StatContextBar(_ref42) {
 // -- Experiment Comparison Panel (Results view, Repeat Experiment) --
 // One row per experiment (identical parameters), with aggregate stats across all
 // of them: overall P&L per experiment, or sessions survived in bankroll mode.
-function ExperimentPanel(_ref44) {
-  var experiments = _ref44.experiments,
-    bankrollMode = _ref44.bankrollMode,
-    sessionsPerExperiment = _ref44.sessionsPerExperiment,
-    cur = _ref44.cur;
+function ExperimentPanel(_ref45) {
+  var experiments = _ref45.experiments,
+    bankrollMode = _ref45.bankrollMode,
+    sessionsPerExperiment = _ref45.sessionsPerExperiment,
+    cur = _ref45.cur;
   if (!experiments || experiments.length < 2) return null;
   var pnls = experiments.map(function (e) {
     return e.pnl;
@@ -8338,11 +8429,11 @@ function ExperimentPanel(_ref44) {
       gap: 6,
       marginBottom: 8
     }
-  }, tiles.map(function (_ref45) {
-    var _ref46 = _slicedToArray(_ref45, 3),
-      l = _ref46[0],
-      v = _ref46[1],
-      c = _ref46[2];
+  }, tiles.map(function (_ref46) {
+    var _ref47 = _slicedToArray(_ref46, 3),
+      l = _ref47[0],
+      v = _ref47[1],
+      c = _ref47[2];
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -8433,9 +8524,9 @@ function ExperimentPanel(_ref44) {
 
 // -- Per-Session Explorer (Results view) --
 // Filterable, sortable drill-down into every simulated session.
-function SessionExplorer(_ref47) {
-  var sessions = _ref47.sessions,
-    cur = _ref47.cur;
+function SessionExplorer(_ref48) {
+  var sessions = _ref48.sessions,
+    cur = _ref48.cur;
   var _useState35 = (0, _react.useState)("all"),
     _useState36 = _slicedToArray(_useState35, 2),
     filter = _useState36[0],
@@ -8507,10 +8598,10 @@ function SessionExplorer(_ref47) {
       gap: 4,
       marginBottom: 4
     }
-  }, filterChips.map(function (_ref48) {
-    var _ref49 = _slicedToArray(_ref48, 2),
-      key = _ref49[0],
-      label = _ref49[1];
+  }, filterChips.map(function (_ref49) {
+    var _ref50 = _slicedToArray(_ref49, 2),
+      key = _ref50[0],
+      label = _ref50[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -8525,10 +8616,10 @@ function SessionExplorer(_ref47) {
       gap: 4,
       marginBottom: 6
     }
-  }, sortChips.map(function (_ref50) {
-    var _ref51 = _slicedToArray(_ref50, 2),
-      key = _ref51[0],
-      label = _ref51[1];
+  }, sortChips.map(function (_ref51) {
+    var _ref52 = _slicedToArray(_ref51, 2),
+      key = _ref52[0],
+      label = _ref52[1];
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       onClick: function onClick() {
@@ -8627,20 +8718,20 @@ function SessionExplorer(_ref47) {
 }
 
 // -- Simulation Mode Page --
-function SimModePage(_ref52) {
-  var simCfg = _ref52.simCfg,
-    setSimCfg = _ref52.setSimCfg,
-    simRunning = _ref52.simRunning,
-    setSimRunning = _ref52.setSimRunning,
-    simProgress = _ref52.simProgress,
-    setSimProgress = _ref52.setSimProgress,
-    simResults = _ref52.simResults,
-    setSimResults = _ref52.setSimResults,
-    simDone = _ref52.simDone,
-    setSimDone = _ref52.setSimDone,
-    simStopRef = _ref52.simStopRef,
-    currency = _ref52.currency,
-    cur = _ref52.cur;
+function SimModePage(_ref53) {
+  var simCfg = _ref53.simCfg,
+    setSimCfg = _ref53.setSimCfg,
+    simRunning = _ref53.simRunning,
+    setSimRunning = _ref53.setSimRunning,
+    simProgress = _ref53.simProgress,
+    setSimProgress = _ref53.setSimProgress,
+    simResults = _ref53.simResults,
+    setSimResults = _ref53.setSimResults,
+    simDone = _ref53.simDone,
+    setSimDone = _ref53.setSimDone,
+    simStopRef = _ref53.simStopRef,
+    currency = _ref53.currency,
+    cur = _ref53.cur;
   var _useState41 = (0, _react.useState)("setup"),
     _useState42 = _slicedToArray(_useState41, 2),
     view = _useState42[0],
@@ -8891,10 +8982,10 @@ function SimModePage(_ref52) {
       display: "flex",
       gap: 8
     }
-  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref53) {
-    var _ref54 = _slicedToArray(_ref53, 2),
-      v = _ref54[0],
-      l = _ref54[1];
+  }, [["european", "🇪🇺 European"], ["american", "🇺🇸 American"]].map(function (_ref54) {
+    var _ref55 = _slicedToArray(_ref54, 2),
+      v = _ref55[0],
+      l = _ref55[1];
     var sel = simCfg.roulette === v;
     return /*#__PURE__*/React.createElement("button", {
       key: v,
@@ -9696,11 +9787,11 @@ function SimModePage(_ref52) {
         gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
         gap: 4
       }
-    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref55) {
-      var _ref56 = _slicedToArray(_ref55, 3),
-        l = _ref56[0],
-        v = _ref56[1],
-        c = _ref56[2];
+    }, [["Min", stats.minPnl, "#f87171"], ["P25", stats.p25, "#f97316"], ["P50", stats.p50, "#fbbf24"], ["P75", stats.p75, "#86efac"], ["Max", stats.maxPnl, "#4ade80"]].map(function (_ref56) {
+      var _ref57 = _slicedToArray(_ref56, 3),
+        l = _ref57[0],
+        v = _ref57[1],
+        c = _ref57[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -9745,11 +9836,11 @@ function SimModePage(_ref52) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref57) {
-      var _ref58 = _slicedToArray(_ref57, 3),
-        l = _ref58[0],
-        v = _ref58[1],
-        c = _ref58[2];
+    }, [["Avg P&L / Session", (stats.avgPnlPerSession >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSession).toFixed(2), stats.avgPnlPerSession >= 0 ? "#4ade80" : "#f87171"], ["Avg P&L / Sequence", (stats.avgPnlPerSequence >= 0 ? "+" : "-") + cur.symbol + Math.abs(stats.avgPnlPerSequence).toFixed(2), stats.avgPnlPerSequence >= 0 ? "#86efac" : "#f97316"], ["Avg Winning Session (" + stats.winSessionCount + ")", "+" + cur.symbol + Math.abs(stats.avgWinSession).toFixed(2), "#4ade80"], ["Avg Losing Session (" + stats.lossSessionCount + ")", "-" + cur.symbol + Math.abs(stats.avgLossSession).toFixed(2), "#f87171"], ["Avg Sequences / Session", stats.avgSequencesPerSession.toFixed(1), "#c4b5fd"], ["Avg Staked / Session", cur.symbol + stats.avgStakedPerSession.toFixed(2), "#94a3b8"]].map(function (_ref58) {
+      var _ref59 = _slicedToArray(_ref58, 3),
+        l = _ref59[0],
+        v = _ref59[1],
+        c = _ref59[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -9852,11 +9943,11 @@ function SimModePage(_ref52) {
         gridTemplateColumns: "1fr 1fr",
         gap: 6
       }
-    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref59) {
-      var _ref60 = _slicedToArray(_ref59, 3),
-        l = _ref60[0],
-        v = _ref60[1],
-        c = _ref60[2];
+    }, [["Longest Win Streak", stats.longestWinStreak, "#4ade80"], ["Longest Loss Streak", stats.longestLossStreak, "#f87171"], ["Avg Win Streak", stats.avgWinStreak.toFixed(1), "#86efac"], ["Avg Loss Streak", stats.avgLossStreak.toFixed(1), "#f97316"], ["Stop Loss Hits", r.stopLossHits, "#fbbf24"], ["Stop Loss Rate", stats.stopLossRate.toFixed(2) + "/sess", "#fbbf24"], ["Sat Out (never entered)", (r.satOutSessions || 0) + " of " + r.sessions.length + " (" + (r.sessions.length ? ((r.satOutSessions || 0) / r.sessions.length * 100).toFixed(1) : "0") + "%)", "#60a5fa"]].map(function (_ref60) {
+      var _ref61 = _slicedToArray(_ref60, 3),
+        l = _ref61[0],
+        v = _ref61[1],
+        c = _ref61[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -9896,9 +9987,9 @@ function SimModePage(_ref52) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.winStreakDist.slice(0, 10).map(function (_ref61) {
-      var len = _ref61.len,
-        p = _ref61.pct;
+    }, stats.winStreakDist.slice(0, 10).map(function (_ref62) {
+      var len = _ref62.len,
+        p = _ref62.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -9950,9 +10041,9 @@ function SimModePage(_ref52) {
         flexDirection: "column",
         gap: 2
       }
-    }, stats.lossStreakDist.slice(0, 10).map(function (_ref62) {
-      var len = _ref62.len,
-        p = _ref62.pct;
+    }, stats.lossStreakDist.slice(0, 10).map(function (_ref63) {
+      var len = _ref63.len,
+        p = _ref63.pct;
       return /*#__PURE__*/React.createElement("div", {
         key: len,
         style: {
@@ -9999,13 +10090,13 @@ function SimModePage(_ref52) {
 }
 
 // -- Sim Strategy Editor --
-function SimStratEditor(_ref63) {
-  var strat = _ref63.strat,
-    idx = _ref63.idx,
-    simCfg = _ref63.simCfg,
-    setSimCfg = _ref63.setSimCfg,
-    cur = _ref63.cur,
-    onClose = _ref63.onClose;
+function SimStratEditor(_ref64) {
+  var strat = _ref64.strat,
+    idx = _ref64.idx,
+    simCfg = _ref64.simCfg,
+    setSimCfg = _ref64.setSimCfg,
+    cur = _ref64.cur,
+    onClose = _ref64.onClose;
   var _useState47 = (0, _react.useState)(_objectSpread({}, strat.config)),
     _useState48 = _slicedToArray(_useState47, 2),
     cfg = _useState48[0],
@@ -10124,10 +10215,10 @@ function SimStratEditor(_ref63) {
       display: "flex",
       gap: 5
     }
-  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref64) {
-    var _ref65 = _slicedToArray(_ref64, 2),
-      m = _ref65[0],
-      l = _ref65[1];
+  }, [["flat", "Flat"], ["progression", "Progression"]].map(function (_ref65) {
+    var _ref66 = _slicedToArray(_ref65, 2),
+      m = _ref66[0],
+      l = _ref66[1];
     var sel = (cfg.betMode || "progression") === m;
     return /*#__PURE__*/React.createElement("button", {
       key: m,
@@ -10350,11 +10441,11 @@ function SimStratEditor(_ref63) {
       flexDirection: "column",
       gap: 6
     }
-  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref66) {
-    var _ref67 = _slicedToArray(_ref66, 3),
-      key = _ref67[0],
-      label = _ref67[1],
-      desc = _ref67[2];
+  }, [["waitForWin", "Wait for win before entering", "Don't bet until first in-range hit observed"], ["parkAfterStopLoss", "Park after stop loss hit", "Resume only after next in-range win observed"], ["parkAfterLoss", "Park after any miss", "Resume next spin (aggressive filter)"]].map(function (_ref67) {
+    var _ref68 = _slicedToArray(_ref67, 3),
+      key = _ref68[0],
+      label = _ref68[1],
+      desc = _ref68[2];
     return /*#__PURE__*/React.createElement("div", {
       key: key,
       style: {
@@ -10529,10 +10620,10 @@ function SimStratEditor(_ref63) {
 
 // ===== components/SecondaryPages.jsx =====
 // -- Spin Log Page --
-function SpinPage(_ref68) {
-  var sess = _ref68.sess,
-    updSess = _ref68.updSess,
-    trackOverlays = _ref68.trackOverlays;
+function SpinPage(_ref69) {
+  var sess = _ref69.sess,
+    updSess = _ref69.updSess,
+    trackOverlays = _ref69.trackOverlays;
   var _useState51 = (0, _react.useState)(false),
     _useState52 = _slicedToArray(_useState51, 2),
     showAll = _useState52[0],
@@ -10639,20 +10730,20 @@ function SpinPage(_ref68) {
   }, showAll ? "Show less" : "Show all " + sess.spins.length + " spins"))));
 }
 // -- Session Stats Page --
-function StatsPage(_ref69) {
-  var sess = _ref69.sess,
-    livePauseOffset = _ref69.livePauseOffset,
-    pnlVal = _ref69.pnlVal,
-    cur = _ref69.cur,
-    currency = _ref69.currency,
-    pnlColor = _ref69.pnlColor,
-    saveSession = _ref69.saveSession,
-    newEmptySession = _ref69.newEmptySession,
-    tearSession = _ref69.tearSession,
-    reactivateTrack = _ref69.reactivateTrack,
-    saved = _ref69.saved,
-    loadSession = _ref69.loadSession,
-    exportJSON = _ref69.exportJSON;
+function StatsPage(_ref70) {
+  var sess = _ref70.sess,
+    livePauseOffset = _ref70.livePauseOffset,
+    pnlVal = _ref70.pnlVal,
+    cur = _ref70.cur,
+    currency = _ref70.currency,
+    pnlColor = _ref70.pnlColor,
+    saveSession = _ref70.saveSession,
+    newEmptySession = _ref70.newEmptySession,
+    tearSession = _ref70.tearSession,
+    reactivateTrack = _ref70.reactivateTrack,
+    saved = _ref70.saved,
+    loadSession = _ref70.loadSession,
+    exportJSON = _ref70.exportJSON;
   // Group tracks by type + roi + stopLoss for consolidated view
   var trackGroups = (0, _react.useMemo)(function () {
     var groups = {};
@@ -10785,10 +10876,10 @@ function StatsPage(_ref69) {
     l: "Net P&L",
     v: (pnlVal >= 0 ? "+" : "-") + cur.symbol + formatNumber(pnlVal),
     c: pnlColor
-  }].map(function (_ref70) {
-    var l = _ref70.l,
-      v = _ref70.v,
-      c = _ref70.c;
+  }].map(function (_ref71) {
+    var l = _ref71.l,
+      v = _ref71.v,
+      c = _ref71.c;
     return /*#__PURE__*/React.createElement("div", {
       key: l,
       style: {
@@ -10935,11 +11026,11 @@ function StatsPage(_ref69) {
         gap: 6,
         marginBottom: 8
       }
-    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref71) {
-      var _ref72 = _slicedToArray(_ref71, 3),
-        l = _ref72[0],
-        v = _ref72[1],
-        c = _ref72[2];
+    }, [["Wins", g.wins, "#4ade80"], ["Losses", g.losses, "#f87171"], ["Win Rate", winRate, "#86efac"]].map(function (_ref72) {
+      var _ref73 = _slicedToArray(_ref72, 3),
+        l = _ref73[0],
+        v = _ref73[1],
+        c = _ref73[2];
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -11082,18 +11173,18 @@ function StatsPage(_ref69) {
 }
 
 // -- Settings Page --
-function SettingsPage(_ref73) {
-  var settings = _ref73.settings,
-    updSettings = _ref73.updSettings,
-    setCurrencyOpen = _ref73.setCurrencyOpen,
-    currency = _ref73.currency,
-    cur = _ref73.cur,
-    updSess = _ref73.updSess,
-    sess = _ref73.sess,
-    setChangelogOpen = _ref73.setChangelogOpen,
-    updApp = _ref73.updApp,
-    importJSON = _ref73.importJSON,
-    setHardResetOpen = _ref73.setHardResetOpen;
+function SettingsPage(_ref74) {
+  var settings = _ref74.settings,
+    updSettings = _ref74.updSettings,
+    setCurrencyOpen = _ref74.setCurrencyOpen,
+    currency = _ref74.currency,
+    cur = _ref74.cur,
+    updSess = _ref74.updSess,
+    sess = _ref74.sess,
+    setChangelogOpen = _ref74.setChangelogOpen,
+    updApp = _ref74.updApp,
+    importJSON = _ref74.importJSON,
+    setHardResetOpen = _ref74.setHardResetOpen;
   var _useState53 = (0, _react.useState)(settings.defaultBuyIn || 100),
     _useState54 = _slicedToArray(_useState53, 2),
     localBuyIn = _useState54[0],
@@ -11173,10 +11264,10 @@ function SettingsPage(_ref73) {
       display: "flex",
       gap: 8
     }
-  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref74) {
-    var _ref75 = _slicedToArray(_ref74, 2),
-      v = _ref75[0],
-      label = _ref75[1];
+  }, [["american", "🇺🇸 American (00)"], ["european", "🇪🇺 European"]].map(function (_ref75) {
+    var _ref76 = _slicedToArray(_ref75, 2),
+      v = _ref76[0],
+      label = _ref76[1];
     return /*#__PURE__*/React.createElement("button", {
       key: v,
       onClick: function onClick() {
@@ -11248,7 +11339,69 @@ function SettingsPage(_ref73) {
       fontWeight: 700,
       cursor: "pointer"
     }
-  }, settings.vibration !== false ? "ON" : "OFF")))), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(FieldLabel, null, "Table Limits"), /*#__PURE__*/React.createElement("div", {
+  }, settings.vibration !== false ? "ON" : "OFF")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "12px 16px",
+      borderRadius: 10,
+      border: "1px solid #2d4057",
+      background: "#0f1923"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      color: "#94a3b8"
+    }
+  }, "Spins Since Last Hit"), /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      return updApp(function (s) {
+        s.settings.showDroughtCounts = s.settings.showDroughtCounts === false;
+      });
+    },
+    style: {
+      padding: "6px 16px",
+      borderRadius: 8,
+      border: "none",
+      background: settings.showDroughtCounts !== false ? "#16a34a" : "#374151",
+      color: "white",
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, settings.showDroughtCounts !== false ? "ON" : "OFF")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "12px 16px",
+      borderRadius: 10,
+      border: "1px solid #2d4057",
+      background: "#0f1923"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      color: "#94a3b8"
+    }
+  }, "Head start for unseen numbers"), /*#__PURE__*/React.createElement("button", {
+    onClick: function onClick() {
+      return updApp(function (s) {
+        s.settings.headStartUnseen = s.settings.headStartUnseen !== true;
+      });
+    },
+    style: {
+      padding: "6px 16px",
+      borderRadius: 8,
+      border: "none",
+      background: settings.headStartUnseen === true ? "#16a34a" : "#374151",
+      color: "white",
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, settings.headStartUnseen === true ? "ON" : "OFF")))), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(FieldLabel, null, "Table Limits"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -11266,10 +11419,10 @@ function SettingsPage(_ref73) {
     label: "Max Total (per spin)",
     key: "tableMaxTotal",
     color: "#f87171"
-  }].map(function (_ref76) {
-    var label = _ref76.label,
-      key = _ref76.key,
-      color = _ref76.color;
+  }].map(function (_ref77) {
+    var label = _ref77.label,
+      key = _ref77.key,
+      color = _ref77.color;
     var val = settings[key] || 1;
     function dec() {
       if (key === "tableMinBet") {
@@ -12310,9 +12463,9 @@ function casinoDuration(ms) {
     };
   return hours ? hours + ':' + pad(minutes) + ':' + pad(seconds) : minutes + ':' + pad(seconds);
 }
-function CasinoRecordingBar(_ref84) {
-  var recording = _ref84.recording,
-    label = _ref84.label;
+function CasinoRecordingBar(_ref85) {
+  var recording = _ref85.recording,
+    label = _ref85.label;
   var text = '';
   if (recording.availability === 'unknown') text = 'Checking Nexus Casino recording before the first spin…';else if (recording.availability === 'unavailable') text = 'Not connected to Nexus Casino — nothing is being recorded.';else if (recording.availability === 'off') text = 'Casino recording is off for Roulette.';else if (!recording.session) text = 'Casino recording is on. This session starts on the first spin.';else text = (recording.session.status === 'running' ? 'Recording' : recording.session.status === 'paused' ? 'Paused' : 'Stopped') + ' · ' + casinoDuration(recording.elapsedMs) + ' · ' + recording.session.spins + ' spins';
   var controls = [];
@@ -12567,7 +12720,7 @@ function useCasinoAccountSync(appState, setAppState) {
     };
   }, []);
   var push = React.useCallback(/*#__PURE__*/function () {
-    var _ref85 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
+    var _ref86 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(candidate, requestedVersion) {
       var next, attempt, result, stored, _current, current;
       return _regenerator().w(function (_context9) {
         while (1) switch (_context9.n) {
@@ -12645,7 +12798,7 @@ function useCasinoAccountSync(appState, setAppState) {
       }, _callee9);
     }));
     return function (_x2, _x3) {
-      return _ref85.apply(this, arguments);
+      return _ref86.apply(this, arguments);
     };
   }(), [applySnapshot]);
   var queuePush = React.useCallback(function (candidate) {
@@ -12814,8 +12967,8 @@ function useCasinoAccountSync(appState, setAppState) {
 function markRouletteAccountReset() {
   writeSyncMeta(nextResetSyncMeta(readSyncMeta(loadApp()), Date.now()));
 }
-function CasinoSyncBar(_ref88) {
-  var sync = _ref88.sync;
+function CasinoSyncBar(_ref89) {
+  var sync = _ref89.sync;
   var text = sync.status === 'local' ? sync.deviceSaved ? 'Saved on this device · export and import through Casino to add it to an account' : 'Not saved · browser storage unavailable' : sync.status === 'checking' ? 'Checking account sync…' : sync.status === 'syncing' ? 'Syncing with your Casino account…' : sync.status === 'synced' ? 'Synced with your Casino account' : sync.deviceSaved ? 'Saved for this account on this device · cloud sync unavailable' : 'Not saved · Casino account storage unavailable';
   return React.createElement('section', {
     'aria-label': 'Roulette account sync',
@@ -13029,14 +13182,14 @@ function pickSessionsFile(updApp, setTab) {
 
 // ===== components/onboarding-apply.jsx =====
 // Applies the first-run setup choices to app state. Moved from App.jsx; the only change is that updApp is a parameter.
-function completeOnboarding(updApp, _ref89) {
-  var roulette = _ref89.roulette,
-    bankroll = _ref89.bankroll,
-    defaultBuyIn = _ref89.defaultBuyIn,
-    curr = _ref89.currency,
-    tableMinBet = _ref89.tableMinBet,
-    tableMaxBet = _ref89.tableMaxBet,
-    tableMaxTotal = _ref89.tableMaxTotal;
+function completeOnboarding(updApp, _ref90) {
+  var roulette = _ref90.roulette,
+    bankroll = _ref90.bankroll,
+    defaultBuyIn = _ref90.defaultBuyIn,
+    curr = _ref90.currency,
+    tableMinBet = _ref90.tableMinBet,
+    tableMaxBet = _ref90.tableMaxBet,
+    tableMaxTotal = _ref90.tableMaxTotal;
   updApp(function (s) {
     var prevBankroll = s.settings._restartBankroll;
     s.settings.onboarded = true;
@@ -13085,9 +13238,9 @@ function completeOnboarding(updApp, _ref89) {
 
 // ===== components/UpdateBanner.jsx =====
 // App update prompt. Moved from App.jsx; the only change is that appState and updateAvailable are props.
-function UpdateBanner(_ref90) {
-  var appState = _ref90.appState,
-    updateAvailable = _ref90.updateAvailable;
+function UpdateBanner(_ref91) {
+  var appState = _ref91.appState,
+    updateAvailable = _ref91.updateAvailable;
   return /*#__PURE__*/React.createElement("button", {
     onClick: function onClick() {
       saveApp(appState);
@@ -13177,10 +13330,10 @@ function UpdateBanner(_ref90) {
 
 // ===== components/DroughtPanel.jsx =====
 // Even-money, dozen and column drought counts. Both play pages render it; moved from App.jsx unchanged.
-function DroughtPanel(_ref91) {
-  var emDroughts = _ref91.emDroughts,
-    dozD = _ref91.dozD,
-    colD = _ref91.colD;
+function DroughtPanel(_ref92) {
+  var emDroughts = _ref92.emDroughts,
+    dozD = _ref92.dozD,
+    colD = _ref92.colD;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -13262,54 +13415,54 @@ function DroughtPanel(_ref91) {
 // Moved from App.jsx. App renders it through a wrapper that passes every App value the page reads.
 // Body unchanged except two marked edits: the drought grid is now DroughtPanel, and the strategy chips
 // take the tracks as an argument.
-function GamePageView(_ref92) {
-  var addOpen = _ref92.addOpen,
-    addTrack = _ref92.addTrack,
-    animNumber = _ref92.animNumber,
-    betResults = _ref92.betResults,
-    clearTimerRef = _ref92.clearTimerRef,
-    closeTrack = _ref92.closeTrack,
-    colD = _ref92.colD,
-    cur = _ref92.cur,
-    currency = _ref92.currency,
-    dozD = _ref92.dozD,
-    editTrackId = _ref92.editTrackId,
-    emDroughts = _ref92.emDroughts,
-    endSession = _ref92.endSession,
-    recordGameSpin = _ref92.recordGameSpin,
-    gameResult = _ref92.gameResult,
-    gameSpinning = _ref92.gameSpinning,
-    isLandscape = _ref92.isLandscape,
-    lastBets = _ref92.lastBets,
-    lastSpinDelta = _ref92.lastSpinDelta,
-    manualBets = _ref92.manualBets,
-    nextColorIdx = _ref92.nextColorIdx,
-    nonClosedTracks = _ref92.nonClosedTracks,
-    parkToggle = _ref92.parkToggle,
-    pendingTrackCfg = _ref92.pendingTrackCfg,
-    pendingTrackType = _ref92.pendingTrackType,
-    pnlVal = _ref92.pnlVal,
-    saveSession = _ref92.saveSession,
-    selectedChip = _ref92.selectedChip,
-    sess = _ref92.sess,
-    setAddOpen = _ref92.setAddOpen,
-    setAnimNumber = _ref92.setAnimNumber,
-    setBetResults = _ref92.setBetResults,
-    setEditTrackId = _ref92.setEditTrackId,
-    setGameResult = _ref92.setGameResult,
-    setGameSpinning = _ref92.setGameSpinning,
-    setLastBets = _ref92.setLastBets,
-    setLastSpinDelta = _ref92.setLastSpinDelta,
-    setManualBets = _ref92.setManualBets,
-    setPendingTrackCfg = _ref92.setPendingTrackCfg,
-    setPendingTrackType = _ref92.setPendingTrackType,
-    setSelectedChip = _ref92.setSelectedChip,
-    setUndoStack = _ref92.setUndoStack,
-    settings = _ref92.settings,
-    tapNumber = _ref92.tapNumber,
-    updSess = _ref92.updSess,
-    updateTrackConfig = _ref92.updateTrackConfig,
-    wheelNums = _ref92.wheelNums;
+function GamePageView(_ref93) {
+  var addOpen = _ref93.addOpen,
+    addTrack = _ref93.addTrack,
+    animNumber = _ref93.animNumber,
+    betResults = _ref93.betResults,
+    clearTimerRef = _ref93.clearTimerRef,
+    closeTrack = _ref93.closeTrack,
+    colD = _ref93.colD,
+    cur = _ref93.cur,
+    currency = _ref93.currency,
+    dozD = _ref93.dozD,
+    editTrackId = _ref93.editTrackId,
+    emDroughts = _ref93.emDroughts,
+    endSession = _ref93.endSession,
+    recordGameSpin = _ref93.recordGameSpin,
+    gameResult = _ref93.gameResult,
+    gameSpinning = _ref93.gameSpinning,
+    isLandscape = _ref93.isLandscape,
+    lastBets = _ref93.lastBets,
+    lastSpinDelta = _ref93.lastSpinDelta,
+    manualBets = _ref93.manualBets,
+    nextColorIdx = _ref93.nextColorIdx,
+    nonClosedTracks = _ref93.nonClosedTracks,
+    parkToggle = _ref93.parkToggle,
+    pendingTrackCfg = _ref93.pendingTrackCfg,
+    pendingTrackType = _ref93.pendingTrackType,
+    pnlVal = _ref93.pnlVal,
+    saveSession = _ref93.saveSession,
+    selectedChip = _ref93.selectedChip,
+    sess = _ref93.sess,
+    setAddOpen = _ref93.setAddOpen,
+    setAnimNumber = _ref93.setAnimNumber,
+    setBetResults = _ref93.setBetResults,
+    setEditTrackId = _ref93.setEditTrackId,
+    setGameResult = _ref93.setGameResult,
+    setGameSpinning = _ref93.setGameSpinning,
+    setLastBets = _ref93.setLastBets,
+    setLastSpinDelta = _ref93.setLastSpinDelta,
+    setManualBets = _ref93.setManualBets,
+    setPendingTrackCfg = _ref93.setPendingTrackCfg,
+    setPendingTrackType = _ref93.setPendingTrackType,
+    setSelectedChip = _ref93.setSelectedChip,
+    setUndoStack = _ref93.setUndoStack,
+    settings = _ref93.settings,
+    tapNumber = _ref93.tapNumber,
+    updSess = _ref93.updSess,
+    updateTrackConfig = _ref93.updateTrackConfig,
+    wheelNums = _ref93.wheelNums;
   var recentSpins = _toConsumableArray(sess.spins).reverse().slice(0, 30);
   var hasActiveTracks = nonClosedTracks.some(function (t) {
     return t.state === "active";
@@ -13612,7 +13765,11 @@ function GamePageView(_ref92) {
       }) || CHIPS[0]).color,
       betResults: betResults,
       stratChips: computeStratChips(nonClosedTracks),
-      landscape: isLandscape
+      landscape: isLandscape,
+      droughts: sess.droughts,
+      spins: sess.spins,
+      showDroughts: settings.showDroughtCounts !== false,
+      headStart: settings.headStartUnseen === true
     });
   }(), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -14085,12 +14242,12 @@ function GamePageView(_ref92) {
 // ===== components/TablePage.jsx =====
 // -- Full table page --
 // Moved from App.jsx unchanged. App renders it through a wrapper that passes the App values it reads.
-function TablePageView(_ref93) {
-  var sess = _ref93.sess,
-    selectedTrackId = _ref93.selectedTrackId,
-    setSelectedTrackId = _ref93.setSelectedTrackId,
-    nonClosedTracks = _ref93.nonClosedTracks,
-    cur = _ref93.cur;
+function TablePageView(_ref94) {
+  var sess = _ref94.sess,
+    selectedTrackId = _ref94.selectedTrackId,
+    setSelectedTrackId = _ref94.setSelectedTrackId,
+    nonClosedTracks = _ref94.nonClosedTracks,
+    cur = _ref94.cur;
   var selTrack = sess.tracks.find(function (t) {
     return t.id === selectedTrackId;
   }) || nonClosedTracks[0] || null;
@@ -14189,10 +14346,10 @@ function TablePageView(_ref93) {
       flexDirection: "column",
       gap: 3
     }
-  }, legendRows.map(function (_ref94) {
-    var _ref95 = _slicedToArray(_ref94, 2),
-      abbr = _ref95[0],
-      desc = _ref95[1];
+  }, legendRows.map(function (_ref95) {
+    var _ref96 = _slicedToArray(_ref95, 2),
+      abbr = _ref96[0],
+      desc = _ref96[1];
     return /*#__PURE__*/React.createElement("div", {
       key: abbr,
       style: {
@@ -15514,7 +15671,11 @@ function App() {
         }) || CHIPS[0]).color,
         betResults: liveBetResults,
         stratChips: computeStratChips(nonClosedTracks),
-        landscape: isLandscape
+        landscape: isLandscape,
+        droughts: sess.droughts,
+        spins: sess.spins,
+        showDroughts: settings.showDroughtCounts !== false,
+        headStart: settings.headStartUnseen === true
       }), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
@@ -15960,10 +16121,10 @@ function App() {
       l: "JP Profit",
       v: (outcomes.jackpot.profit * (primaryTrack.config.unit || 1) >= 0 ? "+" : "-") + cur.symbol + Math.abs(outcomes.jackpot.profit * (primaryTrack.config.unit || 1)).toFixed(cur.dec),
       c: outcomes.jackpot.profit >= 0 ? "#4ade80" : "#f87171"
-    }].map(function (_ref96) {
-      var l = _ref96.l,
-        v = _ref96.v,
-        c = _ref96.c;
+    }].map(function (_ref97) {
+      var l = _ref97.l,
+        v = _ref97.v,
+        c = _ref97.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -16045,10 +16206,10 @@ function App() {
       l: "Partial Profit",
       v: outcomes ? signChips(outcomes.partial.profit, primaryTrack.config.unit || 1, currency) : "--",
       c: outcomes && outcomes.partial.profit >= 0 ? "#4ade80" : "#f97316"
-    }].map(function (_ref97) {
-      var l = _ref97.l,
-        v = _ref97.v,
-        c = _ref97.c;
+    }].map(function (_ref98) {
+      var l = _ref98.l,
+        v = _ref98.v,
+        c = _ref98.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -16083,7 +16244,12 @@ function App() {
       trackOverlays: trackOverlays.filter(function (o) {
         return o.id !== primaryTrack.id;
       }),
-      flashNum: flashNum
+      flashNum: flashNum,
+      roulette: sess.roulette,
+      droughts: sess.droughts,
+      spins: sess.spins,
+      showDroughts: settings.showDroughtCounts !== false,
+      headStart: settings.headStartUnseen === true
     }), /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
@@ -16292,8 +16458,8 @@ function App() {
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
 
   // -- Bankroll Edit --
-  function BankrollEdit(_ref98) {
-    var onClose = _ref98.onClose;
+  function BankrollEdit(_ref99) {
+    var onClose = _ref99.onClose;
     var _useState169 = (0, _react.useState)(sess.bankrollCurrent),
       _useState170 = _slicedToArray(_useState169, 2),
       val = _useState170[0],

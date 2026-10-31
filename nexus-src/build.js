@@ -28,6 +28,8 @@ const FILES = [
   'simulation.js',
   // Base UI — depends on constants
   'roulette-bets.mjs',
+  // Number drought count under each number (NumberDrought, displayDrought). Depends on nothing; ui and grids use it.
+  'components/NumberDrought.jsx',
   'components/ui.jsx',
   'components/RouletteIcon.jsx',
   // Grids — depends on engine + constants + ui

@@ -1,7 +1,9 @@
 // -- Number Grids --
-function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOverlays, flashNum}) {
+function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOverlays, flashNum, roulette, droughts, showDroughts, spins, headStart}) {
   const rows = Array.from({length:12}, (_,r) => [r*3+1,r*3+2,r*3+3]);
   const dts = dozenTargets||[0], cts = colTargets||[];
+  // Drought count under every number (NumberDrought). Display only: droughts is read, never written.
+  const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false};
   const pressTimer = React.useRef(null);
   function numCell(val) {
     const isZ = val==="0"||val==="00";
@@ -21,8 +23,9 @@ function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOver
         onTouchStart={()=>{if(onGhost)pressTimer.current=setTimeout(()=>onGhost(val),600);}}
         onTouchEnd={()=>clearTimeout(pressTimer.current)}
         onTouchMove={()=>clearTimeout(pressTimer.current)}
-        style={{padding:"8px 0",borderRadius:7,border:"1px solid "+(isFlash?"#ffffff":cs.bd),background:isFlash?"#ffffff22":cs.bg,color:cs.tx,fontSize:12,fontWeight:800,cursor:"pointer",minHeight:42,transition:"background 0.1s,border 0.1s"}}>
-        <div>{val}</div>
+        style={{padding:"5px 0",borderRadius:7,border:"1px solid "+(isFlash?"#ffffff":cs.bd),background:isFlash?"#ffffff22":cs.bg,color:cs.tx,fontSize:12,fontWeight:800,cursor:"pointer",minHeight:42,transition:"background 0.1s,border 0.1s"}}>
+        <div style={{lineHeight:"14px"}}>{val}</div>
+        <NumberDrought num={val} view={droughtView}/>
         {overlays.length>0 && (
           <div style={{display:"flex",justifyContent:"center",gap:2,marginTop:1}}>
             {overlays.map((o,i) => <div key={i} style={{width:5,height:5,borderRadius:"50%",background:o.color}}/>)}
@@ -35,7 +38,7 @@ function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOver
     <div style={{width:"100%"}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginBottom:4}}>
         {["0","00"].map(v => (
-          <button key={v} onClick={()=>onNumber(v)} style={{padding:"11px 0",borderRadius:8,border:"1px solid #1f2937",background:"#1a0a0a",color:"#6b7280",fontSize:14,fontWeight:800,cursor:"pointer"}}>{v}</button>
+          <button key={v} onClick={()=>onNumber(v)} style={{padding:"7px 0",borderRadius:8,border:"1px solid #1f2937",background:"#1a0a0a",color:"#6b7280",fontSize:14,fontWeight:800,cursor:"pointer"}}><div>{v}</div><NumberDrought num={v} view={droughtView}/></button>
         ))}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:2}}>
