@@ -7,14 +7,27 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
-## [0.52.0] - 2026-10-30
-
 ### Added
 
 - Each dozen and column tile on the drought panel, on the Live page and the Game page, shows six readings at once with no tap. The section's current losing streak is the largest number, with a corner badge for the highest percentile tier it has reached (P25, P50, P75, P95 or P98) and its exact percentile in a small label. Below it: the section's total loss level (TLV) with a small sparkline of TLV since the current losing streak began (the last 50 spins when there is no streak); the average loss level, which is TLV divided by 12 to one decimal, with its tier; the maximum single-number loss level in the section, which is its coldest number, with its single-number tier; the count of the section's numbers at or above their single-number P95; and the TLV's own tier. TLV is the sum of the loss levels of the section's 12 numbers.
 - Tapping a dozen or column tile opens the app's shared modal as a detail view of that section: a TLV chart for the whole session with the current losing streak shaded and reference lines at the TLV P50, P75, P95 and P98; the streak, TLV, average and maximum, each with its exact percentile; the section's 12 numbers with their loss levels and single-number percentiles, coldest first; and the count at or above P95. It closes from the backdrop or its Close button.
 - The percentile set for every bet, every single number and both section distributions is P25, P50, P75, P90, P95 and P98. The generator also records, for both wheels, the TLV distribution of the dozen and the column sections, sampled after every spin of the 1,000 sessions of 1,000,000 spins, and the distribution of the average loss level (TLV / 12, to one decimal). The generator prints its own speed.
 - `nexus-src/src/tlv.js` holds the pure functions for the section readings: the TLV update for one spin, the section TLV, average, maximum and count at P95, the TLV history for the sparkline and the detail chart, and the percentile tier mapping.
+
+### Changed
+
+- The dozen and column cards on the drought panel are replaced by the section tiles described above. The panel is taller: its reserved height is recalculated from the tile's fixed row heights.
+- The Stats page's "Streak percentiles" table gains a P25 column, so it lists P25, P50, P75, P90, P95 and P98.
+- The Game page renders the drought panel from the start, with zero values before the first spin, instead of adding it after the first spin, so nothing below it moves.
+
+### Fixed
+
+- The progression grid's zero row shows the wheel's own zeros. A European wheel shows a single 0 and no 00 cell; it was showing 0 and 00 on both wheels.
+
+## [0.52.0] - 2026-10-30
+
+### Added
+
 - Streak percentiles for every bet, both wheels. `tools/gen-streak-percentiles.mjs` runs a seeded simulation of 1,000 sessions of 1,000,000 spins per wheel and writes `nexus-src/src/streak-percentiles.js`. For each even-money bet, dozen, column, group-bet shape (split, street, corner, six-line, and the basket on American) and single number, it records the streak length at P50, P75, P90, P95 and P98, and the cumulative distribution up to the 99.99% length. A completed losing streak is a run of consecutive spins a bet loses before its next win.
 - `streakPercentile()` in `nexus-src/src/percentile.js` places a current losing streak on that distribution and returns its percentile to one decimal, rounded down.
 - Stats page: a "Streak percentiles" table lists the P50 to P98 streak lengths for every bet on the current wheel, with the simulation size and seed in small print.
@@ -25,15 +38,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ### Changed
 
-- The dozen and column cards on the drought panel are replaced by the section tiles described above. The panel is taller: its reserved height is recalculated from the tile's fixed row heights.
-- The Stats page's "Streak percentiles" table gains a P25 column, so it lists P25, P50, P75, P90, P95 and P98.
-- The Game page renders the drought panel from the start, with zero values before the first spin, instead of adding it after the first spin, so nothing below it moves.
 - On Custom Bet tracks, the Full Table column headed "Invested" is headed "Bankroll needed", and the legend says it is the cumulative stake needed to play up to that level. The legend for "Bet" on these tracks says it covers all spots this spin. Other track types keep their existing headings and legend.
 - The selected Custom Bet level is kept in the app, beside the selected track. Choosing a different track, or a track being selected from the Game tab, clears the level pick back to the track's current level.
-
-### Fixed
-
-- The progression grid's zero row shows the wheel's own zeros. A European wheel shows a single 0 and no 00 cell; it was showing 0 and 00 on both wheels.
 
 ## [0.51.0] - 2026-10-30
 
