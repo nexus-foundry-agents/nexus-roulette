@@ -17,7 +17,7 @@ function CashOutModal({maxAmount, currency, currentBankroll, onCashOut, onClose}
         <button onClick={onClose} style={{background:"transparent",border:"none",color:"#64748b",fontSize:22,cursor:"pointer"}}>×</button>
       </div>
 
-      <MoneyInput value={amount} onChange={v=>setAmount(Math.min(v,maxAmount))} currCode={currency} label="Cash Out Amount"/>
+      <MoneyInput value={amount} onChange={setAmount} currCode={currency} label="Cash Out Amount" range={{min:0.01, max:maxAmount, noun:"cash out"}}/>
 
       <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:12}}>
         {[25,50,100,200,500].filter(v=>v<=maxAmount).map(v => (

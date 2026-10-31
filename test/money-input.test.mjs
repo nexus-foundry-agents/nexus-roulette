@@ -285,7 +285,7 @@ test('MoneyInput rounds nothing: its commit path has no Math.round', async () =>
   assert.doesNotMatch(body, /Math\.round/);
 });
 
-test('every MoneyInput caller is named and keeps the default range: none passes a range of its own', async () => {
+test('every MoneyInput caller is named and states its range: only Cash Out passes one (0.01 to the bankroll)', async () => {
   const expected = {
     'components/modals.jsx': 4, // Cash Out, Starting Bankroll, Default Buy In (onboarding), Buy In amount
     'components/SecondaryPages.jsx': 1, // Default Buy In (settings)
@@ -303,7 +303,10 @@ test('every MoneyInput caller is named and keeps the default range: none passes 
     }
   }
   assert.deepEqual(found, expected, 'the callers are the ones named here; a new caller must state its range');
-  assert.deepEqual(withRange, [], 'no caller passes a range, so each keeps the default');
+  assert.equal(withRange.length, 1, 'only Cash Out passes a range');
+  assert.ok(withRange[0].startsWith('components/modals.jsx: '), 'the one ranged caller is in modals.jsx');
+  assert.ok(withRange[0].includes('label="Cash Out Amount" range={{min:0.01, max:maxAmount, noun:"cash out"}}'), 'Cash Out passes 0.01 to the bankroll');
+  assert.ok(!withRange[0].includes('Math.min'), 'Cash Out never clamps what was typed');
 });
 
 test('the Table Limits copy states what the Min Bet does today, and drops the stale claims', async () => {
@@ -319,4 +322,12 @@ test('build.js registers money-parse.js before both of its users', async () => {
   assert.ok(at > -1, 'registered in FILES');
   assert.ok(at < build.indexOf("'components/ui.jsx'"), 'before ui.jsx (MoneyInput)');
   assert.ok(at < build.indexOf("'components/BaseBetInput.jsx'"), 'before BaseBetInput.jsx');
+});
+
+test('Cash Out refuses an amount above the bankroll with its reason, and never clamps it', async () => {
+  const { ctx } = await load();
+  const range = { min: 0.01, max: 250, noun: 'cash out' };
+  assert.deepEqual(plain(ctx.parseMoneyAmount('250', 'USD', range)), { ok: true, value: 250 });
+  assert.deepEqual(plain(ctx.parseMoneyAmount('300', 'USD', range)), { ok: false, reason: 'The highest cash out is $250.' });
+  assert.deepEqual(plain(ctx.parseMoneyAmount('0', 'USD', range)), { ok: false, reason: 'The lowest cash out is $0.01.' });
 });
