@@ -105,7 +105,7 @@ function computeMartingaleTable(maxChips) {
 }
 
 function defaultSettings() {
-  return{ currency:"USD", defaultBuyIn:100, onboarded:false, vibration:true, tableMinBet:10, tableMaxBet:500, tableMaxTotal:10000 };
+  return{ currency:"USD", defaultBuyIn:100, onboarded:false, vibration:true, showDroughtCounts:true, headStartUnseen:false, tableMinBet:10, tableMaxBet:500, tableMaxTotal:10000 };
 }
 
 // Standalone keeps the historical keys. Embedded storage stays closed until the authenticated

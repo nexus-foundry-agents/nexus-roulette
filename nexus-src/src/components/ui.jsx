@@ -145,12 +145,14 @@ function SessionClock({startedAt, endedAt, style, pauseOffset}) {
 }
 
 // -- Roulette Table Board --
-function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape}) {
+function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart}) {
   const isAmerican = roulette === "american";
   const sb = stratBets || {};
   const bb = boardBets || {};
   const br = betResults || {};
   const sChipsMap = stratChips || {};
+  // Drought count under every number (NumberDrought). Display only: droughts is read, never written.
+  const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false};
   const canBet = !!onBet && !spinning && !betResults;
   const BOARD_ROWS = ROULETTE_BOARD_ROWS;
   const g = 2;
@@ -189,6 +191,9 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
   }
 
   function Mkr(){return React.createElement("div",{style:{position:"absolute",top:-5,right:-3,width:12,height:12,borderRadius:"50%",background:"#fbbf24",border:"2px solid #92400e",boxShadow:"0 0 6px #fbbf24",animation:"pulse 1s infinite"}});}
+
+  // A number and its drought count, stacked. The count's slot is always reserved (NumberDrought).
+  function numberFace(label){return React.createElement("div",{style:{display:"flex",flexDirection:"column",alignItems:"center"}},label,React.createElement(NumberDrought,{num:label,view:droughtView}));}
 
   var chipSize = landscape ? 24 : 16;
   var chipFs = landscape ? 11 : 8;
@@ -295,7 +300,7 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
     }
 
     return React.createElement("div",{key:numStr,onClick:handleClick,style:{...numStyle(num,isZero),cursor:canBet?"pointer":"default",border:betBorder||numStyle(num,isZero).border}},
-      numStr,
+      numberFace(numStr),
       winStr===numStr&&!spinning&&React.createElement(Mkr),
       sChips&&React.createElement(StratChipBadge,{chips:sChips}),
       bb[betKey]&&React.createElement(BetChip,{amount:bb[betKey],posKey:betKey})
@@ -361,10 +366,10 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
         <div style={{display:"flex",flexDirection:"column",gap:g,width:zeroW,flexShrink:0}}>
           {React.createElement("div",{key:"0",onClick:function(e){if(!canBet)return;var rect=e.currentTarget.getBoundingClientRect();var pX=(e.clientX-rect.left)/rect.width,pY=(e.clientY-rect.top)/rect.height;
             var bet=zeroCellBet("0",pX,pY,isAmerican);onBet(bet.type,bet.target);
-          },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["0"]?"2px solid #c084fc":(winStr==="0"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="0"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="0"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},"0",winStr==="0"&&!spinning&&React.createElement(Mkr),bb["s:0"]&&React.createElement(BetChip,{amount:bb["s:0"],posKey:"s:0"}))}
+          },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["0"]?"2px solid #c084fc":(winStr==="0"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="0"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="0"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("0"),winStr==="0"&&!spinning&&React.createElement(Mkr),bb["s:0"]&&React.createElement(BetChip,{amount:bb["s:0"],posKey:"s:0"}))}
           {isAmerican&&React.createElement("div",{key:"00",onClick:function(e){if(!canBet)return;var rect=e.currentTarget.getBoundingClientRect();var pX=(e.clientX-rect.left)/rect.width,pY=(e.clientY-rect.top)/rect.height;
             var bet=zeroCellBet("00",pX,pY,isAmerican);onBet(bet.type,bet.target);
-          },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["00"]?"2px solid #c084fc":(winStr==="00"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="00"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="00"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},"00",winStr==="00"&&!spinning&&React.createElement(Mkr),bb["s:00"]&&React.createElement(BetChip,{amount:bb["s:00"],posKey:"s:00"}))}
+          },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["00"]?"2px solid #c084fc":(winStr==="00"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="00"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="00"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("00"),winStr==="00"&&!spinning&&React.createElement(Mkr),bb["s:00"]&&React.createElement(BetChip,{amount:bb["s:00"],posKey:"s:00"}))}
         </div>
         <div style={{position:"relative",flex:1,minWidth:0}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gridTemplateRows:"repeat(3,"+cellH+"px)",gap:g}}>
