@@ -8,15 +8,19 @@ import {
   CASINO_BRIDGE_REQUEST,
   CASINO_BRIDGE_RESPONSE,
   CASINO_SHELL_ORIGIN,
+  openCasinoReadBoard,
   recordingForMode,
-  nextSequenceForSession,
-  isRecordingDisabledResult,
-  sendCasinoSpinAndPause,
-  sendCasinoSpinUntilReconciled,
   mergeWagerSummaries,
   summarizeManualWagers,
   summarizeTrackWagers,
 } from '../nexus-src/src/casino-recording.mjs';
+import {
+  createSpinQueue,
+  isRecordingDisabledResult,
+  nextSequenceForSession,
+  sendCasinoSpinAndPause,
+  sendCasinoSpinUntilReconciled,
+} from '../nexus-src/src/casino-spin-queue.mjs';
 
 const covers = (type, target) => {
   if(type === 'straight') return [String(target)];
@@ -175,26 +179,62 @@ test('the built app wires both play modes to recording after splitting the legac
   assert.ok(build.indexOf("'casino-sync.mjs'") < build.indexOf("'App.jsx'"));
 });
 
-test('the first spin waits for settings, sequences are one-based, and inactive modes auto-pause', async () => {
-  const source = await readFile(new URL('../nexus-src/src/casino-recording.mjs', import.meta.url), 'utf8');
-  assert.match(source, /const cursor=\{sessionId:null,next:1\}/);
-  assert.match(source, /await refresh\(\)/);
-  assert.doesNotMatch(source, /if\(availability!==['"]on['"]\) return/);
-  assert.match(source, /!active&&live\.status==='running'/);
-  assert.match(source, /active&&live\.status==='paused'&&pauseOwner\.current==='auto'/);
-  assert.match(source, /pause:function\(\)\{void pauseImmediately\('manual'\)/);
-  assert.match(source, /pauseOwner\.current=owner;\s*const task=queue\.current\.then/);
-  assert.match(source, /pauseRequested:function\(\)\s*\{\s*return pauseOwner\.current!=='none';\s*\}/);
-  assert.match(source, /head\.pauseAfter\s*\?\s*await sendCasinoSpinAndPause\(head\.payload/);
-  assert.match(source, /if\(!ok\)pauseOwner\.current='none'/);
-  assert.match(source, /recorder\.current\.enqueue\(spin\)/);
+// The settings wait, the auto-pause on leaving a mode and the pause intent are behaviour checks against the
+// hook in test/recording-queue.test.mjs. This one checks the queue's numbering and its refusal to send early.
+test('a spin is numbered on a new session from one, and is never sent before its session exists', async () => {
+  const sent = [];
+  const resolutions = [{ ok: false, error: 'network down' }, { ok: true, session: { id: 'fresh', status: 'running', spins: 0 } }];
+  const queue = createSpinQueue({
+    resolveSession: async () => resolutions.shift(),
+    send: async (_op, payload) => {
+      sent.push(payload);
+      return { ok: true, status: 201, body: { recorded: true, session: { id: 'fresh', status: 'running', spins: 1 } } };
+    },
+    wait: async () => {},
+    pauseRequested: () => false,
+    report: () => {},
+    confirmed: () => {},
+    recordingOff: () => {},
+    reread: async () => ({ ok: true, session: null }),
+    ended: () => {},
+    drained: () => {},
+    schedule: () => () => {},
+  });
+  queue.enqueue({ segment: '17', staked: 5, returned: 0, watched: false });
+  assert.equal(await queue.flush(), false);
+  assert.equal(sent.length, 0, 'a spin was sent before its session existed');
+  assert.equal(await queue.flush(), true);
+  assert.deepEqual(sent.map((payload) => [payload.sessionId, payload.spin.sequence]), [['fresh', 1]]);
 });
 
-test('the handshake is pinned to the Casino parent, and no request broadcasts play data', async () => {
-  const source = await readFile(new URL('../nexus-src/src/casino-recording.mjs', import.meta.url), 'utf8');
-  assert.match(source, /event\.origin !== CASINO_SHELL_ORIGIN \|\| event\.source !== window\.parent/);
-  assert.match(source, /window\.parent\.postMessage\([^\n]+,CASINO_SHELL_ORIGIN\)/);
-  assert.doesNotMatch(source, /postMessage\([^\n]+,[ ]*['"]\*['"]\)/);
+test('the bridge answers only the Casino shell, and every request is addressed to its origin', async (t) => {
+  const posted = [];
+  const shell = { postMessage: (message, targetOrigin) => { posted.push({ message, targetOrigin }); } };
+  const listeners = [];
+  globalThis.window = {
+    parent: shell,
+    addEventListener(type, listener) { if (type === 'message') listeners.push(listener); },
+  };
+  t.after(() => { delete globalThis.window; });
+  const deliver = (event) => listeners.slice().forEach((listener) => listener(event));
+  const hello = { kind: CASINO_BRIDGE_HELLO, gameId: 'roulette' };
+
+  // A hello from another origin, or from another window, does not make the bridge ready.
+  deliver({ origin: 'https://example.invalid', source: shell, data: hello });
+  deliver({ origin: CASINO_SHELL_ORIGIN, source: { postMessage() {} }, data: hello });
+  assert.equal((await openCasinoReadBoard('american')).error, 'not-framed');
+  assert.equal(posted.length, 0, 'a request went out before a genuine hello');
+
+  deliver({ origin: CASINO_SHELL_ORIGIN, source: shell, data: hello });
+  const answer = openCasinoReadBoard('european');
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].targetOrigin, CASINO_SHELL_ORIGIN, 'the request was not addressed to the shell origin');
+
+  // An answer from another origin is ignored. The genuine answer settles the request.
+  const { id } = posted[0].message;
+  deliver({ origin: 'https://example.invalid', source: shell, data: { kind: CASINO_BRIDGE_RESPONSE, id, ok: true, status: 200, body: {} } });
+  deliver({ origin: CASINO_SHELL_ORIGIN, source: shell, data: { kind: CASINO_BRIDGE_RESPONSE, id, ok: true, status: 200, body: { genuine: true } } });
+  assert.deepEqual(await answer, { ok: true, status: 200, body: { genuine: true }, error: null });
 });
 
 test('embedded notification permission routes to a top-level Roulette surface', async () => {
