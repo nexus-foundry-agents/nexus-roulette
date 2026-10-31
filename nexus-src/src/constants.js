@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.58.0";
+const APP_VERSION = "0.59.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,10 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.59.0", date:"Oct 31, 2026", title:"Money Fields Tell You Why", changes:[
+    "Bankroll, buy-in, cash-out and base bet fields keep exactly what you type",
+    "If an amount can't be used, the field says why and keeps your previous amount; nothing is rounded or cut off"
+  ]},
   { v:"0.58.0", date:"Oct 31, 2026", title:"Exact Base Bets and a Sessions Browser", changes:[
     "Set your exact base bet on any track: tap 0.25, 0.50, 1, 2, 5 or 10, or type any amount up to 10,000",
     "Changing only the base on a track keeps its level, bets and results so far",

@@ -7,46 +7,14 @@
 // P&L with rebaseTrackPnl before it saves. Everything below BaseBetInput except the component is pure.
 
 const BASE_MAX = 10000;      // the highest base, in the session's currency; the field states it
-const BASE_DECIMALS = 2;     // the most decimal places a typed base takes
 const BASE_PREVIEW_H = 180;  // the preview box has this height whether or not it has rows (rule 82)
 const BASE_PREVIEW_GRID = "34px 1fr 1fr 1fr";
 
 // The lowest base in a currency: 0.01, or 1 where the currency has no minor unit (JPY, KRW, ARS).
 function baseFloor(cur) { return cur.dec === 0 ? 1 : 0.01; }
 
-// Reads a typed base. Returns {ok:true, value} or {ok:false, reason}.
-//   A currency symbol at the start or the end is ignored; the session's own symbol is tried first.
-//   Commas are read only as thousands separators (1,000 or 10,000.50), never as a decimal point.
-//   Up to 2 decimal places. A currency with no minor unit takes whole amounts only.
-function parseBaseAmount(text, currCode) {
-  const cur = getCurrency(currCode);
-  const floorText = cur.symbol + baseFloor(cur).toFixed(cur.dec);
-  const topText = cur.symbol + "10,000";
-  const fail = reason => ({ok: false, reason});
-  let s = String(text == null ? "" : text).trim();
-  const symbols = [cur.symbol, ...Object.values(CURRENCIES).map(c => c.symbol)]
-    .filter((sym, i, all) => all.indexOf(sym) === i)
-    .sort((a, b) => b.length - a.length);
-  for(const sym of symbols) {
-    if(s.startsWith(sym)) { s = s.slice(sym.length).trim(); break; }
-    if(s.endsWith(sym)) { s = s.slice(0, s.length - sym.length).trim(); break; }
-  }
-  if(s === "") return fail("Type an amount from " + floorText + " to " + topText + ".");
-  if(/^[-−]/.test(s)) return fail("Negative amounts are not allowed.");
-  if(/[^0-9.,]/.test(s)) return fail("Use digits, one decimal point and commas (for thousands) only.");
-  if(s.split(".").length > 2) return fail("Only one decimal point is allowed.");
-  const m = /^(\d{1,3}(?:,\d{3})+|\d*)(?:\.(\d*))?$/.exec(s);
-  if(!m) return fail("Commas only separate thousands, as in 1,000.");
-  const whole = m[1].replace(/,/g, "");
-  const frac = m[2] || "";
-  if(whole === "" && frac === "") return fail("Type an amount from " + floorText + " to " + topText + ".");
-  if(frac.length > BASE_DECIMALS) return fail("Up to " + BASE_DECIMALS + " decimal places.");
-  if(cur.dec === 0 && /[1-9]/.test(frac)) return fail(cur.name + " has no cents: enter a whole amount.");
-  const value = Number((whole || "0") + "." + (frac || "0"));
-  if(value < baseFloor(cur)) return fail("The lowest base is " + floorText + ".");
-  if(value > BASE_MAX) return fail("The highest base is " + topText + ".");
-  return {ok: true, value};
-}
+// The base's range for the shared parser (money-parse.js): baseFloor to BASE_MAX in the session's currency.
+function baseRange(cur) { return {min: baseFloor(cur), max: BASE_MAX, noun: "base"}; }
 
 // Whether a base sits under the table minimum. The minimum falls back to 1, as the rest of the app does. It never blocks.
 function baseBelowTableMin(unit, tableMinBet) { return unit < (tableMinBet || 1); }
@@ -85,7 +53,7 @@ function BaseBetInput({type, config, currency, tableMinBet, onChange}) {
 
   function apply(v) { setError(""); onChange(v); }
   function commit(str) {
-    const r = parseBaseAmount(str, currency);
+    const r = parseMoneyAmount(str, currency, baseRange(cur));
     if(r.ok) apply(r.value);
     else setError(r.reason);
   }
