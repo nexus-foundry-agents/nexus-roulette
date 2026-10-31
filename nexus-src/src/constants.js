@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.65.0";
+const APP_VERSION = "0.66.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,10 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.66.0", date:"Oct 31, 2026", title:"Undo Keeps Your Edits", changes:[
+    "Undo is refused, with a reason, if you edited or parked a track after the last spin, so an edit is never silently lost",
+    "Fixing a number from before you parked a track is refused with a reason, so the parked track's record stays right"
+  ]},
   { v:"0.65.0", date:"Oct 31, 2026", title:"No Spin Lost on a Casino Blip", changes:[
     "When the Casino connection blips, new spins wait in line and send in order, instead of being dropped",
     "If a spin cannot be saved to Casino, the screen says so with a count; nothing is lost silently",

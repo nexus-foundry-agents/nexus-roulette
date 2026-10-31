@@ -1,1 +1,1 @@
-{"version":"0.65.0","date":"2026-10-31","notes":"If the Casino connection blips, spins wait in line and send in order; nothing is dropped without a count."}
+{"version":"0.66.0","date":"2026-10-31","notes":"Undo no longer quietly undoes a track edit or park; fixing a spin from before a park is refused with a reason."}

@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-10-31
+
 ### Changed
 
 - A correction to a spin played before a track was parked with its Park button is refused. The number picker shows "This spin was played before a track was parked. Corrections can only change spins after the last park.", the same kind of refusal as a spin before an edit, with its own note, and nothing changes. Corrections to spins from the park onward are unchanged.
