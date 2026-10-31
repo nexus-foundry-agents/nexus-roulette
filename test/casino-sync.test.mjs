@@ -174,7 +174,7 @@ test('the app wires visible local-first account sync and a reset tombstone', asy
   assert.match(sync, /scopeFromResponse\(result\)/);
   assert.match(sync, /beginRouletteAccountStorage\(scope\)/);
   assert.match(sync, /const local=rouletteSnapshot\(scopedApp,meta\.current\)/);
-  assert.match(sync, /applySnapshot\(local\)/);
+  assert.match(sync, /applySnapshot\(withWindowEdit\(local,local\.resetAt\)\)/);
   assert.match(sync, /return \{status,problem,deviceSaved\}/);
   assert.doesNotMatch(sync, /applySnapshot\(next\)/);
   assert.match(storage, /base\+'\:account\:'\+rouletteAccountStorageScope/);

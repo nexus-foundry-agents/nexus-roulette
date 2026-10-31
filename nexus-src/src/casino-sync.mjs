@@ -125,6 +125,69 @@ export function mergeRouletteSnapshots(leftValue,rightValue){
   });
 }
 
+// Changes made before hydration finishes (CASINO-SYNC-HYDRATE-WINDOW). Embedded storage stays closed until
+// the shell opens the account scope, so such a change starts from the mount state (factory defaults), not
+// from the device copy. Only the fields that differ from the mount state are the change, and only those
+// fields are applied over the merged account state: settings field by field, savedSessions by union, and a
+// session by its modified stamp. A session takes the active slot only when it is newer than an active
+// session that holds work; the session it displaces is kept in saved sessions. Nothing is deduplicated.
+function sessionHasWork(session){
+  return syncObject(session)&&!!((session.spins||[]).length||(session.tracks||[]).length||
+    (session.buyIns||[]).length||(session.cashOuts||[]).length||session.sessionStartedAt);
+}
+
+function changedFields(next,base){
+  const after=syncObject(next)?next:{},before=syncObject(base)?base:{};
+  return Object.keys(after).concat(Object.keys(before)).filter(function(key,index,all){
+    return all.indexOf(key)===index&&canonicalSyncString(after[key])!==canonicalSyncString(before[key]);
+  });
+}
+
+function placeEditedSession(appState,key,edited){
+  if(!syncObject(edited))return;
+  const current=appState[key];
+  if(syncObject(current)&&current.id===edited.id){
+    if(sessionModified(edited)>=sessionModified(current))appState[key]=edited;
+    return;
+  }
+  let keep=edited;
+  if(!sessionHasWork(current)||sessionModified(edited)>sessionModified(current)){
+    keep=sessionHasWork(current)?current:null;
+    appState[key]=edited;
+  }
+  if(keep)appState.savedSessions=mergeSavedSessions(appState.savedSessions,[keep]);
+}
+
+function editedAppState(base,mountAppState,edit){
+  const next={...base};
+  changedFields(edit,mountAppState).forEach(function(key){
+    if(key==='settings'){
+      const editSettings=syncObject(edit.settings)?edit.settings:{};
+      const settings={...(syncObject(next.settings)?next.settings:{})};
+      changedFields(editSettings,mountAppState.settings).forEach(function(field){settings[field]=editSettings[field];});
+      next.settings=settings;
+    }else if(key==='savedSessions'){
+      next.savedSessions=mergeSavedSessions(next.savedSessions,edit.savedSessions);
+    }else if(key==='currentSession'||key==='gameSession'){
+      placeEditedSession(next,key,edit[key]);
+    }else if(!(key in next)){
+      next[key]=edit[key];
+    }
+  });
+  return next;
+}
+
+// The pre-hydration change applied over a snapshot. A snapshot that adopted an account reset this device had not
+// observed is returned unchanged: an earlier offline edit cannot resurrect what the reset removed.
+function snapshotWithEdit(snapshot,mountAppState,edit,deviceResetAt){
+  if(!edit||snapshot.resetAt>deviceResetAt||!changedFields(edit.state,mountAppState).length)return snapshot;
+  const stamp=nextLocalSyncMeta({modifiedAt:snapshot.modifiedAt,resetAt:snapshot.resetAt},edit.at);
+  return rouletteSnapshot(editedAppState(snapshot.appState,mountAppState,edit.state),{
+    modifiedAt:stamp.modifiedAt,
+    resetAt:snapshot.resetAt,
+  });
+}
+
 export function conflictCandidate(queued,remote,latestLocal){
   return mergeRouletteSnapshots(latestLocal||queued,remote);
 }
@@ -153,7 +216,12 @@ export function useCasinoAccountSync(appState,setAppState){
   const meta=React.useRef(readSyncMeta(appState)),applyHash=React.useRef(null);
   const lastLocalHash=React.useRef(JSON.stringify(appState));
   const timer=React.useRef(null),serial=React.useRef(Promise.resolve()),dirty=React.useRef(0);
+  const mountState=React.useRef(appState),windowEdit=React.useRef(null);
   appRef.current=appState;
+  // The change made before hydration finished, applied over a snapshot that hydration is about to adopt.
+  function withWindowEdit(snapshot,deviceResetAt){
+    return snapshotWithEdit(snapshot,mountState.current,windowEdit.current,deviceResetAt);
+  }
 
   const applySnapshot=React.useCallback(function(snapshot){
     const hash=JSON.stringify(snapshot.appState);
@@ -229,7 +297,7 @@ export function useCasinoAccountSync(appState,setAppState){
           meta.current=readSyncMeta(scopedApp);
           const local=rouletteSnapshot(scopedApp,meta.current);
           enableRouletteAccountStorage();hydrated.current=true;
-          const saved=applySnapshot(local);
+          const saved=applySnapshot(withWindowEdit(local,local.resetAt));
           setStatus('unavailable');setProblem(saved
             ? 'Casino cloud sync is unavailable. Changes remain saved for this account on this device.'
             : 'Casino cloud sync and browser storage are unavailable. Changes are not saved.');
@@ -248,31 +316,40 @@ export function useCasinoAccountSync(appState,setAppState){
       const local=rouletteSnapshot(scopedApp,meta.current);
       const raw=result.body&&result.body.state;
       if(raw===null){
-        enableRouletteAccountStorage();hydrated.current=true;applySnapshot(local);queuePush(local);return;
+        const first=withWindowEdit(local,local.resetAt);
+        enableRouletteAccountStorage();hydrated.current=true;applySnapshot(first);queuePush(first);return;
       }
       const remote=stateFromResponse(result);
       if(!remote){
-        enableRouletteAccountStorage();hydrated.current=true;applySnapshot(local);
+        enableRouletteAccountStorage();hydrated.current=true;applySnapshot(withWindowEdit(local,local.resetAt));
         setStatus('unavailable');setProblem('Casino account state uses an unsupported format.');return;
       }
       revision.current=remote.revision;
       const merged=mergeRouletteSnapshots(local,remote.data);
       if(!merged){
-        enableRouletteAccountStorage();hydrated.current=true;applySnapshot(local);
+        enableRouletteAccountStorage();hydrated.current=true;applySnapshot(withWindowEdit(local,local.resetAt));
         setStatus('unavailable');setProblem('Casino account state could not be merged.');return;
       }
       enableRouletteAccountStorage();
       hydrated.current=true;
-      applySnapshot(merged);
-      if(JSON.stringify(merged)!==JSON.stringify(remote.data))queuePush(merged);
+      const adopted=withWindowEdit(merged,local.resetAt);
+      applySnapshot(adopted);
+      if(JSON.stringify(adopted)!==JSON.stringify(remote.data))queuePush(adopted);
       else {setStatus('synced');setProblem(null);}
     })();
     return function(){cancelled=true;if(timer.current)clearTimeout(timer.current);};
   },[applySnapshot,queuePush]);
 
   useEffect(function(){
-    if(!hydrated.current)return;
     const hash=JSON.stringify(appState);
+    if(!hydrated.current){
+      // A change before hydration is kept, not dropped: hydration applies it over the loaded account state.
+      if(lastLocalHash.current===hash)return;
+      lastLocalHash.current=hash;
+      ++dirty.current;
+      windowEdit.current={state:appState,at:Date.now()};
+      return;
+    }
     if(applyHash.current===hash){applyHash.current=null;lastLocalHash.current=hash;return;}
     if(lastLocalHash.current===hash)return;
     lastLocalHash.current=hash;
