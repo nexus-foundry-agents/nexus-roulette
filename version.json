@@ -1,1 +1,1 @@
-{"version":"0.54.0","date":"2026-10-31","notes":"Subtle percentile outlines on every board number: green from P75, yellow from P95, red from P98."}
+{"version":"0.55.0","date":"2026-10-31","notes":"Record where you play on every session: casino, machine or table, and dealer, with spins logged per venue."}

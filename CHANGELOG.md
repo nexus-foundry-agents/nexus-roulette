@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-10-31
+
 ### Added
 
 - A live session can record its venue: the casino, and either a machine (maker, model and version) or a table (table label and dealer). Every field is optional, and a session without a venue behaves exactly as before, including sessions saved by earlier versions.
