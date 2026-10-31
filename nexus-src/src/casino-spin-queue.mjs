@@ -14,6 +14,32 @@ const PAIR_RETRY_COPY = 'Casino has not confirmed the spin-and-pause yet. Retryi
 
 export const retryDelay = (milliseconds) => new Promise(function(resolve){ setTimeout(resolve,milliseconds); });
 
+// The request id names one spin on every retry, so it must differ between spins. randomUUID needs a secure context.
+// Without it the id is read from getRandomValues in the same UUID shape. Without that too, it is the time and a
+// counter: unique within a page, and between pages only by the time.
+let requestIdCounter = 0;
+function uuidFromHex(hex) {
+  return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20,32);
+}
+export function newRequestId() {
+  const source = typeof crypto !== 'undefined' ? crypto : null;
+  if(source && typeof source.randomUUID === 'function') return source.randomUUID();
+  if(source && typeof source.getRandomValues === 'function') {
+    try {
+      const bytes = source.getRandomValues(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      return uuidFromHex(Array.from(bytes, function(byte){ return byte.toString(16).padStart(2,'0'); }).join(''));
+    } catch(_error) {
+      // Fall through to the time and a counter.
+    }
+  }
+  requestIdCounter += 1;
+  const count = requestIdCounter.toString(16).padStart(8,'0').slice(-8);
+  const time = Date.now().toString(16).padStart(12,'0').slice(-12);
+  return count+'-0000-4000-8000-'+time;
+}
+
 /**
  * Keep one idempotent spin at the head of the queue until the server gives a definitive answer.
  * A timeout or 5xx can happen after the database commit, so the retry MUST carry the identical
@@ -240,7 +266,7 @@ export function createSpinQueue(deps) {
     // A new spin is the next action, so the line about earlier drops gives way to the queue's own status.
     notice=null;
     entries.push({
-      requestId:crypto.randomUUID(),
+      requestId:newRequestId(),
       spin:{...spin,net:spin.returned-spin.staked},
       sessionId:null,sequence:null,
       pauseAfter:false,pauseSent:false,ambiguous:false,refusals:0,
