@@ -336,10 +336,13 @@ function spinCorrectionBlockAt(sess, index, replayed) {
 
 // Undo last spin restores the session as it was before the last tapped spin (prevSess). Anything recorded after that spin
 // would go with it, so Undo is refused for each kind, with its reason: a track edit or park (a boundary above the spin count
-// prevSess holds), money that moved (a buy-in, cash-out, bankroll edit or currency conversion), and a spin recorded after it
-// (a ghost spin, or a spin no track settled). Returns the reason, or null when Undo may run (and when there is nothing to undo).
+// prevSess holds), money that moved (a buy-in, cash-out, bankroll edit or currency conversion), an abandon (Abandon
+// Progression, which moves a track's P&L and writes a record into its bets, so the money check cannot see it), and a spin
+// recorded after it (a ghost spin, or a spin no track settled). Returns the reason, or null when Undo may run (and when there
+// is nothing to undo).
 const UNDO_BLOCK_REASON = "Undo is off: a track was edited or parked after the spin it would reverse, and Undo would drop that change.";
 const UNDO_MONEY_REASON = "Undo is off after a buy-in, cash-out or bankroll change. Fix the number instead.";
+const UNDO_ABANDON_REASON = "Undo is off after a track was abandoned. Fix the number instead.";
 const UNDO_SPIN_REASON = "Undo is off after a ghost spin or an untracked spin. Fix the number instead.";
 // The money records a spin never changes, so a difference from prevSess is money that moved after the spin. Compared by
 // value, not by spin index: Clear numbers keeps the money and its spin indices and resets only the spin count.
@@ -348,6 +351,9 @@ function undoBlockReason(sess, prevSess) {
   if(!prevSess) return null;
   if(Math.max(lastEditSpin(sess), lastParkSpin(sess)) > prevSess.spins.length) return UNDO_BLOCK_REASON;
   if(MONEY_RECORD_KEYS.some(k => !sameValue(sess[k], prevSess[k]))) return UNDO_MONEY_REASON;
+  // An abandon is a bets record with type "abandon" (it has no spin index). An abandon recorded after the spin is one more here.
+  const abandons = s => (s.tracks || []).reduce((n, t) => n + (t.bets || []).filter(b => b.type === "abandon").length, 0);
+  if(abandons(sess) > abandons(prevSess)) return UNDO_ABANDON_REASON;
   // A tapped spin adds exactly one spin to prevSess, so any spin beyond that was recorded after it.
   if((sess.spins || []).length > prevSess.spins.length + 1) return UNDO_SPIN_REASON;
   return null;
