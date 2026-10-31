@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-10-31
+
 ### Added
 
 - Real vs simulated (F12): a Real vs simulated button on the Stats page opens a sheet that compares what was logged at each casino, machine or table, and dealer with the simulated wheel. For the chosen venue it shows the spins observed, a number grid of observed counts against a simulated reference (the spins on that wheel divided by its pockets), and a dozen and column table with hits, the reference hits, the longest completed losing streak and its percentile against the simulated streak distribution in `nexus-src/src/streak-percentiles.js`. A completed losing streak is consecutive spins without a hit, ended by a hit, counted within one session and, for a table, within one dealer's spins; a streak still running at the end is not counted. The venue picker offers casino, then machine or table, then dealer, and lists only the values logged sessions hold. A venue with fewer than 100 spins says how many were logged. The logic is pure, in `nexus-src/src/real-vs-sim.js`; the sheet is `nexus-src/src/components/RealVsSimPage.jsx`, mounted from `nexus-src/src/components/SecondaryPages.jsx`; the tests are in `test/real-vs-sim.test.mjs`.
