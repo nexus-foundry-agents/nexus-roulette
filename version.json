@@ -1,1 +1,1 @@
-{"version":"0.70.0","date":"2026-10-31","notes":"The photo review says which provider read the board, for example Google Gemini."}
+{"version":"0.71.0","date":"2026-10-31","notes":"Undo only ever applies to the session it came from; resuming, importing or switching modes never brings back an old one."}

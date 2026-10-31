@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.71.0] - 2026-10-31
+
 ### Fixed
 
 - Undo last spin is offered only while the session and mode it was taken from are still current. The snapshot now records the session id and the mode, and Undo reads as unavailable once either differs. Resuming a saved session, a JSON import, a Game/Live mode switch and a Restart Onboarding that changes the wheel no longer leave an Undo that restores the replaced session. A mode switch also drops the snapshot for good. The snapshot is held as `undoBind` (with its session id and mode) in `nexus-src/src/App.jsx`, and `prevSessState` is that snapshot only while it matches the current session and mode.
