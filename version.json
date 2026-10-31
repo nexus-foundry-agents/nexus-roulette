@@ -1,1 +1,1 @@
-{"version":"0.74.0","date":"2026-10-31","notes":"Restarting setup and choosing No minimum now really clears your table minimum."}
+{"version":"0.75.0","date":"2026-10-31","notes":"Automatic pause and resume no longer retry endlessly; every Casino call shows its error instead of hanging."}

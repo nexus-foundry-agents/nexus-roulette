@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-10-31
+
 ### Fixed
 
 - Automatic pause and resume stop retrying on every render (CASINO-AUTO-RETRY-LOOP). The automatic pause the Game or Live view makes when the mode changes, the one it makes when the page opens, and the automatic resume made on return to a mode each try once. A refusal or a throw is not re-armed by renders: the effect in `nexus-src/src/casino-recording.mjs` no longer depends on the one-second tick, and a halt stops the automatic attempts. The halt ends at the next user action (Pause, Resume or Stop) or the next spin. A spin makes at most one automatic attempt before it is queued. The problem line says so: "Casino did not pause the session. It will try again at your next spin." and, for a resume, "Casino did not resume the session. It will try again at your next spin."
