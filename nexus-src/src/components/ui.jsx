@@ -135,7 +135,9 @@ function SessionClock({startedAt, endedAt, style, pauseOffset}) {
 }
 
 // -- Roulette Table Board --
-function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows}) {
+// pickNumbers: the board is picking a hit, not placing a bet, so a tap anywhere in a number's square is that number
+// (the counter under the number sits in the edge zone, which would otherwise read as a split or corner).
+function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows, pickNumbers}) {
   const isAmerican = roulette === "american";
   const sb = stratBets || {};
   const bb = boardBets || {};
@@ -274,6 +276,7 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
 
     function handleClick(e){
       if(!canBet||!onBet) return;
+      if(pickNumbers) { onBet("straight",numStr); return; }
       if(isZero) {
         // Zeros: center = straight, edge near other zero = split 0-00
         var rect=e.currentTarget.getBoundingClientRect();
@@ -356,10 +359,10 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
       <div style={{display:"flex",gap:g}}>
         <div style={{display:"flex",flexDirection:"column",gap:g,width:zeroW,flexShrink:0}}>
           {React.createElement("div",{key:"0",onClick:function(e){if(!canBet)return;var rect=e.currentTarget.getBoundingClientRect();var pX=(e.clientX-rect.left)/rect.width,pY=(e.clientY-rect.top)/rect.height;
-            var bet=zeroCellBet("0",pX,pY,isAmerican);onBet(bet.type,bet.target);
+            if(pickNumbers){onBet("straight","0");return;}var bet=zeroCellBet("0",pX,pY,isAmerican);onBet(bet.type,bet.target);
           },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["0"]?"2px solid #c084fc":(winStr==="0"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="0"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="0"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("0"),winStr==="0"&&!spinning&&React.createElement(Mkr),bb["s:0"]&&React.createElement(BetChip,{amount:bb["s:0"],posKey:"s:0"}))}
           {isAmerican&&React.createElement("div",{key:"00",onClick:function(e){if(!canBet)return;var rect=e.currentTarget.getBoundingClientRect();var pX=(e.clientX-rect.left)/rect.width,pY=(e.clientY-rect.top)/rect.height;
-            var bet=zeroCellBet("00",pX,pY,isAmerican);onBet(bet.type,bet.target);
+            if(pickNumbers){onBet("straight","00");return;}var bet=zeroCellBet("00",pX,pY,isAmerican);onBet(bet.type,bet.target);
           },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["00"]?"2px solid #c084fc":(winStr==="00"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="00"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="00"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("00"),winStr==="00"&&!spinning&&React.createElement(Mkr),bb["s:00"]&&React.createElement(BetChip,{amount:bb["s:00"],posKey:"s:00"}))}
         </div>
         <div style={{position:"relative",flex:1,minWidth:0}}>
