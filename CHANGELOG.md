@@ -7,6 +7,32 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- A spin recorded while an earlier spin's send to Casino is still unconfirmed is no longer dropped from the Casino recording. The new spin queues behind the earlier one in `useCasinoRecording()` in `nexus-src/src/casino-recording.mjs`, takes the next sequence number in spin order, and is sent once the earlier spin confirms. Every retry of a send reuses that spin's sequence and request id. A send that keeps failing shows how many spins are waiting to send to Casino.
+- The spin queue moves from `nexus-src/src/casino-recording.mjs` into `nexus-src/src/casino-spin-queue.mjs` (`createSpinQueue()` and its send helpers). The build includes it ahead of the recording hook.
+- A definitive refusal of the head spin no longer retries every 10 seconds forever. A 4xx refusal, or a sequence Casino already holds, makes the queue read the session again. If the session has ended, the queued spins are dropped and the problem line says how many were not saved. If the session is live, the spin is renumbered from Casino's count and keeps its request id.
+- Turning recording off and on again no longer lets a later spin reuse the sequence of an earlier spin that may already be in Casino's record.
+- While the queue is held, a new spin only joins the queue, and Pause records its intent at once instead of waiting for the retries; the pause applies when the queue drains. Stop on a held queue asks for a second press that names the number of unsent spins it will discard, and states the count once they are discarded.
+- A spin's pause is decided at each send from the current intent, and only the last queued spin can carry it, so two spins no longer both pause the session.
+- Leaving the Roulette view stops the retry loop. No retry is scheduled, and no problem line or session change is written, after it closes.
+
+### Open
+
+- The unconfirmed spins are held in memory, and the queue has no bound. If the page closes or reloads before Casino confirms them, they are missing from the Casino record; the local session still has them.
+- `recorded:false` after an ambiguous attempt is accepted as this client's spin without an owner check. A sequence another device wrote can be read as ours.
+- Review residuals L1 to L4 were named in the review verdict, but their text is not in this round's brief and is not on disk. They are placeholders until the review text is supplied.
+- Resume on a held queue still waits behind spin retries, so it can wait for a retry round in flight (up to about 39 seconds). Pause and Stop, once the queue is held, do not.
+- The first round of an outage runs before the queue is held, so Pause and Stop pressed during that round still wait for it to end (up to about 39 seconds).
+- A spin renumbered after an ambiguous send keeps its request id. It is recorded once only if Casino treats a repeated request id as the same spin. This is not verified against Casino.
+- Stop during a retry round can discard a spin that Casino has just recorded. The count shown is of unconfirmed spins.
+- A spin queued behind a spin whose pause is in flight is sent after that pause. How Casino answers a spin on a paused session is not verified.
+- A spin that Casino refuses while the session is still live (for example, a session paused behind a held queue) is retried every 10 seconds until Stop. Whether Casino accepts spins on a paused session is not verified.
+- The session check reads the running session for the mode from Casino's history. Whether that list includes a paused session is not verified; if it does not, a paused session would be reported as ended and its queued spins dropped with that count.
+- Account sync (`nexus-src/src/casino-sync.mjs`) may replace a spin made before the account sync has loaded the saved state. This is not reproduced by a test here and is not changed by this fix.
+- No browser suite was run. The problem lines and the Stop confirmation are UNVERIFIED on a device.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 ## [0.63.0] - 2026-10-31
 
 ### Added
@@ -92,32 +118,6 @@ Notable code and documentation changes are recorded here. Release versions are a
 - The Buy In modal accepts 0 into the field, and its button does nothing at 0, because `handleBuyIn` requires more than 0. Not changed here.
 - The version number is not bumped and the service worker cache name is unchanged; both move at promotion. The rebuilt `index.html` therefore has new bytes under the current version, which `deploy.sh` refuses until that step.
 - The in-app release notes list in `nexus-src/src/constants.js` is not updated; it belongs to the release step.
-
-### Fixed
-
-- A spin recorded while an earlier spin's send to Casino is still unconfirmed is no longer dropped from the Casino recording. The new spin queues behind the earlier one in `useCasinoRecording()` in `nexus-src/src/casino-recording.mjs`, takes the next sequence number in spin order, and is sent once the earlier spin confirms. Every retry of a send reuses that spin's sequence and request id. A send that keeps failing shows how many spins are waiting to send to Casino.
-- The spin queue moves from `nexus-src/src/casino-recording.mjs` into `nexus-src/src/casino-spin-queue.mjs` (`createSpinQueue()` and its send helpers). The build includes it ahead of the recording hook.
-- A definitive refusal of the head spin no longer retries every 10 seconds forever. A 4xx refusal, or a sequence Casino already holds, makes the queue read the session again. If the session has ended, the queued spins are dropped and the problem line says how many were not saved. If the session is live, the spin is renumbered from Casino's count and keeps its request id.
-- Turning recording off and on again no longer lets a later spin reuse the sequence of an earlier spin that may already be in Casino's record.
-- While the queue is held, a new spin only joins the queue, and Pause records its intent at once instead of waiting for the retries; the pause applies when the queue drains. Stop on a held queue asks for a second press that names the number of unsent spins it will discard, and states the count once they are discarded.
-- A spin's pause is decided at each send from the current intent, and only the last queued spin can carry it, so two spins no longer both pause the session.
-- Leaving the Roulette view stops the retry loop. No retry is scheduled, and no problem line or session change is written, after it closes.
-
-### Open
-
-- The unconfirmed spins are held in memory, and the queue has no bound. If the page closes or reloads before Casino confirms them, they are missing from the Casino record; the local session still has them.
-- `recorded:false` after an ambiguous attempt is accepted as this client's spin without an owner check. A sequence another device wrote can be read as ours.
-- Review residuals L1 to L4 were named in the review verdict, but their text is not in this round's brief and is not on disk. They are placeholders until the review text is supplied.
-- Resume on a held queue still waits behind spin retries, so it can wait for a retry round in flight (up to about 39 seconds). Pause and Stop, once the queue is held, do not.
-- The first round of an outage runs before the queue is held, so Pause and Stop pressed during that round still wait for it to end (up to about 39 seconds).
-- A spin renumbered after an ambiguous send keeps its request id. It is recorded once only if Casino treats a repeated request id as the same spin. This is not verified against Casino.
-- Stop during a retry round can discard a spin that Casino has just recorded. The count shown is of unconfirmed spins.
-- A spin queued behind a spin whose pause is in flight is sent after that pause. How Casino answers a spin on a paused session is not verified.
-- A spin that Casino refuses while the session is still live (for example, a session paused behind a held queue) is retried every 10 seconds until Stop. Whether Casino accepts spins on a paused session is not verified.
-- The session check reads the running session for the mode from Casino's history. Whether that list includes a paused session is not verified; if it does not, a paused session would be reported as ended and its queued spins dropped with that count.
-- Account sync (`nexus-src/src/casino-sync.mjs`) may replace a spin made before the account sync has loaded the saved state. This is not reproduced by a test here and is not changed by this fix.
-- No browser suite was run. The problem lines and the Stop confirmation are UNVERIFIED on a device.
-- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
 
 ## [0.58.0] - 2026-10-31
 
