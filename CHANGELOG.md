@@ -7,6 +7,16 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.70.0] - 2026-10-31
+
+### Changed
+
+- The photo review names the provider that answered the read. A `;by=<provider id>` field after the numbers of a photo return shows as one factual line under the heading, in the same reserved slot as before. An id is lowercase letters, digits and hyphens, 1 to 32 characters. `gemini` reads "Read by Google Gemini", `openai` reads "Read by OpenAI", `cloud` keeps "Read by the cloud model" for returns that predate the field, and `pc` reads "Read by your PC". Any other id that matches the pattern reads "Read by <id>". An id that does not match, or an empty one, shows no line, and the numbers parse as before. The reader map and the id check are in `nexus-src/src/components/BoardPhoto.jsx`, and the return contract comment above `parseBoardReturn()` states the new shape.
+
+### Tests
+
+- `test/reader-label.test.mjs`: each known id reads its provider's line; an unknown valid id reads "Read by <id>", including a 32-character id; invalid ids (uppercase, too long, a space, markup) and the empty value show no line; `__proto__` shows no line and `constructor` is treated as a plain id; repeated numbers parse the same with the field; the reader slot stays reserved in every state. Updated: the cases that expected `gizmo` and `constructor` to be ignored now expect them as valid ids, and the contract-comment assertion now checks the `;by=<id>` shape.
+
 ## [0.69.0] - 2026-10-31
 
 ### Fixed
