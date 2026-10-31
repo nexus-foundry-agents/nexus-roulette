@@ -177,6 +177,8 @@ function loadApp() {
       if(d.currentSession.sessionEndedAt===undefined) d.currentSession.sessionEndedAt = null;
       // Venue migration (F11): sessions saved before venues existed have no venue keys and are left as they were.
       [d.currentSession, d.gameSession].concat(d.savedSessions||[]).forEach(migrateSessionVenue);
+      // Park points (migrateParkPoints): a parked track with none gets its session's spin count at load. Same sessions as the venue migration.
+      [d.currentSession, d.gameSession].concat(d.savedSessions||[]).forEach(migrateParkPoints);
       // Auto-recalibrate bankroll from track P&Ls to fix any float drift.
       // Both live sessions have the same shape and the same drift exposure.
       [d.currentSession, d.gameSession].forEach(sess => {
@@ -266,6 +268,17 @@ function migrateSessionVenue(sess){
   if('venue' in sess)sess.venue=normalizeVenue(sess.venue);
   if('dealerChanges' in sess)sess.dealerChanges=Array.isArray(sess.dealerChanges)?sortedDealerChanges(sess.dealerChanges):[];
   if('label' in sess)sess.label=normalizeLabel(sess.label);
+  return sess;
+}
+
+// Park points. A park stamps the spin count it was made at (parkToggle, and the import's park in session-files.jsx), and
+// spin-apply.js's lastParkSpin reads it. A parked track with no park point was parked before the stamp existed, or came in
+// without one. It gets the session's spin count at load: the conservative mark, so no spin before this load can be corrected
+// into a record the park has already fixed. A park point already stamped is never moved, so a later load changes nothing.
+function migrateParkPoints(sess){
+  if(!sess||typeof sess!=='object'||!Array.isArray(sess.tracks))return sess;
+  const at=Array.isArray(sess.spins)?sess.spins.length:0;
+  sess.tracks.forEach(t=>{if(t&&t.state==='parked'&&!Number.isSafeInteger(t.parkedAtSpin))t.parkedAtSpin=at;});
   return sess;
 }
 

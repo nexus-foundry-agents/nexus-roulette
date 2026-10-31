@@ -1,1 +1,1 @@
-{"version":"0.67.0","date":"2026-10-31","notes":"A Casino error can no longer silently stop spins from being recorded."}
+{"version":"0.68.0","date":"2026-10-31","notes":"Undo is refused after a buy-in or cash-out; every parked track remembers when it was parked."}

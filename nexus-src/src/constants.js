@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.67.0";
+const APP_VERSION = "0.68.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,10 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.68.0", date:"Oct 31, 2026", title:"Undo Stays Honest", changes:[
+    "Undo is refused, with a reason, after a buy-in, cash-out or bankroll change, so money moves are never quietly reversed",
+    "Every parked track now remembers when it was parked (imports and older sessions too), so its record can't be changed by a later fix"
+  ]},
   { v:"0.67.0", date:"Oct 31, 2026", title:"Recording Keeps Going", changes:[
     "If a call to Casino fails, recording keeps going: later spins are still saved and the screen says what failed"
   ]},
