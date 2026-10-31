@@ -74,7 +74,9 @@ function VenueSpinCounts({sessions}) {
   // -- Session Stats Page --
 // venueSession: the Live session is the one whose venue can be recorded here. onEditVenue(scope) opens the venue sheet
 // for "current" or for a saved session id.
-function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, saveSession, newEmptySession, tearSession, reactivateTrack, saved, loadSession, exportJSON, venueSession, onEditVenue }) {
+function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, saveSession, newEmptySession, tearSession, reactivateTrack, saved, resumeSaved, renameSaved, addCatchUp, readPhoto, exportJSON, venueSession, onEditVenue }) {
+    // The sessions sheet (F13): null when closed, {focusId} when opened, focusId names a session to resume at once or null.
+    const [browse, setBrowse] = useState(null);
     // Group tracks by type + roi + stopLoss for consolidated view
     const trackGroups = useMemo(() => {
       const groups = {};
@@ -197,6 +199,7 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
 
         <Card>
           <FieldLabel>{"Saved Sessions ("+saved.length+")"}</FieldLabel>
+          <button onClick={()=>setBrowse({focusId:null})} disabled={saved.length===0} style={{width:"100%",padding:"9px 0",marginBottom:8,borderRadius:9,border:"1px solid #2d4057",background:"#1e2d3d",color:saved.length===0?"#475569":"#60a5fa",fontSize:12,fontWeight:700,cursor:saved.length===0?"default":"pointer"}}>Browse sessions</button>
           {saved.length===0
             ? <div style={{textAlign:"center",padding:"16px 0",color:"#475569",fontSize:12}}>No saved sessions yet.</div>
             : (
@@ -207,7 +210,7 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
                     <div key={s.id} style={{background:"#0f1923",borderRadius:10,padding:"10px 12px",border:"1px solid "+(isCurrent?"#86efac":"#2d4057")}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                         <div>
-                          <div style={{fontSize:12,fontWeight:700,color:isCurrent?"#86efac":"#e2e8f0"}}>{s.name}{isCurrent?" (current)":""}</div>
+                          <div style={{fontSize:12,fontWeight:700,color:isCurrent?"#86efac":"#e2e8f0"}}>{normalizeLabel(s.label)||s.name}{isCurrent?" (current)":""}</div>
                           <div style={{fontSize:10,color:"#64748b"}}>
                             {new Date(s.modified).toLocaleString()} · {s.spins.length} spins
                             {s.sessionStartedAt&&s.sessionEndedAt&&(
@@ -223,7 +226,7 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
                           <button onClick={()=>onEditVenue(s.id)} style={{flex:"0 0 auto",padding:"5px 9px",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>{s.venue?"Edit venue":"Add venue"}</button>
                         </div>
                       )}
-                      {!isCurrent && <button onClick={()=>loadSession(s.id)} style={{width:"100%",padding:"7px 0",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Resume</button>}
+                      {!isCurrent && <button onClick={()=>setBrowse({focusId:s.id})} style={{width:"100%",padding:"7px 0",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Resume</button>}
                     </div>
                   );
                 })}
@@ -241,6 +244,7 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
             <button onClick={exportJSON} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",background:"#1e3a5f",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}}>Export All Sessions (.json)</button>
           </Card>
         )}
+        {browse && <SessionsPage saved={saved} sess={sess} cur={cur} initialResumeId={browse.focusId} onResume={resumeSaved} onRename={renameSaved} onAddNumbers={addCatchUp} readPhoto={readPhoto} onClose={()=>setBrowse(null)}/>}
       </div>
     );
   }

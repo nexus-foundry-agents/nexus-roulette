@@ -265,6 +265,7 @@ function migrateSessionVenue(sess){
   if(!sess||typeof sess!=='object')return sess;
   if('venue' in sess)sess.venue=normalizeVenue(sess.venue);
   if('dealerChanges' in sess)sess.dealerChanges=Array.isArray(sess.dealerChanges)?sortedDealerChanges(sess.dealerChanges):[];
+  if('label' in sess)sess.label=normalizeLabel(sess.label);
   return sess;
 }
 
@@ -415,4 +416,89 @@ function venueSpinCounts(sessions){
 function venueCountRows(map){
   return Object.keys(map||{}).map(label=>({label,count:map[label]}))
     .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label));
+}
+
+// -- Session label and resume (F13) --
+// A saved session may carry an optional label: trimmed, at most 60 characters, or null when empty.
+const SESSION_LABEL_MAX=60;
+function normalizeLabel(value){
+  if(typeof value!=='string')return null;
+  return value.trim().slice(0,SESSION_LABEL_MAX).trim()||null;
+}
+
+// The mode a saved session resumes into: 'game' for a Game session, otherwise 'live' (sessions saved before modes
+// existed carry no mode and are Live, as the Stats list has always shown them).
+function savedSessionMode(sess){return sess&&sess.mode==='game'?'game':'live';}
+
+// The part of a session a save writes, without the stamps a save or a rename sets (modified, metrics, mode).
+function sessionContent(sess){
+  const copy=JSON.parse(JSON.stringify(sess));
+  delete copy.modified;
+  delete copy.metrics;
+  delete copy.mode;
+  return JSON.stringify(copy);
+}
+
+// How many spins of the current session the saved copy does not have. When the saved spins are a prefix of the
+// current spins, the difference is the unsaved count; any other change to the spin history counts every current spin.
+function unsavedSpinCount(sess,savedList){
+  const spins=Array.isArray(sess&&sess.spins)?sess.spins:[];
+  const saved=(savedList||[]).find(x=>!!x&&x.id===sess.id);
+  if(!saved)return spins.length;
+  const savedSpins=Array.isArray(saved.spins)?saved.spins:[];
+  if(savedSpins.length<=spins.length&&savedSpins.every((v,i)=>v===spins[i]))return spins.length-savedSpins.length;
+  return spins.length;
+}
+
+// True when the current session holds work the saved list does not: a session never saved that has spins, tracks,
+// buy-ins or cash-outs, or a saved session whose content has changed since it was saved.
+function sessionHasUnsavedWork(sess,savedList){
+  if(!sess)return false;
+  const saved=(savedList||[]).find(x=>!!x&&x.id===sess.id);
+  if(!saved)return (sess.spins||[]).length>0||(sess.tracks||[]).length>0||(sess.buyIns||[]).length>0||(sess.cashOuts||[]).length>0;
+  return sessionContent(sess)!==sessionContent(saved);
+}
+
+// Resumes a saved session. The session that is current under activeMode is saved first when it holds work the saved
+// list does not have; then the saved copy becomes the current session of its own mode, exactly as it was saved. A Game
+// session goes to gameSession, any other to currentSession. Returns a new state object and does not mutate the input.
+// The state is returned unchanged when the id is not saved or is already the current session of the active mode.
+function resumeSavedSession(state,id,activeMode,now){
+  const saved=(state.savedSessions||[]).find(x=>!!x&&x.id===id);
+  const activeKey=activeMode==='game'?'gameSession':'currentSession';
+  const current=state[activeKey];
+  if(!saved||(current&&current.id===id))return state;
+  const next=JSON.parse(JSON.stringify(state));
+  next.savedSessions=next.savedSessions||[];
+  const liveCurrent=next[activeKey];
+  if(liveCurrent&&sessionHasUnsavedWork(liveCurrent,next.savedSessions)){
+    const copy=JSON.parse(JSON.stringify(liveCurrent));
+    copy.modified=now;
+    copy.mode=activeMode==='game'?'game':'live';
+    copy.metrics=computeMetrics(copy);
+    const at=next.savedSessions.findIndex(x=>!!x&&x.id===copy.id);
+    if(at>=0)next.savedSessions[at]=copy;
+    else next.savedSessions.push(copy);
+    next[activeKey]=JSON.parse(JSON.stringify(copy));
+  }
+  next[savedSessionMode(saved)==='game'?'gameSession':'currentSession']=JSON.parse(JSON.stringify(saved));
+  return next;
+}
+
+// Sets the label of a saved session, and of the live copy with the same id so that a later save keeps it. The new
+// label is stamped with now as modified, so the sync merge keeps this copy over an older one. Returns a new state object.
+function renameSavedSession(state,id,label,now){
+  const next=JSON.parse(JSON.stringify(state));
+  const value=normalizeLabel(label);
+  next.savedSessions=(next.savedSessions||[]).map(x=>{
+    if(!x||x.id!==id)return x;
+    x.label=value;
+    x.modified=now;
+    return x;
+  });
+  ['currentSession','gameSession'].forEach(key=>{
+    const live=next[key];
+    if(live&&live.id===id){live.label=value;live.modified=now;}
+  });
+  return next;
 }
