@@ -331,14 +331,15 @@ test('the recent-numbers strip keeps the same reserved height with no numbers an
   const { ctx } = await load();
   const tags = [];
   const chips = [];
-  for (const n of [0, 5, 40, 41]) {
+  for (const n of [0, 5, 40, 41, 1000]) {
     const html = await renderStrip(SPINS(n));
     tags.push(openingTag(html));
     chips.push((html.match(/border:2px solid/g) || []).length);
   }
   assert.match(tags[0], new RegExp(`min-height:${ctx.RECENT_STRIP_MIN_HEIGHT}px`));
-  assert.ok(tags.every((t) => t === tags[0]), 'the container tag is identical at 0, 5, 40 and 41 spins');
-  assert.deepStrictEqual(chips, [0, 5, 40, 40], 'the strip shows at most forty numbers');
+  assert.ok(tags.every((t) => t === tags[0]), 'the container tag is identical at 0, 5, 40, 41 and 1000 spins');
+  // The first render draws the newest forty whatever the session length; the rest load as the strip is scrolled (test/strip-lazy.test.mjs).
+  assert.deepStrictEqual(chips, [0, 5, 40, 40, 40], 'the first render draws the newest forty, however many spins there are');
 });
 
 test('App mounts the strip and the drought slot unconditionally, with the clear wiring in place', async () => {
