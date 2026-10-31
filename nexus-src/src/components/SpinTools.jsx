@@ -24,6 +24,18 @@ const LONG_PRESS_SLOP_PX = 8;
 // App provides the function that opens the picker for a spin index. Outside App it is null and a press does nothing.
 const SpinCorrectionContext = React.createContext(null);
 
+// The Read board photo button: the one control for the photo reader. The Live spin tools and the catch-up card in the
+// sessions sheet both mount it, and the handler is App's, so both open the reader for the same session. `full` is the
+// card's size (a full-width button in its row). `placement` is the spin tools' grid cell; it comes first in the style.
+function ReadBoardPhotoButton({onReadPhoto, full, placement}) {
+  const look = full
+    ? {flex:1,padding:11,borderRadius:10,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}
+    : {padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:700,cursor:"pointer"};
+  return (
+    <button type="button" onClick={onReadPhoto} style={{...placement,...look}}>Read board photo</button>
+  );
+}
+
 function SpinTools({spinCount, confirmOpen, undoVisible, onAsk, onCancel, onConfirm, onUndo, onReadPhoto}) {
   const hasSpins = spinCount > 0;
   const noun = spinCount === 1 ? "spin" : "spins";
@@ -34,10 +46,8 @@ function SpinTools({spinCount, confirmOpen, undoVisible, onAsk, onCancel, onConf
   return (
     <>
       <div style={{display:"grid",gridTemplateColumns:"auto auto",justifyContent:"space-between",alignItems:"center",justifyItems:"end",minHeight:SPIN_TOOLS_ROW_HEIGHT,width:"100%",boxSizing:"border-box"}}>
-        <button type="button" onClick={onReadPhoto}
-          style={{gridRow:1,gridColumn:1,justifySelf:"start",alignSelf:"center",padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-          Read board photo
-        </button>
+        <ReadBoardPhotoButton onReadPhoto={onReadPhoto}
+          placement={{gridRow:1,gridColumn:1,justifySelf:"start",alignSelf:"center"}}/>
         <button type="button" disabled={!hasSpins} aria-hidden={undoVisible} onClick={onAsk}
           style={{...cell(!undoVisible),padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:hasSpins?"#94a3b8":"#374151",fontSize:11,fontWeight:700,cursor:hasSpins?"pointer":"not-allowed"}}>
           Clear numbers
@@ -113,10 +123,14 @@ function stripChevron(points) {
 // Recent numbers, newest first. The first RECENT_STRIP_PAGE chips are drawn, and the next page when the reader scrolls to
 // within one strip width of the oldest chip drawn, so a session of any length can be reached. Chip for spin k is drawn
 // at position spins.length - 1 - k, whenever it was loaded. The container is always rendered at its reserved height: with
-// no numbers it is an empty slot. Pressing and holding one asks App for the picker; nothing else. Newer and Older scroll
-// the strip by one strip width. Both keep their slots, and only their visibility changes.
-function RecentNumbersStrip({spins, trackOverlays}) {
-  const openCorrection = React.useContext(SpinCorrectionContext);
+// no numbers it is an empty slot. Pressing and holding one asks App for the picker, when correctable is set; nothing else.
+// Newer and Older scroll the strip by one strip width. Both keep their slots, and only their visibility changes.
+// Two props differ between the pages that mount it. trackOverlays colours the border of a chip that an active track hit
+// (the Live page passes them; the Game page passes none). correctable (default true) lets a press and hold ask App for the
+// spin correction through SpinCorrectionContext (the Live page); the Game page passes correctable={false}.
+function RecentNumbersStrip({spins, trackOverlays, correctable=true}) {
+  const contextOpen = React.useContext(SpinCorrectionContext);
+  const openCorrection = correctable ? contextOpen : null;
   const latestOpen = React.useRef(openCorrection);
   latestOpen.current = openCorrection;
   const press = React.useMemo(() => createLongPress({

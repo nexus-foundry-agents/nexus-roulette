@@ -305,7 +305,7 @@ test('the photo reader contains no spin settlement or native dialog path', async
 test('the review is live-only, the status sits under the spin tools, and a spin entered by hand ends a status', async () => {
   const app = await readFile(new URL('App.jsx', SRC), 'utf8');
   assert.match(app, /appMode==="live" && boardReturn && boardReturn\.kind==="numbers" && <BoardPhotoReview /);
-  assert.match(app, /onReadPhoto=\{\(\)=>openBoardPhoto\(window\.location,sess\.roulette,setBoardReturn\)\}\/>\s*<BoardPhotoStatus result=\{boardReturn\}\/>/);
+  assert.match(app, /onReadPhoto=\{readBoardPhoto\}\/>\s*<BoardPhotoStatus result=\{boardReturn\}\/>/);
   assert.match(app, /if\(boardReturn&&boardReturn\.kind==="status"\) setBoardReturn\(null\);/);
 });
 
@@ -556,7 +556,7 @@ async function mountApp({framed = true, hash = '', wheel = 'american', mutate, r
   ctx.useBoardPhotoState = load => {
     const value = usePhotoState(load);
     [committedState, appSetter] = value;
-    return [value[0], value[1], value[2], action => { boardActions.push(plain(action)); value[3](action); }];
+    return [value[0], value[1], value[2], (action, kind) => { boardActions.push(plain(action)); value[3](action, kind); }];
   };
   const initial = plain(ctx.loadApp());
   initial.settings.onboarded = true;
@@ -670,7 +670,7 @@ const autoRecordMutant = source => {
   const anchor = '  // Save UI state when page is hidden';
   assert.ok(source.includes(anchor));
   return source.replace(anchor, `  React.useEffect(() => {
-    if(boardReturn && boardReturn.kind === "numbers") setBoardAdd(boardAddOrder(boardReturn.numbers));
+    if(boardReturn && boardReturn.kind === "numbers") setBoardAdd(boardAddOrder(boardReturn.numbers), appState.currentSession);
   }, [boardReturn]);
 ` + anchor);
 };
@@ -846,7 +846,7 @@ const liveRefMutant = source => {
   assert.equal(source.split(guard).length, 2, 'atomic guard mutation matches exactly once');
   return source.replace(guard, '!action.validated')
     .replace('  const bind = result =>', '  const live = React.useRef(session); live.current = session;\n  const bind = result =>')
-    .replace('commitBoardAdd(queue);', 'commitBoardAdd({...queue, validated:boardMatchesSession(queue, live.current) && legalBoardList(queue.numbers, live.current.roulette)});');
+    .replace('commitBoardAdd(queue, queue.kind);', 'commitBoardAdd({...queue, validated:boardMatchesSession(queue, live.current) && legalBoardList(queue.numbers, live.current.roulette)}, queue.kind);');
 };
 
 test('the real React receipt-before-passive regression kills the live.current validation mutant', async () => {

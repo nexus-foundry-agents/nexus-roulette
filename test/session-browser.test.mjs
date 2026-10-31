@@ -16,7 +16,7 @@ const SRC = new URL('../nexus-src/src/', import.meta.url);
 const ROOT = new URL('../', import.meta.url);
 const LOGIC = ['constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'sessions-browse.js', 'casino-sync.mjs'];
 const SHEET = ['constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'sessions-browse.js',
-  'components/ui.jsx', 'components/BoardPhoto.jsx', 'components/SessionsPage.jsx'];
+  'components/ui.jsx', 'components/SpinTools.jsx', 'components/BoardPhoto.jsx', 'components/SessionsPage.jsx'];
 
 async function load(files, reactImpl = React) {
   const sources = await Promise.all(files.map((f) => readFile(new URL(f, SRC), 'utf8')));
@@ -393,10 +393,12 @@ test('the catch-up, confirm and rename views render from their own state, and a 
   assert.match(badEntry, /35x/);
   assert.match(badEntry, /is not a number on the American wheel\./);
   assert.match(badEntry, /<button[^>]*disabled=""[^>]*>Add<\/button>/, 'Add is disabled while the entry is not valid');
-  // A Game session: no numbers can be caught up into it, and the card says where they go.
-  const gameView = await render(['catchup', gameTarget, undefined, undefined, undefined, undefined], gameTarget);
-  assert.match(gameView, /This is a Game session\./);
+  // A Game session takes the same bulk entry, with no photo button (a photo return opens the Live review) and no note.
+  const gameView = await render(['catchup', gameTarget, undefined, undefined, '2 2 2 24', undefined], gameTarget);
+  assert.match(gameView, /4 numbers to enter, oldest first/);
+  assert.match(gameView, />Add 4 spins</);
   assert.doesNotMatch(gameView, /Read board photo/);
+  assert.doesNotMatch(gameView, /This is a Game session/);
   // Switching away with unsaved spins: the confirm names the count, and offers Cancel and Save and switch.
   const confirm = await render(['confirm', liveTarget], session({ id: 'cur', spins: ['1', '2'] }));
   assert.match(confirm, /has 2 spins that are not saved/);
