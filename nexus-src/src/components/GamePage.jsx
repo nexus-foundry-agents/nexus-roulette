@@ -11,7 +11,7 @@ function GamePageView({
   setSelectedChip, setUndoStack, settings, tapNumber, updSess, updateTrackConfig, wheelNums
 }) {
     const hasActiveTracks = nonClosedTracks.some(t=>t.state==="active");
-    const tMin = settings.tableMinBet||1;
+    const tMin = tableMinimum(settings.tableMinBet) || 0;
 
     const CHIPS = CHIP_DENOMS.filter(c=>c.val>=tMin);
 
@@ -229,7 +229,7 @@ function GamePageView({
                   </div>
                 </div>
                 {isEditing && (
-                  <EditTrackCfg track={t} currency={currency} tableMinBet={settings.tableMinBet||1} onSave={cfg=>updateTrackConfig(t.id,cfg)} onCancel={()=>setEditTrackId(null)}/>
+                  <EditTrackCfg track={t} currency={currency} tableMinBet={settings.tableMinBet} onSave={cfg=>updateTrackConfig(t.id,cfg)} onCancel={()=>setEditTrackId(null)}/>
                 )}
               </div>
             );
@@ -237,7 +237,7 @@ function GamePageView({
           {!addOpen && (
             <button onClick={()=>setAddOpen(true)} style={{padding:"10px 0",borderRadius:12,border:"2px dashed #2d4057",background:"transparent",color:"#64748b",fontSize:13,cursor:"pointer"}}>+ Add Strategy</button>
           )}
-          {addOpen && <AddTrackPanel onAdd={addTrack} onClose={()=>setAddOpen(false)} nextColor={nextColorIdx} type={pendingTrackType} cfg={pendingTrackCfg} onTypeChange={(t)=>{setPendingTrackType(t);setPendingTrackCfg(t==="fibonacci"?defaultFibCfg():defaultSolCfg());}} onCfgChange={setPendingTrackCfg} closedTracks={sess.tracks.filter(t=>t.state==="closed")} currency={currency} tableMinBet={settings.tableMinBet||1}/>}
+          {addOpen && <AddTrackPanel onAdd={addTrack} onClose={()=>setAddOpen(false)} nextColor={nextColorIdx} type={pendingTrackType} cfg={pendingTrackCfg} onTypeChange={(t)=>{setPendingTrackType(t);setPendingTrackCfg(t==="fibonacci"?defaultFibCfg():defaultSolCfg());}} onCfgChange={setPendingTrackCfg} closedTracks={sess.tracks.filter(t=>t.state==="closed")} currency={currency} tableMinBet={settings.tableMinBet}/>}
         </div>
 
         {/* Session controls */}

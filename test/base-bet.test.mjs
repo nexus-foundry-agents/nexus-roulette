@@ -167,19 +167,25 @@ test('a Solution table and a Custom Bet table at base 2.00 are 2 times their 1.0
   }
 });
 
-test('the table minimum warning never blocks: a base under the minimum is still applied, and the presets stay enabled', async () => {
+test('a base under a set table minimum is refused, not applied; with no minimum nothing is under it, and the presets stay enabled', async () => {
   const { ctx } = await load();
   assert.equal(ctx.baseBelowTableMin(0.5, 10), true);
   assert.equal(ctx.baseBelowTableMin(10, 10), false);
-  assert.equal(ctx.baseBelowTableMin(0.5, undefined), true, 'the minimum falls back to 1');
+  assert.equal(ctx.baseBelowTableMin(0.5, undefined), false, 'no minimum: nothing is under it');
+  assert.equal(ctx.baseBelowTableMin(0.25, null), false, 'null is no minimum');
+  assert.equal(ctx.baseBelowTableMin(0.25, 0), false, '0 is no minimum');
+  assert.equal(ctx.tableMinimum(null), null);
+  assert.equal(ctx.tableMinimum(0), null);
+  assert.equal(ctx.tableMinimum(5), 5);
   const html = ReactDOMServer.renderToStaticMarkup(React.createElement(ctx.BaseBetInput, {
     type: 'fibonacci', config: progressionCfg(1, 200), currency: 'USD', tableMinBet: 10, onChange() {},
   }));
-  assert.match(html, /Below the table minimum \(\$10\.00\)/);
+  assert.match(html, /This base bet is below your table minimum of \$10\.00\. Change the bet size, or change the table limit in Settings\./);
+  assert.doesNotMatch(html, /Below the table minimum/, 'the F16 note is gone');
   assert.doesNotMatch(html, /disabled=""/, 'no preset is disabled');
 });
 
-test('the base-bet control renders its presets, a custom field, and reserved slots that do not change with the warning', async () => {
+test('the base-bet control renders its presets, a custom field, and one reserved line that does not change with the message', async () => {
   const { ctx } = await load();
   const render = (tableMinBet, unit) => ReactDOMServer.renderToStaticMarkup(React.createElement(ctx.BaseBetInput, {
     type: 'fibonacci', config: progressionCfg(unit, 200), currency: 'USD', tableMinBet, onChange() {},
@@ -189,11 +195,11 @@ test('the base-bet control renders its presets, a custom field, and reserved slo
   for (const html of [below, clear]) {
     for (const label of ['$0.25', '$0.50', '$1.00', '$2.00', '$5.00', '$10.00']) assert.match(html, new RegExp(label.replace('$', '\\$')), `preset ${label}`);
     assert.match(html, /aria-label="Custom base amount"/);
-    assert.equal((html.match(/min-height:14px/g) || []).length, 2, 'the error line and the warning line each reserve their height');
+    assert.equal((html.match(/min-height:14px/g) || []).length, 1, 'the one reason line reserves its height');
     assert.doesNotMatch(html, /display:none/, 'no optional line is removed from layout (rule 82)');
     assert.match(html, /Table at this base/);
   }
-  assert.match(below, /Below the table minimum \(\$10\.00\)[^<]*/);
+  assert.match(below, /This base bet is below your table minimum of \$10\.00\. Change the bet size, or change the table limit in Settings\./);
   assert.match(below, /visibility:visible/);
   assert.match(clear, /visibility:hidden/);
 });

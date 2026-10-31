@@ -7,6 +7,24 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Changed
+
+- Table minimum has no default. A new user has no table minimum until one is set in the startup wizard or in Settings. The wizard's Min Bet field starts at "No minimum" and may be left there. Settings shows "No minimum" when none is set, and its stepper returns to none from $0.25. Stored values are not rewritten: an existing user keeps the minimum they have. The migration in `nexus-src/src/session.js` (`loadApp()`) no longer fills $10 for a missing value; a missing value is none (`null`), and `defaultSettings()` stores `null`.
+- A base bet below a table minimum that is set is refused, not noted. The base is not applied and the previous base stays. The reserved line under the field reads "This base bet is below your table minimum of $X. Change the bet size, or change the table limit in Settings." The refusal applies in the track setup and in Edit Config, which mount the one control, `nexus-src/src/components/BaseBetInput.jsx`. A preset below the minimum stays visible and shows the same message when tapped. The F16 "Below the table minimum" note is removed; a base already under a minimum that was raised later shows the same message.
+- Every reader of `settings.tableMinBet` goes through `tableMinimum()` in `nexus-src/src/session.js`, which reads null, undefined and 0 as no minimum. The `||1` fallbacks are removed from the Live and Game chip filters (`nexus-src/src/App.jsx`, `nexus-src/src/components/GamePage.jsx`), from the track-panel props in both files, and from the Settings stepper (`nexus-src/src/components/SecondaryPages.jsx`).
+- The startup wizard's Table Limits copy in `nexus-src/src/components/modals.jsx` describes the refusal and the empty default. Its Min Bet stepper steps from "No minimum" to $0.25, and back to none from $0.25.
+
+### Tests
+
+- Added `test/table-min-rule.test.mjs`: a new user has no minimum and every preset applies; with a minimum of 5, base 2 is refused with the exact message and the base is unchanged, and base 5 applies; Settings clears the minimum to none; the wizard starts at none and may be left there; the migration keeps a stored minimum and gives none for a missing one; no `tableMinBet||` fallback remains in source.
+- Updated `test/base-bet.test.mjs` (the warning-only tests, now the refusal and the reserved line) and `test/money-input.test.mjs` (the Table Limits copy assertion) to the new behaviour. The five Settings failures in `test/gold-coldest.test.mjs`, `test/number-drought.test.mjs` and `test/streak-percentiles.test.mjs` were `ReferenceError: tableMinimum is not defined` while the helper lived in `BaseBetInput.jsx`; it now lives in `session.js`, which those harnesses load. No expectation in them changed.
+
+### Open
+
+- The visual checks of the wizard stepper, the Settings Min Bet row and the base-bet refusal line at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
+- Settings "Restart Onboarding" can not clear an existing minimum: `nexus-src/src/components/onboarding-apply.jsx` writes the wizard's Min Bet only when it is truthy. The wizard then shows "No minimum" and the stored minimum is kept. That file is outside this change and needs its own item.
+- The version and `APP_VERSION` (0.71.0) are not bumped; they move at promotion. The built `index.html` has no `?v=` stamp for this change to bump; the cache-bust question at promotion is open for the supervisor.
+
 ## [0.71.0] - 2026-10-31
 
 ### Fixed

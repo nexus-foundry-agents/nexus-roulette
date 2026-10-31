@@ -313,7 +313,7 @@ test('the Table Limits copy states what the Min Bet does today, and drops the st
   const modals = await readFile(new URL('components/modals.jsx', SRC), 'utf8');
   assert.doesNotMatch(modals, /This controls which unit bet sizes are valid/);
   assert.doesNotMatch(modals, /warns when a progression would exceed the max/);
-  assert.match(modals, /A base bet below the Min Bet is allowed and shows a note; it is never blocked\./);
+  assert.match(modals, /Leave Min Bet at No minimum if your table has none\. A base bet below a Min Bet you set is refused, and you can change either one later\./);
 });
 
 test('build.js registers money-parse.js before both of its users', async () => {

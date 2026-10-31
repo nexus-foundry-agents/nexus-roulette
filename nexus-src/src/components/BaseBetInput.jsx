@@ -16,22 +16,33 @@ function baseFloor(cur) { return cur.dec === 0 ? 1 : 0.01; }
 // The base's range for the shared parser (money-parse.js): baseFloor to BASE_MAX in the session's currency.
 function baseRange(cur) { return {min: baseFloor(cur), max: BASE_MAX, noun: "base"}; }
 
-// Whether a base sits under the table minimum. The minimum falls back to 1, as the rest of the app does. It never blocks.
-function baseBelowTableMin(unit, tableMinBet) { return unit < (tableMinBet || 1); }
+// Whether a base sits under the table minimum. With no minimum nothing is under it.
+function baseBelowTableMin(unit, tableMinBet) { const min = tableMinimum(tableMinBet); return min !== null && unit < min; }
+
+// The reason a base under the table minimum is refused, in the session's currency. It names both ways out.
+function baseBelowMessage(tableMinBet, currency) {
+  return "This base bet is below your table minimum of " + formatMoney(tableMinimum(tableMinBet), currency) + ". Change the bet size, or change the table limit in Settings.";
+}
 
 // The base-bet control. config is the track's config as the panel holds it; config.unit is the applied base.
 function BaseBetInput({type, config, currency, tableMinBet, onChange}) {
   const cur = getCurrency(currency || "USD");
   const unit = config.unit || 1;
-  const tMin = tableMinBet || 1;
   const CLIP = {whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"};
   const [text, setText] = useState(String(unit));
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState("");
   // The field shows the applied base whenever it is not being typed in. A refused value keeps its text, because the base did not change.
   useEffect(() => { if(!focused) setText(String(unit)); }, [unit]);
+  // A refusal is about the minimum it was made against, so a changed minimum clears it.
+  useEffect(() => { setError(""); }, [tableMinBet]);
 
-  function apply(v) { setError(""); onChange(v); }
+  // A base under the table minimum is refused: it is not applied, the previous base stays, and the reason shows under the field.
+  function apply(v) {
+    if(baseBelowTableMin(v, tableMinBet)) { setError(baseBelowMessage(tableMinBet, currency)); return; }
+    setError("");
+    onChange(v);
+  }
   function commit(str) {
     const r = parseMoneyAmount(str, currency, baseRange(cur));
     if(r.ok) apply(r.value);
@@ -44,7 +55,10 @@ function BaseBetInput({type, config, currency, tableMinBet, onChange}) {
   const noSpot = type === "custom" && (config.positions || []).length === 0;
   const emptyWhy = noTarget ? "Pick a target to see the levels." : noSpot ? "Add a spot to see the levels." : "";
   const rows = emptyWhy ? [] : computeTableForTrack({type, config: {...config, unit}});
-  const below = baseBelowTableMin(unit, tMin);
+  // The one reserved line under the field: the reason a value was refused, or, when the applied base is under a minimum raised
+  // since it was set, the same reason for the applied base.
+  const below = baseBelowTableMin(unit, tableMinBet);
+  const note = error || (below ? baseBelowMessage(tableMinBet, currency) : "");
   const floorText = cur.symbol + baseFloor(cur).toFixed(cur.dec);
   const topText = cur.symbol + "10,000";
   const money = v => formatChips(v, unit, currency);
@@ -83,8 +97,7 @@ function BaseBetInput({type, config, currency, tableMinBet, onChange}) {
             style={{flex:1, minWidth:0, padding:"10px 0", fontSize:18, fontWeight:800, color:"#86efac", background:"transparent", border:"none", outline:"none"}}
           />
         </div>
-        <div aria-hidden={!error} style={{minHeight:14, marginTop:4, fontSize:10, color:"#f87171", visibility:error?"visible":"hidden"}}>{error || " "}</div>
-        <div aria-hidden={!below} style={{minHeight:14, fontSize:10, color:"#fbbf24", visibility:below?"visible":"hidden"}}>{"Below the table minimum (" + formatMoney(tMin, currency) + ")"}</div>
+        <div aria-hidden={!note} style={{minHeight:14, marginTop:4, fontSize:10, color:error?"#f87171":"#fbbf24", visibility:note?"visible":"hidden"}}>{note || " "}</div>
         <div style={{fontSize:10, color:"#64748b"}}>{floorText + " to " + topText + (cur.dec > 0 ? ", up to 2 decimals" : ", whole amounts")}</div>
       </div>
       <div>
