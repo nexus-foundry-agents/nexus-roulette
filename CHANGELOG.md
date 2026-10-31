@@ -7,6 +7,17 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- Gold for the coldest number in each dozen and column. On the board, the number with the highest loss level in each of the six sections is gold: gold number text and a small gold corner pip. The F10 outline is unchanged, so gold and the outline read separately. Each section tile shows its coldest number or numbers and their loss level in gold, in a row with a reserved slot, and its detail view lists the section's numbers coldest first with the coldest in gold. The rule is `sectionColdest()` in `nexus-src/src/tlv.js`: ties return every tied number, and nothing is gold when the highest loss level is 0. 0 and 00 are never in a section.
+- Settings: "Gold for the coldest number in each dozen and column", on by default, beside Percentile outlines and saved with the other settings (`nexus-src/src/components/SecondaryPages.jsx`).
+
+### Open
+
+- The toggle governs the board on the Live page only. Tile gold shows regardless of the toggle, and the Game page board shows no gold until `nexus-src/src/components/GamePage.jsx` passes `coldestGold`. Wiring the toggle into the tiles needs a prop through `nexus-src/src/components/DroughtPanel.jsx`. `GamePage.jsx` and `DroughtPanel.jsx` are outside this change, so neither is edited here.
+- The visual checks for the gold board cell and the tile's coldest row at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 ## [0.58.0] - 2026-10-31
 
 ### Added

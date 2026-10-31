@@ -137,7 +137,7 @@ function SessionClock({startedAt, endedAt, style, pauseOffset}) {
 // -- Roulette Table Board --
 // pickNumbers: the board is picking a hit, not placing a bet, so a tap anywhere in a number's square is that number
 // (the counter under the number sits in the edge zone, which would otherwise read as a split or corner).
-function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows, pickNumbers, percentileOutlines}) {
+function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows, pickNumbers, percentileOutlines, coldestGold}) {
   const isAmerican = roulette === "american";
   const sb = stratBets || {};
   const bb = boardBets || {};
@@ -276,6 +276,15 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
     insideBetChips[anchorNum].push({amount:bb[k],posKey:k,style:chipStyle});
   });
 
+  // The coldest number of each dozen and column (F18): gold number text and a small gold pip at the corner. Drawn only when the
+  // page passes coldestGold true (the Settings toggle), and read from droughts, so it follows every spin, undo and correction.
+  // Neither changes a square's size, border or outline.
+  var goldNums = coldestGold===true ? coldestGoldNumbers(droughtView.droughts) : {};
+  function coldestStyle(numStr){ return goldNums[numStr] && winStr!==numStr ? {color:COLDEST_GOLD} : {}; }
+  function coldestPip(numStr){
+    return goldNums[numStr] ? React.createElement("div",{"aria-hidden":true,style:{position:"absolute",top:2,left:2,width:5,height:5,borderRadius:"50%",background:COLDEST_GOLD,pointerEvents:"none",zIndex:3}}) : null;
+  }
+
   function cell(num,isZero,zeroLabel){
     var numStr=isZero?(zeroLabel||"0"):String(num);
     var betKey="s:"+numStr;
@@ -303,8 +312,9 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
       onBet(det.type,det.target);
     }
 
-    return React.createElement("div",{key:numStr,onClick:handleClick,style:{...numStyle(num,isZero),...percentileOutline(numStr),cursor:canBet?"pointer":"default",border:betBorder||numStyle(num,isZero).border}},
+    return React.createElement("div",{key:numStr,onClick:handleClick,style:{...numStyle(num,isZero),...percentileOutline(numStr),...coldestStyle(numStr),cursor:canBet?"pointer":"default",border:betBorder||numStyle(num,isZero).border}},
       numberFace(numStr),
+      coldestPip(numStr),
       winStr===numStr&&!spinning&&React.createElement(Mkr),
       sChips&&React.createElement(StratChipBadge,{chips:sChips}),
       bb[betKey]&&React.createElement(BetChip,{amount:bb[betKey],posKey:betKey})
