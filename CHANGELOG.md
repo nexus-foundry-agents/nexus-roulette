@@ -9,6 +9,16 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ### Changed
 
+- Catch up card (`nexus-src/src/components/SessionsPage.jsx`): its "Read board photo" button is the shared `ReadBoardPhotoButton` in `nexus-src/src/components/SpinTools.jsx`, the same component the Live spin tools mount, with the same handler from `nexus-src/src/App.jsx`. The card defines no photo button of its own.
+- Catch up for Game sessions: the card offers the bulk entry for a Game session as it does for a Live one, and the Game-mode note is removed. The board-add path `commitBoardAdd()` in `nexus-src/src/board-return.mjs` takes the session kind (live or game) as a parameter and writes that session, so "2 2 2 24" enters four spins oldest first and settles the Game tracks. The add is recorded to the recorder for its mode.
+- The card offers Read board photo for Live sessions only. A photo return opens the Live review, so the button would lead nowhere for a Game session.
+
+### Open
+
+- A Game catch-up cannot be reached from the screen yet. The sessions sheet is mounted only in the Live Stats tab (`nexus-src/src/App.jsx`, `nexus-src/src/components/SecondaryPages.jsx`), and resuming a Game session switches the app to Game mode, which unmounts the sheet before the card shows. Opening the card for a Game session needs a change to where the sheet is mounted, or an entry on the Game page (`nexus-src/src/components/GamePage.jsx`). Both are outside this item and need their own item and a ruling.
+- The visual checks of the card are UNVERIFIED: no browser suite was run for this change. They cover the single photo button in a Live card and the Add button's width in a Game card, where there is no photo button.
+- The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+
 - The Game page's recent-numbers ticker is now the shared recent-numbers strip the Live page uses, `RecentNumbersStrip` in `nexus-src/src/components/SpinTools.jsx`. The separate 30-chip row in `nexus-src/src/components/GamePage.jsx` is removed. The Game page reaches every spin of the session with no limit: it draws the newest 40 chips first, loads the next 40 as the reader scrolls toward the oldest chip drawn, and has the same Newer and Older pager buttons and hidden scrollbar as the Live page.
 - The shared strip takes a `correctable` prop, on by default. The Game page passes `correctable={false}`, so a long-press on a number there does not open the Live spin correction, as before. The Game page passes no track overlays, as before, so the track colour borders stay on the Live page.
 - The Game page's strip reserves its 40 px row from the first render, with no numbers in it, so the spin result and the drought panel below it do not move when the first spin lands. Before this change the ticker appeared only after the first spin.

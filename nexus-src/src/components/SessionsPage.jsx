@@ -56,6 +56,7 @@ function SessionsPage({saved, sess, cur, initialResumeId, onResume, onRename, on
   const parsed = parseBulkNumbers(bulk, sess ? sess.roulette : "american", BOARD_MAX_NUMBERS);
   // The Catch up card is about the session just resumed: it is the current session once the resume has landed.
   const resumed = target && sess && sess.id === target.id ? sess : null;
+  // The photo reader returns to the Live review, so the card offers it for a Live session only.
   const resumedLive = !!resumed && savedSessionMode(resumed) === "live";
 
   function doResume(s) {
@@ -91,9 +92,9 @@ function SessionsPage({saved, sess, cur, initialResumeId, onResume, onRename, on
     setView("list");
   }
   function addCatchUp() {
-    if(!parsed.ok) return;
+    if(!parsed.ok || !resumed) return;
     const count = parsed.numbers.length;
-    onAddNumbers(parsed.numbers.slice());
+    onAddNumbers(parsed.numbers.slice(), resumed);
     setNote(count + (count === 1 ? " spin" : " spins") + " entered, oldest first.");
     setBulk("");
   }
@@ -178,7 +179,7 @@ function SessionsPage({saved, sess, cur, initialResumeId, onResume, onRename, on
       <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0",overflowWrap:"anywhere"}}>{targetName}</div>
         <div style={{fontSize:11,color:"#94a3b8",lineHeight:"16px"}}>Numbers you add here are entered as new spins, oldest first.</div>
-        {resumedLive ? (
+        {resumed ? (
           <>
             <FieldLabel>Numbers that came while you were away</FieldLabel>
             <input type="text" value={bulk} placeholder="2 2 2 24 4, or 2,2,2,24,4" onChange={e=>setBulk(e.target.value)}
@@ -195,16 +196,14 @@ function SessionsPage({saved, sess, cur, initialResumeId, onResume, onRename, on
             </div>
             <div role="status" style={{fontSize:11,minHeight:16,color:parsed.ok||parsed.empty?"#64748b":"#f87171",overflowWrap:"anywhere"}}>{statusText}</div>
             <div style={{display:"flex",gap:8,minWidth:0}}>
-              <button type="button" onClick={readPhoto} style={{flex:1,padding:11,borderRadius:10,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}}>Read board photo</button>
+              {resumedLive && <ReadBoardPhotoButton onReadPhoto={readPhoto} full/>}
               <button type="button" disabled={!parsed.ok} onClick={addCatchUp} style={{flex:1,padding:11,borderRadius:10,border:"none",background:parsed.ok?"#16a34a":"#1f2937",color:parsed.ok?"white":"#475569",fontSize:13,fontWeight:700,cursor:parsed.ok?"pointer":"default"}}>
                 {parsed.ok ? "Add "+parsed.numbers.length+(parsed.numbers.length===1?" spin":" spins") : "Add"}
               </button>
             </div>
           </>
         ) : (
-          <div style={{fontSize:12,color:"#94a3b8",lineHeight:"17px"}}>
-            {resumed ? "This is a Game session. Catch up adds numbers to Live sessions; enter Game numbers on the Game page." : "Resuming the session."}
-          </div>
+          <div style={{fontSize:12,color:"#94a3b8",lineHeight:"17px"}}>Resuming the session.</div>
         )}
         <button type="button" onClick={()=>setView("list")} style={{padding:"9px 0",borderRadius:9,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Back to sessions</button>
       </div>

@@ -24,6 +24,18 @@ const LONG_PRESS_SLOP_PX = 8;
 // App provides the function that opens the picker for a spin index. Outside App it is null and a press does nothing.
 const SpinCorrectionContext = React.createContext(null);
 
+// The Read board photo button: the one control for the photo reader. The Live spin tools and the catch-up card in the
+// sessions sheet both mount it, and the handler is App's, so both open the reader for the same session. `full` is the
+// card's size (a full-width button in its row). `placement` is the spin tools' grid cell; it comes first in the style.
+function ReadBoardPhotoButton({onReadPhoto, full, placement}) {
+  const look = full
+    ? {flex:1,padding:11,borderRadius:10,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}
+    : {padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:700,cursor:"pointer"};
+  return (
+    <button type="button" onClick={onReadPhoto} style={{...placement,...look}}>Read board photo</button>
+  );
+}
+
 function SpinTools({spinCount, confirmOpen, undoVisible, onAsk, onCancel, onConfirm, onUndo, onReadPhoto}) {
   const hasSpins = spinCount > 0;
   const noun = spinCount === 1 ? "spin" : "spins";
@@ -34,10 +46,8 @@ function SpinTools({spinCount, confirmOpen, undoVisible, onAsk, onCancel, onConf
   return (
     <>
       <div style={{display:"grid",gridTemplateColumns:"auto auto",justifyContent:"space-between",alignItems:"center",justifyItems:"end",minHeight:SPIN_TOOLS_ROW_HEIGHT,width:"100%",boxSizing:"border-box"}}>
-        <button type="button" onClick={onReadPhoto}
-          style={{gridRow:1,gridColumn:1,justifySelf:"start",alignSelf:"center",padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-          Read board photo
-        </button>
+        <ReadBoardPhotoButton onReadPhoto={onReadPhoto}
+          placement={{gridRow:1,gridColumn:1,justifySelf:"start",alignSelf:"center"}}/>
         <button type="button" disabled={!hasSpins} aria-hidden={undoVisible} onClick={onAsk}
           style={{...cell(!undoVisible),padding:"4px 10px",borderRadius:8,border:"1px solid #2d4057",background:"transparent",color:hasSpins?"#94a3b8":"#374151",fontSize:11,fontWeight:700,cursor:hasSpins?"pointer":"not-allowed"}}>
           Clear numbers
