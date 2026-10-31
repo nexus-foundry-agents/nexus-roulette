@@ -7,6 +7,25 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.67.0] - 2026-10-31
+
+### Fixed
+
+- A Stop whose call to Casino throws now restores the pause owner it replaced, as a refused Stop already does. The owner stayed "manual", so the next spin was sent with a pause. `discardAndStop()` in `nexus-src/src/casino-recording.mjs`.
+- A Pause, or an automatic pause, whose call to Casino throws clears the pause owner and states the failure in the problem line. A Pause that threw before this change left the same pause owner behind. `pauseImmediately()` in `nexus-src/src/casino-recording.mjs`.
+- A session check that throws (`refresh()`) states the failure in the problem line and does not overturn a recording state it has already reached. A check that could not establish the state moves it to not connected, and the next spin checks again. A pause that the check sends and that throws clears the pause owner.
+- A start or a session read that throws (`resolveSession()`, `rereadSession()`) holds the queue with the failure in the problem line. The queue retries it as it does for a refusal.
+- Every link appended to the recording chain (a spin, a Resume or Stop, a Pause) catches its own error, states it in the problem line, and resolves. The chain is no longer rejected, so a later spin is recorded. Before, a link that threw left every later spin silently unrecorded. `appendLink()` in `nexus-src/src/casino-recording.mjs`.
+- A browser without `crypto.randomUUID` (a page outside a secure context) records its spins. The request id falls back to `crypto.getRandomValues()`, then to a time-plus-counter value, in the same UUID shape and unique per spin. Before, `enqueue()` threw and the chain was rejected, so every later spin was silently unrecorded. `newRequestId()` in `nexus-src/src/casino-spin-queue.mjs`. This resolves the L3 note under 0.65.0 Open.
+
+### Tests
+
+- `test/recording-throws.test.mjs`: a Stop, Pause, session check or start that throws is stated in the problem line; the pause owner is restored; a later spin is recorded and carries no pause; a link that throws does not stop the next one; a request id is unique per spin without `crypto.randomUUID`.
+
+### Open
+
+- The automatic pause and automatic resume in `useCasinoRecording()` are re-sent on each render while the view stays in that state after Casino refuses them. A throw now does the same, where it used to leave the transition stuck. Not changed here.
+
 ## [0.66.0] - 2026-10-31
 
 ### Changed

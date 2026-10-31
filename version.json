@@ -1,1 +1,1 @@
-{"version":"0.66.0","date":"2026-10-31","notes":"Undo no longer quietly undoes a track edit or park; fixing a spin from before a park is refused with a reason."}
+{"version":"0.67.0","date":"2026-10-31","notes":"A Casino error can no longer silently stop spins from being recorded."}
