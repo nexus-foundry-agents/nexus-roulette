@@ -1,7 +1,7 @@
 // -- Game Page --
 // Moved from App.jsx. App renders it through a wrapper that passes every App value the page reads.
-// Body unchanged except two marked edits: the drought grid is now DroughtPanel, and the strategy chips
-// take the tracks as an argument.
+// Body unchanged except three marked edits: the drought grid is now DroughtPanel, the strategy chips
+// take the tracks as an argument, and the recent-numbers ticker is now the shared RecentNumbersStrip.
 function GamePageView({
   addOpen, addTrack, animNumber, betResults, clearTimerRef, closeTrack, colD, colP, cur,
   currency, dozD, dozP, editTrackId, emDroughts, endSession, recordGameSpin, gameResult, gameSpinning,
@@ -10,7 +10,6 @@ function GamePageView({
   setEditTrackId, setGameResult, setGameSpinning, setLastBets, setLastSpinDelta, setManualBets, setPendingTrackCfg, setPendingTrackType,
   setSelectedChip, setUndoStack, settings, tapNumber, updSess, updateTrackConfig, wheelNums
 }) {
-    const recentSpins = [...sess.spins].reverse().slice(0,30);
     const hasActiveTracks = nonClosedTracks.some(t=>t.state==="active");
     const tMin = settings.tableMinBet||1;
 
@@ -177,19 +176,9 @@ function GamePageView({
         )}
         <div style={{textAlign:"center",fontSize:8,color:"#374151"}}>center=straight · edge=split · corner=corner</div>
 
-        {/* Recent spins ticker */}
-        {sess.spins.length>0 && (
-          <div style={{display:"flex",gap:4,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch",width:"100%",maxWidth:"100%",minWidth:0,boxSizing:"border-box"}}>
-            {recentSpins.map((val,i)=>{
-              const isZ=val==="0"||val==="00", r=!isZ&&RED.has(+val);
-              return(
-                <div key={i} style={{flexShrink:0,width:28,height:28,borderRadius:6,background:isZ?"#166534":r?"#7f1d1d":"#0d1117",border:"2px solid "+(i===0?"#ffffff":isZ?"#22c55e":r?"#ef4444":"#374151"),color:isZ?"#bbf7d0":r?"#fecaca":"#f1f5f9",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  {val}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* Recent numbers: the Live page's shared strip, reserved from the first render. This page passes no track
+            overlays and turns the long-press spin correction off (correctable={false}). */}
+        <RecentNumbersStrip spins={sess.spins} correctable={false}/>
 
         {/* Session Profit */}
         {sess.spins.length>0 && (

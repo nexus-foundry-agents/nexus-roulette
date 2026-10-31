@@ -27,6 +27,22 @@ const BOARD_STATUS_LINES = {
 };
 const BOARD_STATUS_KEYS = Object.keys(BOARD_STATUS_LINES).concat(["canceled"]);
 
+// The optional reader field, after the numbers of a numbers return only: "#readboard=ok:8,31,3;by=cloud" or ";by=pc".
+const BOARD_READER_FIELD = ";by=";
+const BOARD_READER_HEIGHT = 16; // the reader line's reserved height (shared rule 82)
+// One factual line per reader. Any other value has no line.
+const BOARD_READER_LINES = {cloud: "Read by the cloud model", pc: "Read by your PC"};
+
+// True only for a value this page has a line for. Own keys only, so "constructor" or "__proto__" is not a reader.
+function isBoardReader(by) {
+  return typeof by === "string" && Object.prototype.hasOwnProperty.call(BOARD_READER_LINES, by);
+}
+
+// The reader line for a value, or "" when the value is absent or unknown.
+function boardReaderLine(by) {
+  return isBoardReader(by) ? BOARD_READER_LINES[by] : "";
+}
+
 // The page the button opens for a session's wheel. The American wheel only when the session says so (as getWheelNumbers).
 function boardPhotoUrl(wheel) {
   return wheel === "american" ? BOARD_PHOTO_URLS.american : BOARD_PHOTO_URLS.european;
@@ -58,13 +74,35 @@ function readBoardNumbers(body, wheel) {
   return parts.every(p => legal.includes(p)) ? {kind: "numbers", numbers: parts} : unreadable;
 }
 
-// Parses a return hash. Returns {kind:"numbers", numbers} or {kind:"status", status}, or null when the hash is a return
-// this reader does not know (an unknown status is ignored).
+// Contract with the Nexus Foundry reader (the shape it must send; a change lands here first):
+//   #readboard=ok:<numbers>              numbers in board order, most recent first; each one legal on the wheel
+//   #readboard=ok:<numbers>;by=cloud     the same, read by the hosted cloud model
+//   #readboard=ok:<numbers>;by=pc        the same, read by the user's PC
+//   #readboard=<status>                  a status key; a status takes no ;by= field
+// The ;by= field is optional. Absent or unknown (exact, lowercase only) means no reader line. It never makes a return
+// unreadable, and a numbers result without it has no reader key at all.
+// Parses a return hash. Returns {kind:"numbers", numbers[, reader]} or {kind:"status", status}, or null when the hash is a
+// return this reader does not know (an unknown status is ignored).
 function parseBoardReturn(hash, wheel) {
   if (!isBoardReturn(hash)) return null;
-  const body = hash.slice(BOARD_HASH_PREFIX.length);
-  if (body === "ok" || body.indexOf("ok:") === 0) return readBoardNumbers(body, wheel);
-  return BOARD_STATUS_KEYS.includes(body) ? {kind: "status", status: body} : null;
+  const raw = hash.slice(BOARD_HASH_PREFIX.length);
+  const {body, by} = splitBoardReader(raw);
+  if (body === "ok" || body.indexOf("ok:") === 0) return withBoardReader(readBoardNumbers(body, wheel), by);
+  return BOARD_STATUS_KEYS.includes(raw) ? {kind: "status", status: raw} : null;
+}
+
+// Splits the reader field off a body. The value after ;by= is kept only when it is a known reader; otherwise the field is
+// dropped and the numbers parse as if it were never sent.
+function splitBoardReader(body) {
+  const at = body.indexOf(BOARD_READER_FIELD);
+  if (at < 0) return {body, by: null};
+  const by = body.slice(at + BOARD_READER_FIELD.length);
+  return {body: body.slice(0, at), by: isBoardReader(by) ? by : null};
+}
+
+// The reader rides on a numbers result only. With no known reader the result is returned unchanged, with no reader key.
+function withBoardReader(result, by) {
+  return by && result.kind === "numbers" ? {...result, reader: by} : result;
 }
 
 // Reads the return once and removes it from the URL at once, so a reload has nothing to read again. Only loc.hash is
@@ -131,16 +169,22 @@ function BoardPhotoStatus({result}) {
 
 // The review of the numbers a photo read returned, in board order, most recent first. Each number can be corrected with
 // the same number picker the recent-numbers strip uses (NumberPicker, SpinTools.jsx). Add passes the list up in board
-// order and App enters it oldest first. Cancel, and a press on the backdrop, add nothing.
-function BoardPhotoReview({numbers, roulette, onAdd, onCancel}) {
+// order and App enters it oldest first. Cancel, and a press on the backdrop, add nothing. The reader line under the heading
+// is always rendered in a reserved slot (shared rule 82): only its visibility depends on whether a reader is known.
+function BoardPhotoReview({numbers, roulette, reader, onAdd, onCancel}) {
   const [list, setList] = React.useState(numbers);
   const [picking, setPicking] = React.useState(null);
   const count = list.length;
+  const readerLine = boardReaderLine(reader);
   return (
     <>
       <Modal onClose={onCancel}>
         <div style={{fontSize:17,fontWeight:800,color:"#e2e8f0",marginBottom:6}}>Numbers read from your photo</div>
-        <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.5,marginBottom:12}}>Most recent first. Check them before adding.</div>
+        <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.5,marginBottom:4}}>Most recent first. Check them before adding.</div>
+        <div data-slot="reader" aria-hidden={readerLine ? undefined : "true"}
+          style={{minHeight:BOARD_READER_HEIGHT,boxSizing:"border-box",visibility:readerLine ? "visible" : "hidden",fontSize:12,fontWeight:700,color:"#94a3b8",lineHeight:"16px",marginBottom:12,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+          {readerLine}
+        </div>
         <div role="group" aria-label="Numbers read from the photo" style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
           {list.map((n,i) => {
             const isZ = n==="0"||n==="00";
