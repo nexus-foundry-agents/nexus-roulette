@@ -129,6 +129,7 @@ export default function App() {
   const saved = appState.savedSessions || [];
   const currency = settings.currency || "USD";
   const cur = getCurrency(currency);
+  const venueSheets = useVenueSheets({appMode, appState, saved, settings, updApp, endSession});
 
   useEffect(() => { saveApp(appState); }, [appState]);
 
@@ -509,8 +510,13 @@ export default function App() {
             }
           </div>
           {sess.sessionStartedAt && (
-            <button onClick={()=>{if(window.confirm("End session and save?"))endSession();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
+            <button onClick={()=>{if(window.confirm("End session and save?"))venueSheets.requestEnd();}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#200505",color:"#f87171",fontSize:11,fontWeight:700,cursor:"pointer"}}>■ End Session</button>
           )}
+        </div>
+        {/* Venue line (F11): one row whether or not a venue is recorded, so the header does not move when one is added. */}
+        <div style={{display:"flex",alignItems:"center",gap:8,minHeight:30,minWidth:0}}>
+          <span style={{flex:"1 1 0",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12,color:sess.venue?"#cbd5e1":"#64748b"}}>{venueLine(sess.venue)||"No venue recorded"}</span>
+          <button onClick={()=>venueSheets.openEdit("current")} style={{flex:"0 0 auto",padding:"5px 10px",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>{sess.venue?"Edit venue":"Add venue"}</button>
         </div>
         <SpinTools spinCount={sess.spins.length} confirmOpen={clearOpen} undoVisible={!!clearUndo&&clearUndo.sessionId===appState.currentSession.id&&appState.currentSession.spins.length===0} onAsk={()=>setClearOpen(true)} onCancel={()=>setClearOpen(false)} onConfirm={clearNumbers} onUndo={undoClearNumbers} onReadPhoto={()=>openBoardPhoto(window.location,sess.roulette,setBoardReturn)}/>
         <BoardPhotoStatus result={boardReturn}/>
@@ -842,7 +848,7 @@ export default function App() {
             {tab===0 && <TrackerPage/>}
             {tab===1 && <TablePage/>}
             {tab===2 && <SpinPage sess={sess} updSess={updSess} trackOverlays={trackOverlays}/>}
-            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} loadSession={loadSession} exportJSON={exportJSON}/>}
+            {tab===3 && <StatsPage sess={sess} livePauseOffset={livePauseOffset} pnlVal={pnlVal} cur={cur} currency={currency} pnlColor={pnlColor} saveSession={saveSession} newEmptySession={newEmptySession} tearSession={tearSession} reactivateTrack={reactivateTrack} saved={saved} loadSession={loadSession} exportJSON={exportJSON} venueSession={appMode==="live"} onEditVenue={venueSheets.openEdit}/>}
             {tab===4 && <SettingsPage settings={settings} updSettings={updSettings} setCurrencyOpen={setCurrencyOpen} currency={currency} cur={cur} updSess={updSess} sess={sess} setChangelogOpen={setChangelogOpen} updApp={updApp} importJSON={importJSON} setHardResetOpen={setHardResetOpen}/>}
           </div>
         )}
@@ -856,6 +862,7 @@ export default function App() {
       {changelogOpen && <ChangelogModal onClose={()=>setChangelogOpen(false)}/>}
       {editBankroll && <BankrollEdit onClose={()=>setEditBankroll(false)}/>}
       {hardResetOpen && <HardResetModal onClose={()=>setHardResetOpen(false)} onExport={exportJSON}/>}
+      {venueSheets.sheets}
 
       {/* Floating feedback button */}
       <button onClick={()=>setFeedbackOpen(true)} style={{position:"fixed",top:12,left:12,width:36,height:36,borderRadius:"50%",border:"none",background:"#1e2d3d",color:"#94a3b8",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:900}}>🐛</button>

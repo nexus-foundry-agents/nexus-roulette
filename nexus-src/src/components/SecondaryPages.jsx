@@ -7,7 +7,7 @@ function SpinPage({ sess, updSess, trackOverlays }) {
         <Card>
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
             <span style={{fontSize:12,color:"#64748b",flex:1}}>Total Spins: <strong style={{color:"#e2e8f0"}}>{sess.spins.length}</strong></span>
-            {sess.spins.length>0 && <button onClick={()=>{if(window.confirm("Clear all spins from session history?"))updSess(s=>{s.spins=[];s.droughts=initDroughts(s.roulette);});}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#1e2d3d",color:"#f87171",fontSize:12,cursor:"pointer"}}>Clear History</button>}
+            {sess.spins.length>0 && <button onClick={()=>{if(window.confirm("Clear all spins from session history?"))updSess(s=>{s.spins=[];s.droughts=initDroughts(s.roulette);resetDealerChanges(s);});}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #7f1d1d",background:"#1e2d3d",color:"#f87171",fontSize:12,cursor:"pointer"}}>Clear History</button>}
           </div>
           {sess.spins.length===0
             ? <div style={{textAlign:"center",padding:"20px 0",color:"#475569",fontSize:12}}>No spins logged yet. Enter numbers on the Tracker tab.</div>
@@ -42,8 +42,39 @@ function SpinPage({ sess, updSess, trackOverlays }) {
       </div>
     );
   }
+  // -- Spins logged by venue (F11): counts only, across the saved sessions. Every row reconciles with the total. --
+function VenueSpinCounts({sessions}) {
+    const counts = venueSpinCounts(sessions);
+    const groups = [
+      ["Casino", venueCountRows(counts.casino)],
+      ["Machine", venueCountRows(counts.machine)],
+      ["Table and dealer", venueCountRows(counts.table)],
+    ];
+    return (
+      <Card>
+        <FieldLabel>Spins logged by venue</FieldLabel>
+        <div style={{fontSize:11,color:"#64748b",marginBottom:10}}>{counts.total+" spins in "+sessions.length+" saved sessions · "+counts.noVenue+" with no venue"}</div>
+        {groups.map(([title,rows]) => (
+          <div key={title} style={{marginBottom:10,minWidth:0}}>
+            <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>{title}</div>
+            {rows.length===0
+              ? <div style={{fontSize:12,color:"#475569"}}>None recorded</div>
+              : rows.map(r => (
+                <div key={r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,fontSize:12,color:"#e2e8f0",minWidth:0,padding:"2px 0"}}>
+                  <span style={{minWidth:0,overflowWrap:"anywhere"}}>{r.label}</span>
+                  <strong style={{flex:"0 0 auto",fontVariantNumeric:"tabular-nums"}}>{r.count}</strong>
+                </div>
+              ))
+            }
+          </div>
+        ))}
+      </Card>
+    );
+  }
   // -- Session Stats Page --
-function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, saveSession, newEmptySession, tearSession, reactivateTrack, saved, loadSession, exportJSON }) {
+// venueSession: the Live session is the one whose venue can be recorded here. onEditVenue(scope) opens the venue sheet
+// for "current" or for a saved session id.
+function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, saveSession, newEmptySession, tearSession, reactivateTrack, saved, loadSession, exportJSON, venueSession, onEditVenue }) {
     // Group tracks by type + roi + stopLoss for consolidated view
     const trackGroups = useMemo(() => {
       const groups = {};
@@ -71,6 +102,12 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
           <FieldLabel>Current Session</FieldLabel>
           <div style={{fontSize:13,color:"#e2e8f0",fontWeight:700,marginBottom:4}}>{sess.name}</div>
           <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>{new Date(sess.created).toLocaleString()} · {sess.spins.length} spins · {sess.tracks.length} tracks</div>
+          {venueSession && (
+            <div style={{display:"flex",alignItems:"center",gap:8,minHeight:34,marginBottom:12,minWidth:0}}>
+              <span style={{flex:"1 1 0",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12,color:sess.venue?"#e2e8f0":"#64748b"}}>{venueLine(sess.venue)||"No venue recorded"}</span>
+              <button onClick={()=>onEditVenue("current")} style={{flex:"0 0 auto",padding:"6px 10px",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:12,cursor:"pointer"}}>{sess.venue?"Edit venue":"Add venue"}</button>
+            </div>
+          )}
           {sess.sessionStartedAt && (
             <div style={{background:"#0c1520",borderRadius:9,padding:"8px 12px",border:"1px solid #2d4057",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:11,color:"#64748b"}}>Session Time</span>
@@ -180,6 +217,12 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
                         </div>
                         <div style={{fontSize:13,fontWeight:800,color:pnl>=0?"#4ade80":"#f87171"}}>{pnl>=0?"+":"-"}{cur.symbol}{Math.abs(pnl).toFixed(cur.dec)}</div>
                       </div>
+                      {(s.mode===undefined||s.mode==="live") && (
+                        <div style={{display:"flex",alignItems:"center",gap:8,minHeight:30,marginBottom:6,minWidth:0}}>
+                          <span style={{flex:"1 1 0",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:11,color:s.venue?"#cbd5e1":"#64748b"}}>{venueLine(s.venue)||"No venue recorded"}</span>
+                          <button onClick={()=>onEditVenue(s.id)} style={{flex:"0 0 auto",padding:"5px 9px",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>{s.venue?"Edit venue":"Add venue"}</button>
+                        </div>
+                      )}
                       {!isCurrent && <button onClick={()=>loadSession(s.id)} style={{width:"100%",padding:"7px 0",borderRadius:8,border:"1px solid #2d4057",background:"#1e2d3d",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Resume</button>}
                     </div>
                   );
@@ -188,6 +231,8 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
             )
           }
         </Card>
+
+        {saved.length>0 && <VenueSpinCounts sessions={saved}/>}
 
         <StreakPercentileTable wheel={sess.roulette}/>
 
