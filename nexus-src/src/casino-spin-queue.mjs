@@ -270,7 +270,9 @@ export function createSpinQueue(deps) {
       const result=head.pauseAfter
         ? await sendCasinoSpinAndPause(payload,deps.send,wait,onRetry,SPIN_ATTEMPTS,head.ambiguous)
         : await sendCasinoSpinUntilReconciled(payload,deps.send,wait,onRetry,SPIN_ATTEMPTS,head.ambiguous);
-      if(!current()) return false;
+      // The send above started, so Casino may hold this spin. A round abandoned after it marks the head ambiguous: the next
+      // round reconciles the same sequence instead of reading Casino's answer as a stale number and renumbering the spin.
+      if(!current()){ head.ambiguous=true; return false; }
       if(!result.ok) {
         // A failure that may have reached Casino marks the head for good, whatever the answer says next.
         head.ambiguous=head.ambiguous||result.ambiguous===true;

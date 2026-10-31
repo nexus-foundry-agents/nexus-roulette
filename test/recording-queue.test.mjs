@@ -40,7 +40,7 @@ function installFakeCasino({ running = false, honourPauseAfter = false, refuseWh
   const shell = {};
   const server = {
     recorded: [], sent: [], failNext: 0, spinCalls: 0, pending: 0,
-    status: 'running', pauses: 0, resumes: 0, stops: 0,
+    status: 'running', pauses: 0, resumes: 0, stops: 0, holdReplies: false, heldReplies: [],
   };
 
   function deliver(data) {
@@ -50,10 +50,12 @@ function installFakeCasino({ running = false, honourPauseAfter = false, refuseWh
   function reply(message, status, body, error) {
     const ok = status >= 200 && status < 300;
     server.pending += 1;
-    setImmediate(() => {
+    const answer = () => {
       server.pending -= 1;
       deliver({ kind: CASINO_BRIDGE_RESPONSE, id: message.id, ok, status, body, error });
-    });
+    };
+    // With holdReplies the answer waits until the test releases it, so a test can act while a send is in flight.
+    if (server.holdReplies) server.heldReplies.push(answer); else setImmediate(answer);
   }
   const sessionNow = () => ({ id: 's1', status: server.status, spins: server.recorded.length });
   function serve(message) {
@@ -114,6 +116,7 @@ function installFakeCasino({ running = false, honourPauseAfter = false, refuseWh
   return {
     server,
     hello() { deliver({ kind: CASINO_BRIDGE_HELLO, gameId: 'roulette' }); },
+    releaseOne() { const answer = server.heldReplies.shift(); if (answer) answer(); },
   };
 }
 
@@ -1049,4 +1052,119 @@ test('a Resume on a queue held behind a paused session resumes Casino first, the
   // Let the last answers and their follow-up work finish before the test ends.
   assert.equal(await until(() => casino.server.pending === 0), true, 'an answer was still in flight when the test ended');
   for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setImmediate(resolve));
+});
+
+// -- Review round 4: the third review's defects. Each test fails on the round-3 code before its fix. -------
+
+// With answers held, the test releases the next one as soon as it is sent.
+async function releaseNext(casino) {
+  assert.equal(await until(() => casino.server.heldReplies.length === 1), true, 'an answer was not held');
+  casino.releaseOne();
+}
+
+// A running recording whose head spin is unconfirmed: each of its three attempts is released by the test.
+async function heldRecording(t) {
+  const casino = installFakeCasino({ running: true });
+  const render = installHarness();
+  t.after(() => { render.unmount(); restoreGlobals(); });
+  const view = () => render('game', true);
+  view();
+  casino.hello();
+  assert.equal(await until(() => view().session && view().session.status === 'running'), true, 'the running session was not adopted');
+  casino.server.holdReplies = true;
+  casino.server.failNext = 3;
+  view().record(spin('17'));
+  for (let i = 0; i < 3; i += 1) await releaseNext(casino);
+  assert.equal(await until(() => /^1 spin waiting/.test(view().problem)), true, 'the head was not held');
+  return { casino, view };
+}
+
+test('FLUSH-DROP 1: a send in flight at dispose that Casino records is resent on reopen under the same sequence, recorded once', async () => {
+  const server = { recorded: [], sent: [], replies: [] };
+  const confirmed = [];
+  const retries = [];
+  const queue = createSpinQueue({
+    resolveSession: async () => ({ ok: true, session: { id: 's1', status: 'running', spins: 0 } }),
+    send: (op, payload) => {
+      const repeat = server.recorded.includes(payload.spin.sequence);
+      if (!repeat) server.recorded.push(payload.spin.sequence);
+      server.sent.push(structuredClone(payload));
+      return new Promise((resolve) => server.replies.push(() => resolve({ ok: true, status: 201, body: { recorded: !repeat, session: { id: 's1', status: 'running', spins: server.recorded.length } } })));
+    },
+    wait: async () => {}, pauseRequested: () => false, report: () => {}, recordingOff: () => {},
+    confirmed: (body, info) => { confirmed.push(info); },
+    reread: async () => ({ ok: true, session: { id: 's1', status: 'running', spins: server.recorded.length } }),
+    ended: () => {}, drained: () => {}, schedule: (callback) => { retries.push(callback); return () => {}; },
+  });
+  const answer = () => server.replies.shift()();
+  queue.enqueue(spin('17'));
+  const flushing = queue.flush();
+  assert.equal(await until(() => server.replies.length === 1), true, 'the first send was not made');
+  queue.dispose(); // the view closes while the send is in flight
+  answer(); // Casino records the spin, and its answer arrives after the close
+  assert.equal(await flushing, false, 'the closed round confirmed a spin');
+  queue.reopen(); // the view mounts again on the same recorder
+  assert.equal(await until(() => server.replies.length === 1), true, 'reopen did not resend the spin');
+  answer();
+  await until(() => confirmed.length === 1 || retries.length > 0);
+  retries.splice(0).forEach((retry) => retry()); // a queue that held the spin would retry it now, under a new number
+  await until(() => confirmed.length === 1 || server.replies.length > 0);
+  if (server.replies.length) answer();
+  assert.equal(await until(() => confirmed.length === 1), true, 'the spin was not confirmed after reopen');
+  assert.deepEqual(server.recorded, [1], 'the spin was recorded under more than one sequence');
+  assert.equal(new Set(server.sent.map((payload) => payload.spin.sequence)).size, 1, 'the spin was renumbered');
+  assert.deepEqual(confirmed, [{ reconciled: true, pauseCarried: false }]);
+});
+
+test('FLUSH-DROP 2: a second Stop during the discard wait says that it is discarding', async (t) => {
+  const { casino, view } = await heldRecording(t);
+  view().stop(); // the first press offers the discard
+  assert.equal(await until(() => /Press Stop again/.test(view().problem)), true);
+  casino.server.failNext = 0;
+  assert.equal(fireRetries(), 1, 'the retry was not armed once');
+  assert.equal(await until(() => casino.server.heldReplies.length === 1), true, 'the retry did not send');
+  view().stop(); // the second press waits for the send in flight
+  assert.equal(view().problem, 'Discarding unsent spins…', 'the second Stop did not say that it is discarding');
+  await releaseNext(casino); // Casino records the spin, and the discard goes on to stop the recording
+  await releaseNext(casino);
+  assert.equal(await until(() => view().session && view().session.status === 'stopped'), true, 'the recording did not stop');
+  assert.equal(casino.server.recorded.length, 1);
+});
+
+test('FLUSH-DROP 3: Resume and Pause during the discard wait are refused with no message and never reach Casino', async (t) => {
+  const { casino, view } = await heldRecording(t);
+  // Resume flushes the held spin: its three attempts are sent, and each answer is held until released.
+  casino.server.failNext = 3;
+  view().resume();
+  assert.equal(await until(() => casino.server.heldReplies.length === 1), true, 'Resume did not flush');
+  view().stop(); // the first press offers the discard
+  view().stop(); // the second press starts the discard, which waits for the flush
+  view().pause(); // a Pause while the discard waits, with the held spin still queued, is refused the same way
+  assert.equal(view().problem, 'Discarding unsent spins…', 'Pause during the discard wait wrote a line of its own');
+  assert.equal(casino.server.pauses, 0, 'Pause reached Casino during the discard');
+  for (let i = 0; i < 3; i += 1) await releaseNext(casino);
+  assert.equal(await until(() => casino.server.heldReplies.length === 1), true, 'the discard did not reach Casino');
+  assert.equal(view().problem, 'Discarding unsent spins…', 'Resume during the discard wait wrote a line of its own');
+  assert.equal(casino.server.resumes, 0, 'Resume reached Casino during the discard');
+  await releaseNext(casino);
+  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: recording was stopped.'), true,
+    'the discard was not stated with its count');
+});
+
+test('FLUSH-DROP 4: a spin made during the discard is refused as stopping, and is neither counted nor sent', async (t) => {
+  const { casino, view } = await heldRecording(t);
+  view().stop(); // the first press offers the discard
+  assert.equal(await until(() => /Press Stop again/.test(view().problem)), true);
+  casino.server.failNext = 0;
+  assert.equal(fireRetries(), 1, 'the retry was not armed once');
+  assert.equal(await until(() => casino.server.heldReplies.length === 1), true, 'the retry did not send');
+  view().record(spin('8')); // made before the second press, but its turn in the queue comes after the discard has begun
+  view().stop(); // the second press: the discard waits for the send in flight
+  view().record(spin('3')); // a spin made during the discard
+  assert.equal(view().problem, '1 spin was not saved to Casino: recording is stopping.', 'the spin made during the discard was not refused');
+  await releaseNext(casino); // the send in flight is recorded
+  await releaseNext(casino); // the stop
+  assert.equal(await until(() => view().problem === '2 spins were not saved to Casino: recording is stopping.'), true,
+    'the refusals did not stay on screen after the discard');
+  assert.deepEqual(casino.server.recorded.map((row) => row.segment), ['17'], 'a refused spin reached Casino');
 });

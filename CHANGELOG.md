@@ -25,6 +25,10 @@ Notable code and documentation changes are recorded here. Release versions are a
 - A spin confirmed by a reconciled answer keeps its pause. If that spin carried a pause and Casino reports the session as not paused, the pause is applied when the queue drains, unless the pause was withdrawn in the meantime.
 - Spins still queued when the Casino recording view unmounts are counted. The next mount of that mode says "N spins were not sent to Casino before the page closed." The count is kept in `localStorage` (with a try/catch, as `casino-sync.mjs` does) and is updated as the queue changes. Where `localStorage` is unavailable the count is not kept. The spins themselves are not persisted; that is CASINO-QUEUE-PERSIST.
 - A spin made while Casino recording is paused says "1 spin was not saved to Casino: recording is paused. Resume it before the next spin." It was refused before, with no count. Spins made while recording is off or Casino is not connected are never queued and are not counted; the recording bar says nothing is being recorded.
+- A send still in flight when the Casino recording view closes no longer lets its spin be recorded twice. A send abandoned by unmount or dispose marks its head ambiguous, so the next mount resends the same sequence and request id. Casino answers `recorded:false`, the spin is confirmed once, and it is never renumbered. `drain()` in `nexus-src/src/casino-spin-queue.mjs`.
+- A second Stop during the discard wait shows "Discarding unsent spins…" in the problem line, and the queue's own problem lines do not replace it until the discard finishes. `discardAndStop()` in `nexus-src/src/casino-recording.mjs`.
+- Resume and Pause pressed during the discard wait do nothing and say nothing: they return false, and no "cannot resume" or "will pause after" line is written. `lifecycle()` and `pauseImmediately()` in `nexus-src/src/casino-recording.mjs`.
+- A spin made while the queue is discarding is refused. It is not queued, not counted as discarded, and never sent to a stopping session. The problem line says "1 spin was not saved to Casino: recording is stopping." and stays on screen after the discard, with the discard's own count. `record()` in `nexus-src/src/casino-recording.mjs`.
 
 ### Open
 
@@ -44,6 +48,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 - Account sync (`nexus-src/src/casino-sync.mjs`) may replace a spin made before the account sync has loaded the saved state. This is not reproduced by a test here and is not changed by this fix.
 - No browser suite was run. The problem lines and the Stop confirmation are UNVERIFIED on a device.
 - The version number is not bumped and the service worker cache name is unchanged; both move at promotion.
+- The refusal counter resets on a non-definitive failure. A head refused with a 409 or 4xx, then failing with a 5xx or a network error, starts again at zero, so a server that alternates 409 and 5xx never reaches the three refusals that drop the head. `drain()` sets `head.refusals=0` on that path in `nexus-src/src/casino-spin-queue.mjs`. Not changed here.
+- Two tabs of one mode share one unsent-count key (`nexus-roulette.casino-unsent.<mode>` in `localStorage`). Each tab writes the count of its own queue to the same key, so the next mount can report another tab's count. Not changed here.
 
 ## [0.63.0] - 2026-10-31
 

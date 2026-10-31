@@ -157,6 +157,8 @@ export function useCasinoRecording(mode,active) {
   const availabilityRef = React.useRef('unknown');
   const mounted = React.useRef(true);
   const discardPending = React.useRef(false);
+  // Spins refused while a discard waits. They are stated on screen once the discard finishes.
+  const stoppingRefusals = React.useRef(0);
   sessionRef.current = session;
   activeRef.current = active;
 
@@ -253,6 +255,12 @@ export function useCasinoRecording(mode,active) {
   // A spin is never dropped once it is part of a running recording. A held queue only takes it, and the retry
   // timer sends the queue. Recording that has not started (off, not connected, or paused) still refuses the spin.
   const record = React.useCallback(function(spin){
+    // A spin made while the queue discards is refused: it is never queued, so it is neither counted as discarded nor sent on.
+    const refuse=function(){
+      stoppingRefusals.current+=1;
+      setProblem(spinsNotSavedCopy(stoppingRefusals.current,'recording is stopping'));
+    };
+    if(discardPending.current) return refuse();
     queue.current = queue.current.then(async function(){
       if(!recorder.current.waiting()){
         const live = sessionRef.current;
@@ -265,6 +273,8 @@ export function useCasinoRecording(mode,active) {
           if(availabilityRef.current!=='on')return;
         }
       }
+      // The last check before the enqueue: an await above may have let a discard begin.
+      if(discardPending.current) return refuse();
       const pending=recorder.current.submit(spin);
       syncUnsent();
       await pending;
@@ -272,11 +282,16 @@ export function useCasinoRecording(mode,active) {
   },[refresh,setProblem,syncUnsent]);
 
   const lifecycle = React.useCallback(function(op){
+    // A discard owns the queue while it waits. A Resume then does nothing and says nothing.
+    if(discardPending.current) return Promise.resolve(false);
     const task=queue.current.then(async function(){
       // A Resume on a queue held behind a paused session resumes Casino first. Flushing first would send the held
       // spins to the paused session, have them refused, and the resume would never be sent.
       const resumingHeld = op==='resume' && recorder.current.pausedHeld();
-      if(!resumingHeld && !await flushPendingSpins()){
+      const flushed = resumingHeld || await flushPendingSpins();
+      // A discard that began during the flush refused it. That refusal is the discard's to report, not a reason to say "cannot resume".
+      if(discardPending.current) return false;
+      if(!flushed){
         const waiting=recorder.current.waiting();
         if(waiting) setProblem(spinsWaitingCopy(waiting)+' Casino cannot '+op+' until they are confirmed.');
         return false;
@@ -304,13 +319,17 @@ export function useCasinoRecording(mode,active) {
   },[setProblem]);
 
   const pauseImmediately = React.useCallback(function(owner){
+    // A discard owns the queue while it waits. A Pause then does nothing and says nothing.
+    if(discardPending.current) return Promise.resolve(false);
     const previousOwner=pauseOwner.current;
     pauseOwner.current=owner;
     if(recorder.current.held()) return Promise.resolve(deferPause());
     const task=queue.current.then(async function(){
       const live=sessionRef.current;
       if(!live){pauseOwner.current=previousOwner;return false;}
-      if(!await flushPendingSpins()){
+      const flushed=await flushPendingSpins();
+      if(discardPending.current){pauseOwner.current=previousOwner;return false;}
+      if(!flushed){
         if(recorder.current.waiting()) return deferPause();
         pauseOwner.current='none';
         return false;
@@ -337,6 +356,15 @@ export function useCasinoRecording(mode,active) {
   const discardAndStop = React.useCallback(async function(){
     if(discardPending.current) return;
     discardPending.current=true;
+    // Shown while the discard waits for a send in flight, so a second press is answered on screen.
+    setProblem('Discarding unsent spins…');
+    // The spins refused while the discard waited are stated after its line, and the count is then taken.
+    const withRefusals=function(text){
+      const refused=stoppingRefusals.current;
+      stoppingRefusals.current=0;
+      const note=refused?spinsNotSavedCopy(refused,'recording is stopping'):null;
+      return [text,note].filter(Boolean).join(' ')||null;
+    };
     try{
       const outcome=await recorder.current.discard();
       stopOffer.current=null;
@@ -344,18 +372,18 @@ export function useCasinoRecording(mode,active) {
       const notSaved=outcome.count?spinsDroppedCopy(outcome.count,outcome.maybeSaved,'recording was stopped'):null;
       syncUnsent();
       const live=sessionRef.current;
-      if(!live){ setProblem(notSaved); return; }
+      if(!live){ setProblem(withRefusals(notSaved)); return; }
       // Set only after the discard, so a discarded queue sends no pause. Cleared again once Casino confirms the stop.
       const previousOwner=pauseOwner.current;
       pauseOwner.current='manual';
       const result=await askCasino('stop',{sessionId:live.id});
       if(!result.ok){
         pauseOwner.current=previousOwner;
-        setProblem((notSaved?notSaved+' ':'')+(result.error||'Casino refused to stop the recording session.'));
+        setProblem(withRefusals((notSaved?notSaved+' ':'')+(result.error||'Casino refused to stop the recording session.')));
         return;
       }
       pauseOwner.current='none';
-      setProblem(notSaved);
+      setProblem(withRefusals(notSaved));
       adopt(casinoSession(result.body)||live);
     }finally{
       discardPending.current=false;
@@ -386,6 +414,8 @@ export function useCasinoRecording(mode,active) {
   // The queue's own problem lines. While a Stop is offered the offer stays, with the count it would discard.
   function reportQueue(text){
     syncUnsent();
+    // A discard that waits keeps its own line; the queue's retry copy does not replace it.
+    if(discardPending.current) return;
     if(text===null){ stopOffer.current=null; setProblem(null); return; }
     if(stopOffer.current!==null){ setProblem(stopOfferCopy(recorder.current.waiting())); return; }
     setProblem(pausePending.current?text+' Casino will pause after they are confirmed.':text);
