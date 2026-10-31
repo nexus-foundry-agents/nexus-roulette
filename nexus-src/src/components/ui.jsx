@@ -137,7 +137,7 @@ function SessionClock({startedAt, endedAt, style, pauseOffset}) {
 // -- Roulette Table Board --
 // pickNumbers: the board is picking a hit, not placing a bet, so a tap anywhere in a number's square is that number
 // (the counter under the number sits in the edge zone, which would otherwise read as a split or corner).
-function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows, pickNumbers}) {
+function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows, pickNumbers, percentileOutlines}) {
   const isAmerican = roulette === "american";
   const sb = stratBets || {};
   const bb = boardBets || {};
@@ -146,6 +146,16 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
   // Drought count under every number (NumberDrought). Display only: droughts is read, never written. The Counter
   // setting picks Spins or Percentile, and the wheel names the table the percentile is read from.
   const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false, counter:counterMode(counterShows), wheel:roulette};
+  // The percentile outline (F10): the number's count, read exactly as its counter reads it (counterLength), on this
+  // wheel's single-number table, drawn as a 2 px outline outside the square. Visual only: no border, size or tap change.
+  // Nothing below P75, and nothing at all when the setting is off.
+  const outlineColors = {p75:"#16a34a", p95:"#fbbf24", p98:"#f87171"};
+  function percentileOutline(numStr) {
+    if (percentileOutlines === false) return {};
+    const c = counterLength(numStr, droughtView.droughts, droughtView.spins, droughtView.wheelSize, droughtView.headStart);
+    const color = outlineColors[outlineTier(streakPercentile("straight:" + numStr, roulette, c.length))];
+    return color ? {outline:"2px solid " + color, outlineOffset:0} : {};
+  }
   const canBet = !!onBet && !spinning && !betResults;
   const BOARD_ROWS = ROULETTE_BOARD_ROWS;
   const g = 2;
@@ -293,7 +303,7 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
       onBet(det.type,det.target);
     }
 
-    return React.createElement("div",{key:numStr,onClick:handleClick,style:{...numStyle(num,isZero),cursor:canBet?"pointer":"default",border:betBorder||numStyle(num,isZero).border}},
+    return React.createElement("div",{key:numStr,onClick:handleClick,style:{...numStyle(num,isZero),...percentileOutline(numStr),cursor:canBet?"pointer":"default",border:betBorder||numStyle(num,isZero).border}},
       numberFace(numStr),
       winStr===numStr&&!spinning&&React.createElement(Mkr),
       sChips&&React.createElement(StratChipBadge,{chips:sChips}),
@@ -360,10 +370,10 @@ function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boa
         <div style={{display:"flex",flexDirection:"column",gap:g,width:zeroW,flexShrink:0}}>
           {React.createElement("div",{key:"0",onClick:function(e){if(!canBet)return;var rect=e.currentTarget.getBoundingClientRect();var pX=(e.clientX-rect.left)/rect.width,pY=(e.clientY-rect.top)/rect.height;
             if(pickNumbers){onBet("straight","0");return;}var bet=zeroCellBet("0",pX,pY,isAmerican);onBet(bet.type,bet.target);
-          },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["0"]?"2px solid #c084fc":(winStr==="0"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="0"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="0"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("0"),winStr==="0"&&!spinning&&React.createElement(Mkr),bb["s:0"]&&React.createElement(BetChip,{amount:bb["s:0"],posKey:"s:0"}))}
+          },style:{...percentileOutline("0"),flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["0"]?"2px solid #c084fc":(winStr==="0"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="0"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="0"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("0"),winStr==="0"&&!spinning&&React.createElement(Mkr),bb["s:0"]&&React.createElement(BetChip,{amount:bb["s:0"],posKey:"s:0"}))}
           {isAmerican&&React.createElement("div",{key:"00",onClick:function(e){if(!canBet)return;var rect=e.currentTarget.getBoundingClientRect();var pX=(e.clientX-rect.left)/rect.width,pY=(e.clientY-rect.top)/rect.height;
             if(pickNumbers){onBet("straight","00");return;}var bet=zeroCellBet("00",pX,pY,isAmerican);onBet(bet.type,bet.target);
-          },style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["00"]?"2px solid #c084fc":(winStr==="00"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="00"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="00"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("00"),winStr==="00"&&!spinning&&React.createElement(Mkr),bb["s:00"]&&React.createElement(BetChip,{amount:bb["s:00"],posKey:"s:00"}))}
+          },style:{...percentileOutline("00"),flex:1,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,background:"#166534",border:insideCoveredNums["00"]?"2px solid #c084fc":(winStr==="00"?"2px solid #fbbf24":"1px solid #374151"),color:winStr==="00"?"#fbbf24":"white",fontSize:cellFs-1,fontWeight:800,position:"relative",boxShadow:winStr==="00"?"0 0 10px #fbbf24":"none",cursor:canBet?"pointer":"default"}},numberFace("00"),winStr==="00"&&!spinning&&React.createElement(Mkr),bb["s:00"]&&React.createElement(BetChip,{amount:bb["s:00"],posKey:"s:00"}))}
         </div>
         <div style={{position:"relative",flex:1,minWidth:0}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gridTemplateRows:"repeat(3,"+cellH+"px)",gap:g}}>

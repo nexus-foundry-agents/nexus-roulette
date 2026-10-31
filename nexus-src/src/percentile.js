@@ -39,6 +39,16 @@ function percentTag(pct) {
   return pct === null || pct === undefined ? "" : "P" + Math.floor(pct);
 }
 
+// The board's outline tier for a single number's percentile: "p98" at 98 and above, "p95" from 95, "p75" from 75, the
+// highest one reached. null below 75 and for no percentile (a non-number or NaN).
+function outlineTier(pct) {
+  if (typeof pct !== "number" || !(pct >= 0)) return null;
+  if (pct >= 98) return "p98";
+  if (pct >= 95) return "p95";
+  if (pct >= 75) return "p75";
+  return null;
+}
+
 // The value of the Counter setting after one tap. Spins is the default; anything other than "percentile" reads as Spins.
 function nextCounterShows(current) {
   return current === "percentile" ? "spins" : "percentile";
