@@ -158,7 +158,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
         // Min-drought-to-enter raises the ENROLLMENT bar; bets already on the
         // table keep resolving normally.
         const effectiveEntry=Math.max(entry, rules.droughtThreshold||0);
-        const valInRange=winningNumber!=="0"&&winningNumber!=="00"&&(droughts[winningNumber]||0)>=entry;
+        const valInRange=solutionInRangeMember(droughts,winningNumber,entry);
 
         if(rules.waitForWin && strategyState.waitingForWin){
           if(valInRange) strategyState.waitingForWin=false;
@@ -167,8 +167,8 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
 
         // Enroll every number that has crossed the entry threshold (bets for THIS spin,
         // decided from droughts as they stood after the previous spin)
-        Object.keys(droughts).forEach(k=>{
-          if(k!=="0"&&k!=="00"&&droughts[k]>=effectiveEntry&&!strategyState.activeBets.find(b=>b.number===k)) strategyState.activeBets.push({number:k,level:0});
+        wheelNums.forEach(k=>{
+          if(solutionInRangeMember(droughts,k,effectiveEntry)&&!strategyState.activeBets.find(b=>b.number===k)) strategyState.activeBets.push({number:k,level:0});
         });
 
         const resolved=[];

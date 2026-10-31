@@ -311,7 +311,7 @@ function SettingsPage({ settings, updSettings, setCurrencyOpen, currency, cur, u
           <FieldLabel>Roulette Type</FieldLabel>
           <div style={{display:"flex",gap:8}}>
             {[["american","🇺🇸 American (00)"],["european","🇪🇺 European"]].map(([v,label]) => (
-              <button key={v} onClick={()=>updSess(s=>{s.roulette=v;s.droughts=initDroughts(v);})} style={{flex:1,padding:"10px 4px",borderRadius:9,border:"1px solid "+(sess.roulette===v?"#60a5fa":"#2d4057"),cursor:"pointer",fontSize:11,fontWeight:700,background:sess.roulette===v?"#0c1a2e":"#0f1923",color:sess.roulette===v?"#60a5fa":"#64748b"}}>{label}</button>
+              <button key={v} onClick={()=>updSess(s=>{s.roulette=v;s.droughts=droughtsFromSpins(s.spins,v);})} style={{flex:1,padding:"10px 4px",borderRadius:9,border:"1px solid "+(sess.roulette===v?"#60a5fa":"#2d4057"),cursor:"pointer",fontSize:11,fontWeight:700,background:sess.roulette===v?"#0c1a2e":"#0f1923",color:sess.roulette===v?"#60a5fa":"#64748b"}}>{label}</button>
             ))}
           </div>
         </Card>

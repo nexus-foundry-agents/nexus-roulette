@@ -1,4 +1,17 @@
 // -- Track Config Panels (Edit + Add) --
+// The Solution's Entry Threshold stepper: the one control for the track setup and the Edit Config panel. It reports the new
+// value only; the caller decides what a change means (the setup also saves the default). The step and the minimum are
+// nextEntryThreshold's (engine.js).
+function EntryThresholdStepper({value, onChange}) {
+  return (
+    <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
+      <button onClick={()=>onChange(nextEntryThreshold(value,-5))} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>-</button>
+      <div style={{flex:1,textAlign:"center",fontSize:18,fontWeight:900,color:"#f59e0b"}}>{value}</div>
+      <button onClick={()=>onChange(nextEntryThreshold(value,5))} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
+    </div>
+  );
+}
+
 function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
   const cur = getCurrency(currency||"USD");
   const tMin = tableMinBet||1;
@@ -33,6 +46,12 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
           <button onClick={()=>upCfg("stopLoss",cfg.stopLoss+25)} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
         </div>
       </div>
+      {track.type==="solution" && (
+        <div>
+          <FieldLabel>Entry Threshold (misses)</FieldLabel>
+          <EntryThresholdStepper value={cfg.entryThreshold} onChange={v=>upCfg("entryThreshold",v)}/>
+        </div>
+      )}
       {track.type==="fibonacci" && (
         <>
           <div>
@@ -66,10 +85,20 @@ function EditTrackCfg({track, currency, tableMinBet, onSave, onCancel}) {
   );
 }
 
-function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCfgChange, closedTracks, currency, tableMinBet}) {
+function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCfgChange, closedTracks, currency, tableMinBet, droughts, wheel, solColor, onEntryDefault}) {
   const cur = getCurrency(currency||"USD");
   const tMin = tableMinBet||1;
   function upCfg(k,v) { onCfgChange(c=>({...c,[k]:v})); }
+  // The Solution's Entry Threshold stepper sets this track's threshold and saves it as the default for the next Solution track.
+  function setEntry(v) { upCfg("entryThreshold",v); if(onEntryDefault) onEntryDefault(v); }
+  // The number this setup chases, and the one in-range number preselected when there is exactly one. Nothing is held in the
+  // setup, so a tap replaces the pending choice. A preselection is a pending choice only: Add Track is what places a bet.
+  const setupChosen = type==="solution" ? solutionChase({config:cfg}, []).number : null;
+  React.useEffect(() => {
+    if(type!=="solution" || setupChosen!==null) return;
+    const pre = solutionPreselect(droughts||{}, getWheelNumbers(wheel), cfg.entryThreshold);
+    if(pre!==null) onCfgChange(c=>({...c,activeBets:[{number:pre,level:0,invest:0}],chaseNumber:pre}));
+  }, [type, setupChosen, droughts, wheel, cfg.entryThreshold]);
   function toggleArr(key,val,max) {
     const arr=cfg[key]||[];
     if(arr.includes(val)) { upCfg(key,arr.filter(x=>x!==val)); }
@@ -181,11 +210,14 @@ function AddTrackPanel({onAdd, onClose, nextColor, type, cfg, onTypeChange, onCf
       {type==="solution" && (
         <div>
           <FieldLabel>Entry Threshold (misses)</FieldLabel>
-          <div style={{display:"flex",alignItems:"center",background:"#0f1923",borderRadius:10,border:"1px solid #2d4057",overflow:"hidden"}}>
-            <button onClick={()=>upCfg("entryThreshold",Math.max(20,cfg.entryThreshold-5))} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>-</button>
-            <div style={{flex:1,textAlign:"center",fontSize:18,fontWeight:900,color:"#f59e0b"}}>{cfg.entryThreshold}</div>
-            <button onClick={()=>upCfg("entryThreshold",cfg.entryThreshold+5)} style={{padding:"8px 14px",background:"transparent",border:"none",color:"#60a5fa",fontSize:18,fontWeight:700,cursor:"pointer"}}>+</button>
-          </div>
+          <EntryThresholdStepper value={cfg.entryThreshold} onChange={setEntry}/>
+        </div>
+      )}
+      {type==="solution" && (
+        <div>
+          <FieldLabel>Coldest numbers - tap one to chase it</FieldLabel>
+          <SolutionPicker droughts={droughts} wheel={wheel} threshold={cfg.entryThreshold} count={6} chosen={setupChosen} color={solColor}
+            onChoose={n=>onCfgChange(c=>({...c,activeBets:[{number:n,level:0,invest:0}],chaseNumber:n}))}/>
         </div>
       )}
       {/* Read-out of exactly what this track will place, in the same colours the
