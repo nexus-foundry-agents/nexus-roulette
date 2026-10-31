@@ -281,14 +281,13 @@ export default function App() {
   }
 
   function addTrack(type, config) { updSess(s=>{const t=newTrack(type,nextColorIdx,config,pickTrackColor(type,config,s.tracks)); t.createdAtSpin=s.spins.length; s.tracks.push(t);}); setAddOpen(false); setPendingTrackType("fibonacci"); setPendingTrackCfg(defaultFibCfg()); }
+  // Undo last spin is refused when a track was edited or parked after the spin it would reverse (undoBlockReason, spin-apply.js).
+  const undoWhy = undoBlockReason(sess, prevSessState);
   function undoLastSpin() {
-    if(!prevSessState) return;
+    if(!prevSessState || undoWhy) return;
     if(!window.confirm("Undo last tracked spin? This reverses the bankroll and progression but session time continues.")) return;
     const preservedStart = sess.sessionStartedAt;
-    updApp(s => {
-      s[sessKey] = prevSessState;
-      s[sessKey].sessionStartedAt = preservedStart;
-    });
+    updApp(s => { s[sessKey] = prevSessState; s[sessKey].sessionStartedAt = preservedStart; });
     setPrevSessState(null);
   }
   // Clear numbers empties the live session's spins and what is derived from them. Money and the session
@@ -366,7 +365,7 @@ export default function App() {
     });
     setEditTrackId(null);
   }
-  function parkToggle(id) { updSess(s=>{const t=s.tracks.find(x=>x.id===id);if(t)t.state=t.state==="active"?"parked":"active";}); }
+  function parkToggle(id) { updSess(s=>{const t=s.tracks.find(x=>x.id===id);if(t){t.state=t.state==="active"?"parked":"active";if(t.state==="parked")t.parkedAtSpin=s.spins.length;}}); }
   function closeTrack(id) { updSess(s=>{const t=s.tracks.find(x=>x.id===id);if(t){t.state="closed";t.closedAtSpin=s.spins.length;}}); }
   // The in-range list's tap and the Active Bets ×: adds or removes one held bet (toggleSolBetConfig).
   function addSolBet(trackId, number) {
@@ -610,9 +609,10 @@ export default function App() {
               <button onClick={()=>setAddOpen(true)} style={{flex:1,padding:"10px 0",borderRadius:12,border:"2px dashed #2d4057",background:"transparent",color:"#64748b",fontSize:13,cursor:"pointer"}}>+ Add Track</button>
             )}
             {prevSessState && (
-              <button onClick={undoLastSpin} style={{padding:"10px 14px",borderRadius:12,border:"1px solid #f59e0b",background:"#1c1000",color:"#fbbf24",fontSize:12,fontWeight:700,cursor:"pointer"}}>↩ Undo</button>
+              <button onClick={undoLastSpin} disabled={!!undoWhy} style={{padding:"10px 14px",borderRadius:12,border:"1px solid #f59e0b",background:"#1c1000",color:"#fbbf24",fontSize:12,fontWeight:700,cursor:undoWhy?"not-allowed":"pointer",opacity:undoWhy?0.5:1}}>↩ Undo</button>
             )}
           </div>
+          <div data-undo-note aria-hidden={!undoWhy} style={{minHeight:14,fontSize:10,color:"#fbbf24",visibility:undoWhy?"visible":"hidden"}}>{undoWhy}</div>
         </div>
 
         {addOpen && <AddTrackPanel onAdd={addTrack} onClose={()=>setAddOpen(false)} nextColor={nextColorIdx} type={pendingTrackType} cfg={pendingTrackCfg} onTypeChange={(t)=>{setPendingTrackType(t);setPendingTrackCfg(t==="fibonacci"?defaultFibCfg():solDefaultCfg(settings));}} onCfgChange={setPendingTrackCfg} closedTracks={sess.tracks.filter(t=>t.state==="closed")} currency={currency} tableMinBet={settings.tableMinBet||1} droughts={sess.droughts} wheel={sess.roulette} solColor={pickTrackColor("solution",pendingTrackCfg,sess.tracks)} onEntryDefault={setSolEntryDefault}/>}

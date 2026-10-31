@@ -7,6 +7,29 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-10-31
+
+### Changed
+
+- A correction to a spin played before a track was parked with its Park button is refused. The number picker shows "This spin was played before a track was parked. Corrections can only change spins after the last park.", the same kind of refusal as a spin before an edit, with its own note, and nothing changes. Corrections to spins from the park onward are unchanged.
+- Undo last spin is refused while a track was edited or parked after the spin it would reverse. The Undo button is disabled and the reason "Undo is off: a track was edited or parked after the spin it would reverse, and Undo would drop that change." shows beneath the track cards. Undo stays available once a new spin is tapped, and when nothing has changed since the spin.
+
+### Fixed
+
+- A correction from before a Park button press no longer leaves the parked track's record and the bankroll stale. The track records the spin count of its park, and corrections before that count are refused.
+- Undo last spin no longer silently removes a track edit or a park made after the spin. It used to restore the whole session from before the spin, so the new track disappeared and the parked track came back active.
+- Clear numbers resets the park point with the spins, and Undo of Clear restores it, so a park does not refuse corrections to spins played after the clear.
+
+### Tests
+
+- `test/track-edit-park.test.mjs`: a Park button press refuses a correction to a spin before it with the picker note, and nothing changes; corrections from the park onward still work; a session without a park corrects as before; Clear numbers and Undo of Clear carry the park point correctly; the Undo after a spin then an edit or a park is refused and changes nothing; Undo still works when nothing changed after the spin, and an edit made before a spin survives Undo of that spin.
+
+### Open
+
+- Parks made before this release carry no park point, so corrections to spins before them are still accepted and the parked track's record can still go stale. Those parks need a decision from the operator on how to treat them.
+- Importing a session parks its active tracks in `nexus-src/src/components/session-files.jsx` without a park point. The same stale-record gap applies to imported sessions. That file is outside this change.
+- Undo last spin still reverts a buy-in, cash-out, bankroll edit or ghost spin made after the spin it reverses. Those are not track edits or parks, so they are outside this change.
+
 ## [0.65.0] - 2026-10-31
 
 ### Fixed

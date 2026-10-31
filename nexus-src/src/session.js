@@ -34,7 +34,7 @@ function clearSpins(sess, now) {
     const config = {...(t.config||{})};
     // A solution bet carries its own progression level; restart it the way addSolBet creates a bet.
     if(Array.isArray(config.activeBets)) config.activeBets = config.activeBets.map(b => ({...b, level:0, invest:0}));
-    return {...t, config, bets:[], wins:0, sequences:0, level:0, createdAtSpin:0, closedAtSpin:null};
+    return {...t, config, bets:[], wins:0, sequences:0, level:0, createdAtSpin:0, closedAtSpin:null, parkedAtSpin:0};
   });
   next.modified = now;
   return next;
@@ -49,7 +49,7 @@ function snapshotSpinState(sess) {
     dealerChanges: sess.dealerChanges,
     tracks: (sess.tracks||[]).map(t => ({
       id: t.id, bets: t.bets, wins: t.wins, sequences: t.sequences, level: t.level,
-      createdAtSpin: t.createdAtSpin, closedAtSpin: t.closedAtSpin,
+      createdAtSpin: t.createdAtSpin, closedAtSpin: t.closedAtSpin, parkedAtSpin: t.parkedAtSpin || 0,
       betProgress: Array.isArray(t.config && t.config.activeBets)
         ? t.config.activeBets.map(b => ({number: b.number, level: b.level, invest: b.invest})) : null,
     })),
@@ -78,7 +78,7 @@ function restoreSpinState(sess, snap, now) {
         ? {...b, level: byNumber[b.number].level, invest: byNumber[b.number].invest} : b);
     }
     return {...t, config, bets: s.bets, wins: s.wins, sequences: s.sequences, level: s.level,
-      createdAtSpin: s.createdAtSpin, closedAtSpin: s.closedAtSpin};
+      createdAtSpin: s.createdAtSpin, closedAtSpin: s.closedAtSpin, parkedAtSpin: s.parkedAtSpin || 0};
   });
   next.modified = now;
   return next;
