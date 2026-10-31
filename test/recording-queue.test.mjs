@@ -11,13 +11,14 @@ import {
 import {
   SPIN_RETRY_MS,
   createSpinQueue,
+  spinsDroppedCopy,
   spinsNotSavedCopy,
   spinsWaitingCopy,
 } from '../nexus-src/src/casino-spin-queue.mjs';
 
 // The bundle concatenates the source files into one scope, so the recording hook reads the queue's functions
 // as globals. The harness provides them the same way it provides React below.
-Object.assign(globalThis, { createSpinQueue, spinsNotSavedCopy, spinsWaitingCopy });
+Object.assign(globalThis, { createSpinQueue, spinsDroppedCopy, spinsNotSavedCopy, spinsWaitingCopy });
 
 // -- A fake Casino shell and a one-component hook harness ---------------------------------------
 // The recording hook talks to its parent frame over postMessage and keeps state in React hooks.
@@ -33,7 +34,9 @@ const realUseEffect = globalThis.useEffect;
 // fake shell delivers into this one list.
 const bridgeListeners = [];
 
-function installFakeCasino({ running = false } = {}) {
+// honourPauseAfter: a spin that carries pauseAfter pauses the session when it is recorded, as Casino does.
+// refuseWhilePaused: a spin sent to a paused session is refused with a 4xx, as a definitive refusal.
+function installFakeCasino({ running = false, honourPauseAfter = false, refuseWhilePaused = false } = {}) {
   const shell = {};
   const server = {
     recorded: [], sent: [], failNext: 0, spinCalls: 0, pending: 0,
@@ -66,6 +69,9 @@ function installFakeCasino({ running = false } = {}) {
     if (op === 'spin') {
       server.spinCalls += 1;
       server.sent.push(payload);
+      if (refuseWhilePaused && server.status === 'paused') {
+        return reply(message, 409, { error: 'session_paused' }, 'session is paused');
+      }
       if (server.failNext > 0) {
         server.failNext -= 1;
         return reply(message, 0, undefined, 'network down');
@@ -73,6 +79,10 @@ function installFakeCasino({ running = false } = {}) {
       const sequence = payload.spin.sequence;
       const repeat = server.recorded.some((row) => row.sequence === sequence);
       if (!repeat) server.recorded.push({ sequence, requestId: payload.spin.requestId, segment: payload.spin.segment });
+      if (!repeat && honourPauseAfter && payload.spin.pauseAfter === true) {
+        server.status = 'paused';
+        server.pauses += 1;
+      }
       return reply(message, 201, { recorded: !repeat, session: sessionNow() });
     }
     if (op === 'pause') {
@@ -163,6 +173,10 @@ function installHarness() {
         slot.cleanup = null;
       }
     });
+  };
+  // A remount keeps the state and sets every effect up again on the next render, as React StrictMode does.
+  render.remount = () => {
+    effects.forEach((slot) => { if (slot) slot.deps = undefined; });
   };
   return render;
 }
@@ -319,7 +333,7 @@ test('Stop on a held queue offers the discard with its count, and the second pre
 
   view().stop();
   assert.equal(await until(() => casino.server.stops === 1), true, 'the second press did not end the recording');
-  assert.equal(await until(() => view().problem === '1 spin was not saved to Casino: recording was stopped.'), true,
+  assert.equal(await until(() => view().problem === '1 spin may have been saved to Casino: recording was stopped.'), true,
     'the discard was not stated with its count');
   assert.equal(casino.server.recorded.length, 0, 'a discarded spin reached Casino');
 });
@@ -362,6 +376,7 @@ function casinoStub(script = []) {
     if (outcome === 'off') return { ok: false, status: 409, body: { error: 'recording_disabled' } };
     if (outcome === 'gone') return { ok: false, status: 404, body: { error: 'session_not_found' } };
     if (outcome === 'stopped') return { ok: false, status: 409, body: { error: 'session_stopped' } };
+    if (outcome === 'refuse') return { ok: false, status: 400, body: { error: 'bad_spin' } };
     const sequence = payload.spin.sequence;
     const repeat = stub.recorded.some((row) => row.sequence === sequence);
     if (!repeat) stub.recorded.push({ sequence, requestId: payload.spin.requestId, segment: payload.spin.segment });
@@ -378,6 +393,7 @@ function queueRig({ sessionSpins = 0, script = [], resolutions = [], pauseReques
   casino.recorded.push(...preRecorded);
   const reports = [];
   const confirmed = [];
+  const confirmedInfo = [];
   const off = [];
   const timers = [];
   const ended = [];
@@ -390,7 +406,7 @@ function queueRig({ sessionSpins = 0, script = [], resolutions = [], pauseReques
     wait: async () => {},
     pauseRequested: () => (typeof pauseRequested === 'function' ? pauseRequested() : pauseRequested),
     report: (text) => { reports.push(text); },
-    confirmed: (body) => { confirmed.push(body); if (body && body.session) queue.observe(body.session); },
+    confirmed: (body, info) => { confirmed.push(body); confirmedInfo.push(info); if (body && body.session) queue.observe(body.session); },
     recordingOff: (count) => { off.push(count); },
     reread: async () => (reread
       ? reread()
@@ -404,7 +420,7 @@ function queueRig({ sessionSpins = 0, script = [], resolutions = [], pauseReques
     },
   });
   queue.observe(session);
-  return { queue, casino, reports, confirmed, off, timers, ended, counts };
+  return { queue, casino, reports, confirmed, confirmedInfo, off, timers, ended, counts };
 }
 
 test('the problem line counts spins with the words Casino uses', () => {
@@ -609,7 +625,10 @@ test('a held queue counts the spins that join it, and discard drops them all wit
   await rig.queue.submit(spin('8'));
   assert.equal(rig.reports.at(-1), '2 spins waiting to send to Casino. Casino still has not confirmed that spin; it remains queued locally.');
   assert.equal(rig.queue.held(), true);
-  assert.equal(rig.queue.discard(), 2);
+  const outcome = await rig.queue.discard();
+  assert.equal(outcome.count, 2);
+  // The head failed with status 0, which may have reached Casino, so it is counted as may have been saved.
+  assert.equal(outcome.maybeSaved, 1);
   assert.equal(rig.queue.waiting(), 0);
   assert.equal(rig.queue.held(), false);
   assert.equal(rig.casino.sent.length, 3, 'discard sent a spin');
@@ -715,4 +734,319 @@ test('M4: a send that succeeds after dispose confirms nothing and sends nothing 
   assert.equal(confirmations, 0, 'a confirmation was written after dispose');
   assert.equal(calls, 1, 'the spin behind it was sent after dispose');
   assert.equal(reports.length, reportsBefore, 'a problem line was written after dispose');
+});
+
+// -- Review round 3: the second review's defects. Each test failed on the round-2 code before its fix. ----
+
+// A stand-in for the browser's localStorage, for the count a closed view leaves behind.
+function fakeLocalStorage() {
+  const items = new Map();
+  return {
+    getItem: (key) => (items.has(key) ? items.get(key) : null),
+    setItem: (key, value) => { items.set(key, String(value)); },
+    removeItem: (key) => { items.delete(key); },
+    get size() { return items.size; },
+  };
+}
+
+// A queue whose sends wait for the test to answer them one at a time, so a test can act while a send is in flight.
+function deferredQueue() {
+  const sends = [];
+  const reports = [];
+  const confirmed = [];
+  const timers = [];
+  const queue = createSpinQueue({
+    resolveSession: async () => ({ ok: true, session: { id: 's1', status: 'running', spins: 0 } }),
+    send: (op, payload) => new Promise((resolve) => { sends.push({ op, payload, resolve }); }),
+    wait: async () => {},
+    pauseRequested: () => false,
+    report: (text) => { reports.push(text); },
+    confirmed: (body) => { confirmed.push(body); },
+    recordingOff: () => {},
+    reread: async () => ({ ok: true, session: { id: 's1', status: 'running', spins: 0 } }),
+    ended: () => {},
+    drained: () => {},
+    schedule: (callback) => { timers.push(callback); return () => {}; },
+  });
+  return {
+    queue, sends, reports, confirmed, timers,
+    answer(result) { sends.shift().resolve(result); },
+  };
+}
+
+test('HIGH 1: a first Stop on a held queue only offers the discard, so the retry that follows sends no pause', async (t) => {
+  const casino = installFakeCasino({ honourPauseAfter: true });
+  const render = installHarness();
+  t.after(() => { render.unmount(); restoreGlobals(); });
+  const view = () => render('game', true);
+
+  view();
+  casino.hello();
+  assert.equal(await until(() => view().availability === 'on'), true, 'recording never reported on');
+
+  casino.server.failNext = 3;
+  view().record(spin('17'));
+  assert.equal(await until(() => casino.server.spinCalls === 3 && /^1 spin waiting/.test(view().problem)), true);
+
+  view().stop(); // the first press: the offer only
+  assert.equal(await until(() => /Press Stop again to discard 1 unsent spin/.test(view().problem)), true);
+
+  // The user walks away. The held spin is retried on the timer and must go out as a plain spin.
+  casino.server.failNext = 0;
+  assert.equal(fireRetries(), 1, 'the retry was not armed');
+  assert.equal(await until(() => casino.server.recorded.length === 1 && view().problem === null), true,
+    'the held spin was not recorded after the retry');
+  assert.equal(casino.server.stops, 0, 'the first press ended the recording');
+  assert.ok(casino.server.sent.every((payload) => payload.spin.pauseAfter !== true),
+    'a retry carried a pause that nobody confirmed');
+  assert.equal(casino.server.pauses, 0, 'Casino paused the session after a first Stop press');
+  assert.equal(view().session.status, 'running');
+});
+
+test('HIGH 1: a confirmed Stop leaves no pause behind for the next session', async (t) => {
+  const casino = installFakeCasino({ honourPauseAfter: true });
+  const render = installHarness();
+  t.after(() => { render.unmount(); restoreGlobals(); });
+  const view = () => render('game', true);
+
+  view();
+  casino.hello();
+  assert.equal(await until(() => view().availability === 'on'), true, 'recording never reported on');
+
+  casino.server.failNext = 3;
+  view().record(spin('17'));
+  assert.equal(await until(() => casino.server.spinCalls === 3 && /^1 spin waiting/.test(view().problem)), true);
+  view().stop();
+  assert.equal(await until(() => /Press Stop again/.test(view().problem)), true);
+  view().stop();
+  assert.equal(await until(() => view().session && view().session.status === 'stopped'), true,
+    'the second press did not end the recording');
+
+  // The next spin starts a new session. Nothing carried over from the stopped one may pause it.
+  casino.server.failNext = 0;
+  view().record(spin('8'));
+  assert.equal(await until(() => casino.server.recorded.length === 1 && view().problem === null), true,
+    'the spin after the stop was not recorded');
+  assert.equal(casino.server.pauses, 0, 'the spin after a confirmed Stop paused the new session');
+  assert.ok(casino.server.sent.every((payload) => payload.spin.pauseAfter !== true),
+    'a spin after a confirmed Stop carried a pause');
+  assert.equal(view().session.status, 'running');
+});
+
+test('MEDIUM 1: a Stop during a send waits for it, and a spin Casino recorded is not counted as discarded', async () => {
+  const rig = deferredQueue();
+  rig.queue.enqueue(spin('17'));
+  const first = rig.queue.flush();
+  // Three failed attempts hold the head and arm the retry timer.
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal(await until(() => rig.sends.length === 1), true, 'an attempt was not sent');
+    rig.answer({ ok: false, status: 0, error: 'network down' });
+  }
+  assert.equal(await first, false);
+  assert.equal(rig.timers.length, 1, 'the retry was not armed once');
+
+  // The retry round starts, and Stop is pressed while its send is in flight. Casino records the spin.
+  rig.timers[0]();
+  assert.equal(await until(() => rig.sends.length === 1), true, 'the retry did not send');
+  const stopping = rig.queue.discard();
+  rig.answer({ ok: true, status: 201, body: { recorded: true, session: { id: 's1', status: 'running', spins: 1 } } });
+  const outcome = await stopping;
+
+  assert.equal(rig.confirmed.length, 1, 'the in-flight success was ignored');
+  assert.ok(!rig.reports.some((text) => /not saved/.test(text)), 'a saved spin was stated as not saved');
+  assert.equal(rig.sends.length, 0, 'a spin was sent after the Stop');
+  assert.deepEqual(outcome, { count: 0, maybeSaved: 0 }, 'a spin Casino recorded was counted as discarded');
+});
+
+test('MEDIUM 1: a Stop that finds an ambiguous head counts it as may have been saved, and sends nothing behind it', async () => {
+  const rig = deferredQueue();
+  rig.queue.enqueue(spin('17'));
+  rig.queue.enqueue(spin('8'));
+  const first = rig.queue.flush();
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal(await until(() => rig.sends.length === 1), true, 'an attempt was not sent');
+    rig.answer({ ok: false, status: 0, error: 'timed out' });
+  }
+  assert.equal(await first, false);
+
+  rig.timers[0]();
+  assert.equal(await until(() => rig.sends.length === 1), true, 'the retry did not send');
+  const stopping = rig.queue.discard();
+  // The in-flight send has its first attempt pending. Its three attempts all time out, and nothing may follow them.
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal(await until(() => rig.sends.length === 1), true, 'an attempt was not sent');
+    rig.answer({ ok: false, status: 0, error: 'timed out' });
+  }
+  const outcome = await stopping;
+
+  assert.deepEqual(outcome, { count: 2, maybeSaved: 1 }, 'the ambiguous head was not counted as may have been saved');
+  assert.equal(rig.sends.length, 0, 'a spin was sent behind the discarded head');
+});
+
+test('MEDIUM 2: a head sent ambiguously keeps its sequence and request id when a later attempt is refused', async () => {
+  // Attempt 1 is recorded but its reply is lost. Attempt 2 is refused with a 400, which is a definitive refusal.
+  const rig = queueRig({ script: ['lost', 'refuse'] });
+  rig.queue.enqueue(spin('17'));
+  assert.equal(await rig.queue.flush(), false);
+  rig.timers.find((timer) => !timer.cancelled).callback();
+  assert.equal(await rig.queue.flush(), true);
+  assert.deepEqual(rig.casino.recorded.map((row) => [row.sequence, row.segment]), [[1, '17']],
+    'the spin was recorded twice under two numbers');
+  assert.equal(new Set(rig.casino.sent.map((payload) => payload.spin.sequence)).size, 1, 'a retry used a new sequence');
+  assert.equal(new Set(rig.casino.sent.map((payload) => payload.spin.requestId)).size, 1, 'a retry used a new request id');
+});
+
+test('MEDIUM 3: a paused session holds the head without renumbering it, and the line says so', async () => {
+  let status = 'paused';
+  const rig = queueRig({
+    script: ['refuse', 'refuse', 'refuse'],
+    reread: async () => ({ ok: true, session: { id: 's1', status, spins: 0 } }),
+  });
+  rig.queue.enqueue(spin('17'));
+  rig.queue.enqueue(spin('8'));
+  assert.equal(await rig.queue.flush(), false);
+  assert.equal(rig.reports.at(-1), 'Casino recording is paused. Resume it to send 2 waiting spins.');
+  assert.equal(await rig.queue.flush(), false);
+  assert.equal(await rig.queue.flush(), false);
+  assert.equal(rig.queue.waiting(), 2, 'a paused hold dropped a spin');
+  assert.ok(!rig.reports.some((text) => /not saved/.test(text)), 'a paused hold stated a spin as not saved');
+
+  status = 'running';
+  assert.equal(await rig.queue.flush(), true);
+  assert.deepEqual(rig.casino.recorded.map((row) => [row.sequence, row.segment]), [[1, '17'], [2, '8']]);
+  const first = rig.casino.sent[0].spin.requestId;
+  assert.ok(rig.casino.sent.filter((payload) => payload.spin.requestId === first).every((payload) => payload.spin.sequence === 1),
+    'the paused hold renumbered the head');
+});
+
+test('MEDIUM 3: a live session that refuses the head three times drops that spin only, says so, and sends the spins behind it', async () => {
+  const rig = queueRig({ script: ['refuse', 'refuse', 'refuse'] });
+  rig.queue.enqueue(spin('17'));
+  rig.queue.enqueue(spin('8'));
+  assert.equal(await rig.queue.flush(), false, 'refusal 1 should hold the queue');
+  assert.equal(await rig.queue.flush(), false, 'refusal 2 should hold the queue');
+  assert.equal(await rig.queue.flush(), true, 'refusal 3 should drop the head and send the spin behind it');
+  assert.deepEqual(rig.casino.recorded.map((row) => [row.sequence, row.segment]), [[1, '8']]);
+  assert.equal(rig.queue.waiting(), 0);
+  assert.equal(rig.reports.at(-1), '1 spin could not be saved to Casino: Casino did not record that spin (400).');
+});
+
+test('MEDIUM 3: a dropped head that may have been saved is stated as may have been saved, and the spin behind it takes a free number', async () => {
+  const rig = queueRig({ script: ['lost', 'refuse', 'refuse', 'refuse'] });
+  rig.queue.enqueue(spin('17'));
+  rig.queue.enqueue(spin('8'));
+  assert.equal(await rig.queue.flush(), false);
+  assert.equal(await rig.queue.flush(), false);
+  assert.equal(await rig.queue.flush(), true);
+  assert.equal(rig.reports.at(-1), '1 spin may have been saved to Casino: Casino did not record that spin (400).');
+  assert.deepEqual(rig.casino.recorded.map((row) => [row.sequence, row.segment]), [[1, '17'], [2, '8']],
+    'the spin behind the dropped head reused a number the dropped head may hold');
+});
+
+test('MEDIUM 5: a reconciled spin reports that it carried a pause, so the hook can still apply it', async () => {
+  const rig = queueRig({ pauseRequested: true, script: ['lost', 'ok'] });
+  rig.queue.enqueue(spin('17'));
+  assert.equal(await rig.queue.flush(), true);
+  assert.equal(rig.confirmedInfo.length, 1);
+  assert.deepEqual(rig.confirmedInfo[0], { reconciled: true, pauseCarried: true });
+});
+
+test('LOW: a spin made while recording is paused says it was not saved, with its count', async (t) => {
+  const casino = installFakeCasino({ running: true });
+  const render = installHarness();
+  t.after(() => { render.unmount(); restoreGlobals(); });
+  const view = () => render('game', true);
+
+  view();
+  casino.hello();
+  assert.equal(await until(() => view().session && view().session.status === 'running'), true,
+    'the running session was not adopted');
+  view().pause();
+  assert.equal(await until(() => casino.server.pauses === 1 && view().session.status === 'paused'), true,
+    'the session did not pause');
+
+  view().record(spin('17'));
+  assert.equal(await until(() => view().problem === '1 spin was not saved to Casino: recording is paused. Resume it before the next spin.'),
+    true, 'the refused spin was not stated with its count');
+  assert.equal(casino.server.recorded.length, 0, 'a spin reached Casino while it was paused');
+});
+
+test('MEDIUM 4: a remount reopens the recorder, and the spins it sends after the remount are recorded', async (t) => {
+  const casino = installFakeCasino();
+  const render = installHarness();
+  t.after(() => { render.unmount(); restoreGlobals(); });
+  const view = () => render('game', true);
+
+  view();
+  casino.hello();
+  assert.equal(await until(() => view().availability === 'on'), true, 'recording never reported on');
+
+  // StrictMode tears the effects down and sets them up again on the same state.
+  render.unmount();
+  render.remount();
+  view().record(spin('17'));
+  assert.equal(await until(() => casino.server.recorded.length === 1), true, 'the recorder was dead after a remount');
+  assert.deepEqual(casino.server.recorded.map((row) => row.segment), ['17']);
+});
+
+test('LOW: spins still queued when the view closes are counted, and the next mount of that mode says so', async (t) => {
+  const storage = fakeLocalStorage();
+  globalThis.localStorage = storage;
+  t.after(() => { delete globalThis.localStorage; });
+  const casino = installFakeCasino();
+  const first = installHarness();
+  t.after(() => { first.unmount(); restoreGlobals(); });
+  const view = () => first('game', true);
+
+  view();
+  casino.hello();
+  assert.equal(await until(() => view().availability === 'on'), true, 'recording never reported on');
+  casino.server.failNext = 3;
+  view().record(spin('17'));
+  assert.equal(await until(() => casino.server.spinCalls === 3 && /^1 spin waiting/.test(view().problem)), true);
+
+  // The view closes with the spin still queued. The next mount is a new recorder with no memory of the queue.
+  first.unmount();
+  const next = installHarness();
+  const nextView = () => next('game', true);
+  nextView();
+  assert.equal(await until(() => nextView().problem === '1 spin was not sent to Casino before the page closed.'), true,
+    'the next mount did not say how many spins were not sent');
+
+  // The count is shown once. A later mount says nothing.
+  const later = installHarness();
+  for (let i = 0; i < 20; i += 1) {
+    later('game', true);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(later('game', true).problem, null, 'the count was shown on a second mount');
+});
+
+test('a Resume on a queue held behind a paused session resumes Casino first, then sends the held spin', async (t) => {
+  const casino = installFakeCasino({ running: true, refuseWhilePaused: true });
+  const render = installHarness();
+  t.after(() => { render.unmount(); restoreGlobals(); });
+  const view = () => render('game', true);
+
+  view();
+  casino.hello();
+  assert.equal(await until(() => view().session && view().session.status === 'running'), true,
+    'the running session was not adopted');
+
+  // Another device pauses the session. The next spin is refused as paused, and the queue holds it.
+  casino.server.status = 'paused';
+  view().record(spin('17'));
+  assert.equal(await until(() => view().problem === 'Casino recording is paused. Resume it to send 1 waiting spin.'), true,
+    'the held spin did not say the recording is paused');
+  assert.equal(casino.server.recorded.length, 0, 'a spin reached Casino while it was paused');
+
+  // Resume must reach Casino first. Flushing the held spin before the resume would be refused again, and nothing would resume.
+  view().resume();
+  assert.equal(await until(() => casino.server.recorded.length === 1 && view().problem === null), true,
+    'Resume did not send the held spin');
+  assert.equal(casino.server.resumes, 1, 'Resume did not reach Casino');
+  assert.equal(view().session.status, 'running');
+  // Let the last answers and their follow-up work finish before the test ends.
+  assert.equal(await until(() => casino.server.pending === 0), true, 'an answer was still in flight when the test ended');
+  for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setImmediate(resolve));
 });
