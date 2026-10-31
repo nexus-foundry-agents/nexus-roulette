@@ -110,6 +110,22 @@ function casinoSession(body) {
   return value && typeof value.id === 'string' ? value : null;
 }
 
+// The problem line for a call that threw. askCasino rejects only when the bridge's postMessage throws.
+function thrownCopy(error) {
+  return error && error.message ? error.message : 'Casino recording failed.';
+}
+
+// Appends one link to the recording chain. A link that throws reports the failure and resolves to false, so the chain
+// it extends is never rejected and the links after it still run.
+function appendLink(queueRef, body, failed) {
+  const task = queueRef.current.then(body).catch(function(error){
+    failed(error);
+    return false;
+  });
+  queueRef.current = task;
+  return task;
+}
+
 export function recordingForMode(mode,gameRecording,liveRecording) {
   return mode==='game'?gameRecording:liveRecording;
 }
@@ -182,23 +198,32 @@ export function useCasinoRecording(mode,active) {
   const refresh = React.useCallback(function(){
     if(refreshing.current)return refreshing.current;
     const pending=(async function(){
-      if(!await waitForCasinoBridge()){setAvailability('unavailable');return 'unavailable';}
-      const settings=await askCasino('settings');
-      if(!settings.ok){setAvailability('unavailable');return 'unavailable';}
-      const enabled=!!(settings.body&&settings.body.settings&&settings.body.settings.recordingEnabled===true);
-      setAvailability(enabled?'on':'off');
-      if(!enabled)return 'off';
-      const history=await askCasino('history');
-      if(!history.ok)return 'on';
-      let running=history.body&&history.body.running&&history.body.running[mode];
-      if(running&&running.status==='running'&&!activeRef.current){
-        pauseOwner.current='auto';
-        const paused=await askCasino('pause',{sessionId:running.id});
-        if(paused.ok)running=casinoSession(paused.body)||running;
-        else pauseOwner.current='none';
+      try{
+        if(!await waitForCasinoBridge()){setAvailability('unavailable');return 'unavailable';}
+        const settings=await askCasino('settings');
+        if(!settings.ok){setAvailability('unavailable');return 'unavailable';}
+        const enabled=!!(settings.body&&settings.body.settings&&settings.body.settings.recordingEnabled===true);
+        setAvailability(enabled?'on':'off');
+        if(!enabled)return 'off';
+        const history=await askCasino('history');
+        if(!history.ok)return 'on';
+        let running=history.body&&history.body.running&&history.body.running[mode];
+        if(running&&running.status==='running'&&!activeRef.current){
+          pauseOwner.current='auto';
+          let paused;
+          try{paused=await askCasino('pause',{sessionId:running.id});}
+          catch(error){pauseOwner.current='none';throw error;}
+          if(paused.ok)running=casinoSession(paused.body)||running;
+          else pauseOwner.current='none';
+        }
+        if(running)adopt(running);
+        return 'on';
+      }catch(error){
+        // A check that threw says so. A state it had already reached stands; an unknown state becomes unavailable.
+        if(availabilityRef.current==='unknown')setAvailability('unavailable');
+        setProblem(thrownCopy(error));
+        return 'unavailable';
       }
-      if(running)adopt(running);
-      return 'on';
     })();
     refreshing.current=pending;
     void pending.finally(function(){if(refreshing.current===pending)refreshing.current=null;});
@@ -223,7 +248,9 @@ export function useCasinoRecording(mode,active) {
   const resolveSession = React.useCallback(async function(){
     const existing = sessionRef.current;
     if(existing && existing.status!=='stopped') return {ok:true,session:existing};
-    const result = await askCasino('start',{mode});
+    let result;
+    try{result = await askCasino('start',{mode});}
+    catch(error){return {ok:false,error:thrownCopy(error)};}
     if(!result.ok) {
       return result.status===409
         ? {ok:false,off:true}
@@ -237,7 +264,9 @@ export function useCasinoRecording(mode,active) {
 
   // The session as Casino holds it now. The queue asks this after a definitive refusal of a spin.
   const rereadSession = React.useCallback(async function(){
-    const history = await askCasino('history');
+    let history;
+    try{history = await askCasino('history');}
+    catch(error){return {ok:false,error:thrownCopy(error)};}
     if(!history.ok) return {ok:false,error:history.error||'Casino did not answer the session check.'};
     const running = history.body&&history.body.running&&history.body.running[mode];
     return {ok:true,session:running&&typeof running.id==='string'?running:null};
@@ -261,7 +290,9 @@ export function useCasinoRecording(mode,active) {
       setProblem(spinsNotSavedCopy(stoppingRefusals.current,'recording is stopping'));
     };
     if(discardPending.current) return refuse();
-    queue.current = queue.current.then(async function(){
+    // Set once the spin is in the queue. A link that throws before that did not save the spin, and the line says so.
+    let queued=false;
+    appendLink(queue,async function(){
       if(!recorder.current.waiting()){
         const live = sessionRef.current;
         if(live && live.status==='paused'){
@@ -276,15 +307,19 @@ export function useCasinoRecording(mode,active) {
       // The last check before the enqueue: an await above may have let a discard begin.
       if(discardPending.current) return refuse();
       const pending=recorder.current.submit(spin);
+      queued=true;
       syncUnsent();
       await pending;
+    },function(error){
+      const reason=thrownCopy(error);
+      setProblem(queued?reason:spinsNotSavedCopy(1,reason));
     });
   },[refresh,setProblem,syncUnsent]);
 
   const lifecycle = React.useCallback(function(op){
     // A discard owns the queue while it waits. A Resume then does nothing and says nothing.
     if(discardPending.current) return Promise.resolve(false);
-    const task=queue.current.then(async function(){
+    return appendLink(queue,async function(){
       // A Resume on a queue held behind a paused session resumes Casino first. Flushing first would send the held
       // spins to the paused session, have them refused, and the resume would never be sent.
       const resumingHeld = op==='resume' && recorder.current.pausedHeld();
@@ -306,9 +341,7 @@ export function useCasinoRecording(mode,active) {
       // A stopped session has no pause left to carry.
       if(op==='stop'){ pauseOwner.current='none'; pausePending.current=false; }
       return true;
-    });
-    queue.current=task;
-    return task;
+    },function(error){ setProblem(thrownCopy(error)); });
   },[adopt,flushPendingSpins,setProblem]);
 
   // On a held queue Pause does not wait for the retries. Its intent is kept, and applied once the queue has drained.
@@ -324,7 +357,7 @@ export function useCasinoRecording(mode,active) {
     const previousOwner=pauseOwner.current;
     pauseOwner.current=owner;
     if(recorder.current.held()) return Promise.resolve(deferPause());
-    const task=queue.current.then(async function(){
+    return appendLink(queue,async function(){
       const live=sessionRef.current;
       if(!live){pauseOwner.current=previousOwner;return false;}
       const flushed=await flushPendingSpins();
@@ -346,9 +379,11 @@ export function useCasinoRecording(mode,active) {
       setProblem(null);
       adopt(casinoSession(result.body)||current);
       return true;
+    },function(error){
+      // A Pause that threw did not pause the session, so no pause is carried to the spins after it.
+      pauseOwner.current='none';
+      setProblem(thrownCopy(error));
     });
-    queue.current=task;
-    return task;
   },[adopt,deferPause,flushPendingSpins,setProblem]);
 
   // The second press discards the queued spins, once a send in flight has finished, and then ends the recording.
@@ -365,6 +400,8 @@ export function useCasinoRecording(mode,active) {
       const note=refused?spinsNotSavedCopy(refused,'recording is stopping'):null;
       return [text,note].filter(Boolean).join(' ')||null;
     };
+    // The owner this Stop replaces. A Stop whose call throws restores it, as a refused Stop does.
+    let previousOwner=null;
     try{
       const outcome=await recorder.current.discard();
       stopOffer.current=null;
@@ -374,7 +411,7 @@ export function useCasinoRecording(mode,active) {
       const live=sessionRef.current;
       if(!live){ setProblem(withRefusals(notSaved)); return; }
       // Set only after the discard, so a discarded queue sends no pause. Cleared again once Casino confirms the stop.
-      const previousOwner=pauseOwner.current;
+      previousOwner=pauseOwner.current;
       pauseOwner.current='manual';
       const result=await askCasino('stop',{sessionId:live.id});
       if(!result.ok){
@@ -386,7 +423,8 @@ export function useCasinoRecording(mode,active) {
       setProblem(withRefusals(notSaved));
       adopt(casinoSession(result.body)||live);
     }catch(e){
-      setProblem(withRefusals(e.message || 'Stop failed.'));
+      if(previousOwner!==null) pauseOwner.current=previousOwner;
+      setProblem(withRefusals((e&&e.message) || 'Stop failed.'));
     }finally{
       discardPending.current=false;
       stoppingRefusals.current=0;
