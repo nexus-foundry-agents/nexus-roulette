@@ -189,6 +189,8 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
           }
         </Card>
 
+        <StreakPercentileTable wheel={sess.roulette}/>
+
         {saved.length>0 && (
           <Card>
             <button onClick={exportJSON} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",background:"#1e3a5f",color:"#60a5fa",fontSize:13,fontWeight:700,cursor:"pointer"}}>Export All Sessions (.json)</button>
@@ -197,6 +199,40 @@ function StatsPage({ sess, livePauseOffset, pnlVal, cur, currency, pnlColor, sav
       </div>
     );
   }
+
+  // -- Streak percentiles table (Stats) --
+// The streak length at each percentile for every bet on the current wheel, from the generated table
+// (streak-percentiles.js, read through percentile.js). Read-only. Lengths are consecutive losses before a win.
+function StreakPercentileTable({wheel}) {
+  const rows = streakRows(wheel);
+  const meta = STREAK_PERCENTILE_DATA.meta;
+  const th = {padding:"4px 3px",fontSize:10,fontWeight:700,color:"#64748b",textAlign:"right",borderBottom:"1px solid #2d4057"};
+  const td = {padding:"3px 3px",fontSize:11,color:"#e2e8f0",textAlign:"right",fontVariantNumeric:"tabular-nums",borderTop:"1px solid #1f2937"};
+  return (
+    <Card>
+      <FieldLabel>Streak percentiles</FieldLabel>
+      <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>
+        {"Consecutive losses before a win, on the " + (wheel==="european"?"European":"American") + " wheel: the streak length at each percentile."}
+      </div>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead>
+          <tr><th style={{...th,textAlign:"left"}}>Bet</th>{meta.percentiles.map(p=><th key={p} style={th}>{"P"+p}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map(r=>(
+            <tr key={r.key}>
+              <td style={{...td,textAlign:"left",whiteSpace:"normal"}}>{r.label}</td>
+              {r.p.map((len,i)=><td key={i} style={td}>{len}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{fontSize:9,color:"#475569",marginTop:8,lineHeight:"13px"}}>
+        {meta.sessions.toLocaleString("en-US")+" sessions x "+meta.spinsPerSession.toLocaleString("en-US")+" spins per wheel · seed \""+meta.seedLabel+"\" ("+meta.seed+") · generated "+meta.generatedAt}
+      </div>
+    </Card>
+  );
+}
 
   // -- Settings Page --
 function SettingsPage({ settings, updSettings, setCurrencyOpen, currency, cur, updSess, sess, setChangelogOpen, updApp, importJSON, setHardResetOpen }) {
@@ -250,6 +286,10 @@ function SettingsPage({ settings, updSettings, setCurrencyOpen, currency, cur, u
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
               <span style={{fontSize:13,color:"#94a3b8"}}>Head start for unseen numbers</span>
               <button onClick={()=>updApp(s=>{s.settings.headStartUnseen=s.settings.headStartUnseen!==true;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.headStartUnseen===true?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.headStartUnseen===true?"ON":"OFF"}</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
+              <span style={{fontSize:13,color:"#94a3b8"}}>Counter shows</span>
+              <button onClick={()=>updApp(s=>{s.settings.counterShows=nextCounterShows(s.settings.counterShows);})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.counterShows==="percentile"?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.counterShows==="percentile"?"Percentile":"Spins"}</button>
             </div>
           </div>
         </Card>
