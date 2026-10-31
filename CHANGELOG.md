@@ -7,6 +7,15 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- Undo last spin is offered only while the session and mode it was taken from are still current. The snapshot now records the session id and the mode, and Undo reads as unavailable once either differs. Resuming a saved session, a JSON import, a Game/Live mode switch and a Restart Onboarding that changes the wheel no longer leave an Undo that restores the replaced session. A mode switch also drops the snapshot for good. The snapshot is held as `undoBind` (with its session id and mode) in `nexus-src/src/App.jsx`, and `prevSessState` is that snapshot only while it matches the current session and mode.
+- Undo last spin is refused when the session changed after the spin in a way Undo would undo too: a changed wheel, name, label or venue, a spin list that is not the snapshot plus the tapped spin, or any other session field a tap does not change. The note reads "Undo is off: the session was changed after the spin it would reverse. Undo would drop that change." The check is `undoBlockReason()` in `nexus-src/src/spin-apply.js`. A venue recorded after the spin (Save on the Where are you playing? sheet) now refuses Undo; Skip does not. Save of the session still leaves Undo offered, as before.
+
+### Tests
+
+- `test/undo-snapshot-class.test.mjs`: the Undo snapshot is not offered or applied after resume, a JSON import, Restart Onboarding with a new wheel, a Game/Live mode switch, or a venue recorded after the spin; a snapshot whose session id does not match is never applied; `undoBlockReason()` refuses a changed wheel, label or id, and a spin list that is not the snapshot plus the tapped spin, and allows the tapped spin, a Save and a track change.
+
 ## [0.69.0] - 2026-10-31
 
 ### Fixed

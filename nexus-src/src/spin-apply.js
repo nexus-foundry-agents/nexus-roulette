@@ -344,6 +344,11 @@ const UNDO_BLOCK_REASON = "Undo is off: a track was edited or parked after the s
 const UNDO_MONEY_REASON = "Undo is off after a buy-in, cash-out or bankroll change. Fix the number instead.";
 const UNDO_ABANDON_REASON = "Undo is off after a track was abandoned. Fix the number instead.";
 const UNDO_SPIN_REASON = "Undo is off after a ghost spin or an untracked spin. Fix the number instead.";
+const UNDO_CHANGED_REASON = "Undo is off: the session was changed after the spin it would reverse. Undo would drop that change.";
+// The fields a tapped spin changes, and the fields a Save stamps (mode, metrics, modified). Any other field of the session that
+// differs from the snapshot was changed after the spin, so Undo would undo that change too. The list is closed: a field added
+// later is refused until it is named here.
+const TAP_CHANGED_KEYS = ["spins", "droughts", "tracks", "bankrollCurrent", "modified", "sessionStartedAt", "metrics", "mode"];
 // The money records a spin never changes, so a difference from prevSess is money that moved after the spin. Compared by
 // value, not by spin index: Clear numbers keeps the money and its spin indices and resets only the spin count.
 const MONEY_RECORD_KEYS = ["bankroll", "totalBuyIn", "totalCashOut", "buyIns", "cashOuts", "bankrollEdits"];
@@ -356,6 +361,12 @@ function undoBlockReason(sess, prevSess) {
   if(abandons(sess) > abandons(prevSess)) return UNDO_ABANDON_REASON;
   // A tapped spin adds exactly one spin to prevSess, so any spin beyond that was recorded after it.
   if((sess.spins || []).length > prevSess.spins.length + 1) return UNDO_SPIN_REASON;
+  // Otherwise the spin list must be the snapshot's plus one spin, with the snapshot's spins unchanged: a list that changed
+  // earlier, or kept its length, was not made by this tap (the session was replaced, or another copy of it was merged in).
+  const spins = sess.spins || [], was = prevSess.spins || [];
+  if(spins.length !== was.length + 1 || !was.every((v, i) => spins[i] === v)) return UNDO_CHANGED_REASON;
+  // Every other field must be as the snapshot left it, apart from what a tap and a Save change.
+  if(Object.keys({...sess, ...prevSess}).some(k => !TAP_CHANGED_KEYS.includes(k) && !sameValue(sess[k], prevSess[k]))) return UNDO_CHANGED_REASON;
   return null;
 }
 
