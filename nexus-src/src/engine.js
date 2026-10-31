@@ -11,6 +11,25 @@ function countDrought(spins, predicate) {
   return count;
 }
 
+// -- The Solution's in-range numbers --
+// A straight number is in range when its miss count, droughts[n] (the count the board and the Solution grid show), is at
+// or above the track's entry threshold. Zeros are never Solution targets. Pure: reads droughts and writes nothing.
+// The simulation (simulation.js) uses solutionInRangeMember for every enrolment and resolution decision.
+// TODO: the live Solution panel and candidate list in App.jsx still inline this predicate; switch them to these
+// functions when App.jsx is in scope for the Solution change.
+function solutionInRangeMember(droughts, num, threshold) {
+  if(num==="0"||num==="00") return false;
+  return ((droughts&&droughts[num])||0) >= threshold;
+}
+
+// The in-range numbers of a wheel, coldest first: the largest miss count first, equal counts in wheel order.
+function solutionInRange(droughts, wheelNums, threshold) {
+  const d = droughts||{};
+  return wheelNums
+    .filter(n => solutionInRangeMember(d, n, threshold))
+    .sort((a, b) => (d[b]||0) - (d[a]||0));
+}
+
 function formatElapsed(ms) {
   const s=Math.floor(ms/1000);
   const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;

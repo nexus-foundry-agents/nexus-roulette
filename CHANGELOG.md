@@ -1,11 +1,27 @@
 # Changelog
 
-Last Updated: 2026-10-30
+Last Updated: 2026-10-31
 
 Notable code and documentation changes are recorded here. Release versions are assigned only when
 `develop` is promoted to `main`; feature-branch work remains under Unreleased.
 
 ## [Unreleased]
+
+### Added
+
+- `solutionInRange()` and `solutionInRangeMember()` in `nexus-src/src/engine.js` are the one definition of which numbers are in range for The Solution: a straight number whose miss count is at or above the track's entry threshold, never a zero, listed coldest first. `test/solution-pick.test.mjs` pins the rule from first principles.
+
+### Changed
+
+- The Experimental simulation's The Solution enrols and resolves numbers through `solutionInRangeMember()` in `nexus-src/src/simulation.js`, the same predicate the live Solution uses. The enrolment order and the results are unchanged.
+
+### Open
+
+- A live report says The Solution showed the last number to hit rather than the coldest. The audit found the in-range list and candidate list in `nexus-src/src/App.jsx` sort coldest first, exclude a number at zero misses, and keep a bet on a cold number through a spin that hits another number. Not reproduced from the engine or those derivations. The on-screen path was not run in a browser.
+- The live Solution panel and candidate list (`nexus-src/src/App.jsx`) still inline the in-range predicate rather than calling `solutionInRange()`. The live and simulated Solution therefore still have two copies of the predicate. `App.jsx` is outside this change's files.
+- The Roulette Type setting (`nexus-src/src/components/SecondaryPages.jsx`, Roulette Type row) and the onboarding restart (`nexus-src/src/components/onboarding-apply.jsx`) reset the drought counts to zero but keep the spin history. After a switch the board shows 0 misses for a number that the kept history shows 90 misses for (`countDrought` over the spins). The counts agree again only after a reload.
+- The brief asked that the American 00 be a Solution target only on the American wheel. The current rule, in both the live panel and the simulation, never offers either zero as a Solution target. The current rule is kept; a ruling is needed.
+- Head start for unseen numbers is a display estimate only. The in-range list uses the stored miss count, not the head-start estimate. A ruling is needed on whether the Solution should use the estimate.
 
 ## [0.53.0] - 2026-10-31
 
