@@ -7,6 +7,16 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Added
+
+- Custom Bet tracks on the Full Table page show a per-spot card above the levels list. It shows the selected level: for each spot its label, the bet on that spot this spin, the payout if that spot hits and the net if it hits. The payout is the gross return of every position that covers the spot's worst number, with overlapping positions counted together. The net is that payout less the bankroll the level needs. Tapping a level row selects it, and the selected row is outlined. The card opens on the track's current level. Its height depends only on the number of positions, so selecting another level moves nothing. Flat-mode Custom Bet tracks, which have one level, show that level in the same card.
+- The per-spot arithmetic is one pure function, `computeSpotBreakdown` in `nexus-src/src/engine.js`. Its hand-computed cases are in `test/progression-planner.test.mjs`.
+
+### Changed
+
+- On Custom Bet tracks, the Full Table column headed "Invested" is headed "Bankroll needed", and the legend says it is the cumulative stake needed to play up to that level. The legend for "Bet" on these tracks says it covers all spots this spin. Other track types keep their existing headings and legend.
+- The selected Custom Bet level is kept in the app, beside the selected track. Choosing a different track, or a track being selected from the Game tab, clears the level pick back to the track's current level.
+
 ## [0.51.0] - 2026-10-30
 
 ### Added

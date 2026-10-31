@@ -1017,18 +1017,18 @@ function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLim
 function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
 function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t.return && (u = t.return(), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
 function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
-function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
-function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
-function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
-function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
-function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 function ownKeys(e, r) { var t = Object.keys(e); if (Object.getOwnPropertySymbols) { var o = Object.getOwnPropertySymbols(e); r && (o = o.filter(function (r) { return Object.getOwnPropertyDescriptor(e, r).enumerable; })), t.push.apply(t, o); } return t; }
 function _objectSpread(e) { for (var r = 1; r < arguments.length; r++) { var t = null != arguments[r] ? arguments[r] : {}; r % 2 ? ownKeys(Object(t), !0).forEach(function (r) { _defineProperty(e, r, t[r]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function (r) { Object.defineProperty(e, r, Object.getOwnPropertyDescriptor(t, r)); }); } return e; }
 function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
 function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
-function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); } // ===== constants.js =====
+function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
+function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
+function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; } // ===== constants.js =====
 // -- Constants & Lookup Tables --
 // -- Constants --
 var RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -1924,6 +1924,42 @@ function computeTableForTrack(t) {
     return computeTable(subs || 1, hasMix ? 6 : 3, t.config.roi, _maxChips);
   }
   return computeTable(1, 36, t.config.roi, t.config.stopLoss / (t.config.unit || 1));
+}
+
+// Per-spot breakdown for one level of a Custom Bet track: one entry per position, in the order given.
+// Money is in currency (chips × unit), the same units as the Return and Profit columns.
+//   betPerSpot — the stake on this spot this spin: baseAmount × c × unit
+//   payout     — what the spot pays if it hits: on its WORST covered number, the gross return of every
+//                position covering that number (overlaps count). Gross includes the stake.
+//   net        — payout − totalInvest × unit: what is left after the bankroll the level needs is paid back.
+// Pure: reads positions and levelRow and never writes to either.
+function computeSpotBreakdown(positions, levelRow, unit) {
+  var u = unit || 1,
+    c = levelRow.c;
+  var round = function round(x) {
+    return Math.round(x * 1e6) / 1e6;
+  }; // clears floating-point noise so a zero net never shows as −0
+  var grossOn = {}; // number → chips returned if that number hits
+  positions.forEach(function (p) {
+    var gross = p.baseAmount * c * betPayoutMult(p.type);
+    betCoveredNumbers(p.type, p.target).forEach(function (n) {
+      var k = String(n);
+      grossOn[k] = (grossOn[k] || 0) + gross;
+    });
+  });
+  var invested = levelRow.totalInvest * u;
+  return positions.map(function (p) {
+    var covered = betCoveredNumbers(p.type, p.target).map(String);
+    var worst = covered.length ? Math.min.apply(Math, _toConsumableArray(covered.map(function (n) {
+      return grossOn[n];
+    }))) : 0;
+    var payout = worst * u;
+    return {
+      betPerSpot: round(p.baseAmount * c * u),
+      payout: round(payout),
+      net: round(payout - invested)
+    };
+  });
 }
 function getCategory(val, dts, cts, row, evts) {
   if (val === "0" || val === "00") return "loss";
@@ -14247,12 +14283,140 @@ function GamePageView(_ref93) {
 // ===== components/TablePage.jsx =====
 // -- Full table page --
 // Moved from App.jsx unchanged. App renders it through a wrapper that passes the App values it reads.
-function TablePageView(_ref94) {
-  var sess = _ref94.sess,
-    selectedTrackId = _ref94.selectedTrackId,
-    setSelectedTrackId = _ref94.setSelectedTrackId,
-    nonClosedTracks = _ref94.nonClosedTracks,
+
+// Per-spot card for a Custom Bet track. Its spot list is sized for the track's number of positions, and every
+// spot row has a fixed height, so the card's box depends only on how many positions there are, never on the
+// level selected or on how long a value is (rule 82).
+var SPOT_ROW_H = 30; // one spot: a label line and a values line
+var SPOT_GAP = 4;
+function spotListHeight(n) {
+  return n * SPOT_ROW_H + (n - 1) * SPOT_GAP;
+}
+
+// The per-spot numbers for one level: a title, column captions, then one row per position.
+// positions and row are only read; computeSpotBreakdown never writes to them.
+function SpotCard(_ref94) {
+  var positions = _ref94.positions,
+    row = _ref94.row,
+    unit = _ref94.unit,
     cur = _ref94.cur;
+  var n = Math.max(positions.length, 1);
+  var spots = row ? computeSpotBreakdown(positions, row, unit) : [];
+  var money = function money(v) {
+    return cur.symbol + v.toFixed(cur.dec);
+  };
+  var signed = function signed(v) {
+    return (v >= 0 ? "+" : "-") + cur.symbol + Math.abs(v).toFixed(cur.dec);
+  };
+  var clip = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis"
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    "data-spot-card": "",
+    style: {
+      background: "#0f1923",
+      borderRadius: 8,
+      padding: "6px 8px",
+      marginBottom: 8,
+      border: "1px solid #2d4057",
+      boxSizing: "border-box",
+      display: "flex",
+      flexDirection: "column",
+      gap: SPOT_GAP,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: _objectSpread(_objectSpread({}, clip), {}, {
+      fontSize: 9,
+      fontWeight: 800,
+      color: "#94a3b8",
+      height: 12,
+      lineHeight: "12px"
+    })
+  }, row ? "Level ".concat(row.level, " - per spot") : "Per spot"), /*#__PURE__*/React.createElement("div", {
+    style: _objectSpread(_objectSpread({
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: SPOT_GAP
+    }, clip), {}, {
+      fontSize: 8,
+      color: "#64748b",
+      height: 10,
+      lineHeight: "10px"
+    })
+  }, /*#__PURE__*/React.createElement("span", null, "Bet per spot"), /*#__PURE__*/React.createElement("span", null, "Payout if it hits"), /*#__PURE__*/React.createElement("span", null, "Net if it hits")), /*#__PURE__*/React.createElement("div", {
+    "data-spot-rows": "",
+    style: {
+      height: spotListHeight(n),
+      display: "flex",
+      flexDirection: "column",
+      gap: SPOT_GAP,
+      overflow: "hidden"
+    }
+  }, spots.map(function (s, i) {
+    var d = betPositionLabel(positions[i]);
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      "data-spot-row": "",
+      style: {
+        height: SPOT_ROW_H,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        overflow: "hidden",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: _objectSpread(_objectSpread({}, clip), {}, {
+        fontSize: 10,
+        fontWeight: 800,
+        color: d.color,
+        height: 14,
+        lineHeight: "14px"
+      })
+    }, d.label, d.detail ? " " + d.detail : ""), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: SPOT_GAP,
+        fontSize: 10,
+        fontWeight: 700,
+        height: 14,
+        lineHeight: "14px"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, clip), {}, {
+        color: "#60a5fa"
+      })
+    }, money(s.betPerSpot)), /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, clip), {}, {
+        color: "#a78bfa"
+      })
+    }, money(s.payout)), /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, clip), {}, {
+        color: s.net >= 0 ? "#4ade80" : "#f97316"
+      })
+    }, signed(s.net))));
+  }), spots.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: _objectSpread(_objectSpread({}, clip), {}, {
+      fontSize: 9,
+      color: "#64748b"
+    })
+  }, positions.length === 0 ? "Add a spot to see its numbers" : "No level to show yet")));
+}
+
+// TablePageView has no hooks: the selected Custom Bet level lives in App (selectedLevel), so this view can be
+// called as a plain function and its tree inspected in tests.
+function TablePageView(_ref95) {
+  var sess = _ref95.sess,
+    selectedTrackId = _ref95.selectedTrackId,
+    setSelectedTrackId = _ref95.setSelectedTrackId,
+    nonClosedTracks = _ref95.nonClosedTracks,
+    cur = _ref95.cur,
+    selectedLevel = _ref95.selectedLevel,
+    setSelectedLevel = _ref95.setSelectedLevel;
   var selTrack = sess.tracks.find(function (t) {
     return t.id === selectedTrackId;
   }) || nonClosedTracks[0] || null;
@@ -14269,11 +14433,24 @@ function TablePageView(_ref94) {
   }, "Add a track to see the progression table");
   var tbl = computeTableForTrack(selTrack);
   var hasMix = selTrack.type === "fibonacci" && (selTrack.config.dozenTargets || []).length > 0 && (selTrack.config.colTargets || []).length > 0;
+  var isCustom = selTrack.type === "custom";
   var unit = selTrack.config.unit || 1;
-  var headers = hasMix ? ["#", "Bet", "Invested", "PW Ret", "PW Profit", "JP Ret", "JP Profit"] : ["#", "Bet", "Invested", "Return", "Profit", "ROI"];
+  // The level the card shows: the one selected for this track, otherwise the track's current level. A selection
+  // made on another track is ignored, so it never carries over.
+  var curIdx = Math.min(Math.max(selTrack.level || 0, 0), tbl.length - 1);
+  var picked = selectedLevel && selectedLevel.trackId === selTrack.id ? selectedLevel.index : null;
+  var selIdx = picked !== null ? Math.min(picked, tbl.length - 1) : curIdx;
+  var selRow = isCustom && selIdx >= 0 ? tbl[selIdx] : null;
+  var pickLevel = function pickLevel(i) {
+    return setSelectedLevel({
+      trackId: selTrack.id,
+      index: i
+    });
+  };
+  var headers = hasMix ? ["#", "Bet", "Invested", "PW Ret", "PW Profit", "JP Ret", "JP Profit"] : ["#", "Bet", isCustom ? "Bankroll needed" : "Invested", "Return", "Profit", "ROI"];
   var hColors = ["#94a3b8", "#60a5fa", "#f87171", "#a78bfa", "#4ade80", "#fbbf24", "#fbbf24"];
   var gridCols = hasMix ? "22px 1fr 1fr 1fr 1fr 1fr 1fr" : "22px 1fr 1fr 1fr 1fr 1fr";
-  var legendRows = hasMix ? [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["PW Ret", "Return if 1 bet hits"], ["PW Profit", "Profit on partial win"], ["JP Ret", "Return if dozen AND column hit"], ["JP Profit", "Profit on jackpot"]] : [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["Return", "Gross payout if you win"], ["Profit", "Net profit after all invested"], ["ROI", "Profit divided by invested"]];
+  var legendRows = hasMix ? [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["PW Ret", "Return if 1 bet hits"], ["PW Profit", "Profit on partial win"], ["JP Ret", "Return if dozen AND column hit"], ["JP Profit", "Profit on jackpot"]] : isCustom ? [["#", "Level #"], ["Bet", "Total bet on all spots this spin"], ["Bankroll needed", "Cumulative stake: the bankroll needed to play up to this level"], ["Return", "Gross payout if you win"], ["Profit", "Net profit after all invested"], ["ROI", "Profit divided by invested"], ["Tap a level", "Shows its per-spot numbers above"]] : [["#", "Level #"], ["Bet", "Total wagered this spin"], ["Invested", "Cumulative total spent"], ["Return", "Gross payout if you win"], ["Profit", "Net profit after all invested"], ["ROI", "Profit divided by invested"]];
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -14351,10 +14528,10 @@ function TablePageView(_ref94) {
       flexDirection: "column",
       gap: 3
     }
-  }, legendRows.map(function (_ref95) {
-    var _ref96 = _slicedToArray(_ref95, 2),
-      abbr = _ref96[0],
-      desc = _ref96[1];
+  }, legendRows.map(function (_ref96) {
+    var _ref97 = _slicedToArray(_ref96, 2),
+      abbr = _ref97[0],
+      desc = _ref97[1];
     return /*#__PURE__*/React.createElement("div", {
       key: abbr,
       style: {
@@ -14374,7 +14551,12 @@ function TablePageView(_ref94) {
         color: "#475569"
       }
     }, desc));
-  })), /*#__PURE__*/React.createElement("div", {
+  })), isCustom && /*#__PURE__*/React.createElement(SpotCard, {
+    positions: selTrack.config.positions || [],
+    row: selRow,
+    unit: unit,
+    cur: cur
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: gridCols,
@@ -14402,14 +14584,29 @@ function TablePageView(_ref94) {
     }
   }, tbl.map(function (r, i) {
     var isA = i === selTrack.level,
-      isP = i < selTrack.level;
+      isP = i < selTrack.level,
+      isSel = isCustom && i === selIdx;
     var pw = 3 * r.c - r.totalInvest,
       jp = hasMix ? 6 * r.c - r.totalInvest : null;
     var cols = hasMix ? [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (3 * r.c * unit).toFixed(cur.dec), (pw * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(pw * unit).toFixed(cur.dec), cur.symbol + (6 * r.c * unit).toFixed(cur.dec), jp !== null ? (jp * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(jp * unit).toFixed(cur.dec) : "--"] : [cur.symbol + (r.totalBet * unit).toFixed(cur.dec), cur.symbol + (r.totalInvest * unit).toFixed(cur.dec), cur.symbol + (r.ret * unit).toFixed(cur.dec), (r.profit * unit >= 0 ? "+" : "-") + cur.symbol + Math.abs(r.profit * unit).toFixed(cur.dec), r.roi.toFixed(1) + "%"];
     var rowColors = hasMix ? ["#60a5fa", "#f87171", "#a78bfa", pw >= 0 ? "#4ade80" : "#f97316", "#fbbf24", jp !== null && jp >= 0 ? "#fbbf24" : "#f87171"] : ["#60a5fa", "#f87171", "#a78bfa", r.profit >= 0 ? "#4ade80" : "#f97316", "#86efac"];
+    // The selected Custom Bet row takes the active row's highlight, plus an inset outline so the two can be told apart.
     return /*#__PURE__*/React.createElement("div", {
       key: r.level,
-      style: {
+      "data-level": isCustom ? r.level : undefined,
+      onClick: isCustom ? function () {
+        return pickLevel(i);
+      } : undefined,
+      role: isCustom ? "button" : undefined,
+      tabIndex: isCustom ? 0 : undefined,
+      "aria-pressed": isCustom ? isSel : undefined,
+      onKeyDown: isCustom ? function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          pickLevel(i);
+        }
+      } : undefined,
+      style: _objectSpread(_objectSpread({
         display: "grid",
         gridTemplateColumns: gridCols,
         gap: 2,
@@ -14418,7 +14615,15 @@ function TablePageView(_ref94) {
         background: isA ? "#134e2a" : isP ? "#0f1923" : "transparent",
         border: "1px solid " + (isA ? "#4ade80" : isP ? "#1e2d3d" : "#2d4057"),
         opacity: isP ? 0.4 : 1
-      }
+      }, isCustom ? {
+        cursor: "pointer"
+      } : {}), isSel ? {
+        background: "#134e2a",
+        border: "1px solid #4ade80",
+        opacity: 1,
+        outline: "2px solid #e2e8f0",
+        outlineOffset: "-2px"
+      } : {})
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
@@ -14534,109 +14739,116 @@ function App() {
     setSelectedTrackId = _useState94[1];
   var _useState95 = (0, _react.useState)(null),
     _useState96 = _slicedToArray(_useState95, 2),
-    result = _useState96[0],
-    setResult = _useState96[1];
+    selectedLevel = _useState96[0],
+    setSelectedLevel = _useState96[1]; // {trackId, index}: the Custom Bet level picked on the Full Table; null = the track's current level
+  (0, _react.useEffect)(function () {
+    setSelectedLevel(null);
+  }, [selectedTrackId]); // a change of selected track clears the level pick (the Game tab sets it too)
   var _useState97 = (0, _react.useState)(null),
     _useState98 = _slicedToArray(_useState97, 2),
-    flashNum = _useState98[0],
-    setFlashNum = _useState98[1];
+    result = _useState98[0],
+    setResult = _useState98[1];
   var _useState99 = (0, _react.useState)(null),
     _useState100 = _slicedToArray(_useState99, 2),
-    prevSessState = _useState100[0],
-    setPrevSessState = _useState100[1];
+    flashNum = _useState100[0],
+    setFlashNum = _useState100[1];
   var _useState101 = (0, _react.useState)(null),
     _useState102 = _slicedToArray(_useState101, 2),
-    draggingId = _useState102[0],
-    setDraggingId = _useState102[1];
+    prevSessState = _useState102[0],
+    setPrevSessState = _useState102[1];
   var _useState103 = (0, _react.useState)(null),
     _useState104 = _slicedToArray(_useState103, 2),
-    dragOverId = _useState104[0],
-    setDragOverId = _useState104[1];
+    draggingId = _useState104[0],
+    setDraggingId = _useState104[1];
   var _useState105 = (0, _react.useState)(null),
     _useState106 = _slicedToArray(_useState105, 2),
-    highlightTrackId = _useState106[0],
-    setHighlightTrackId = _useState106[1];
+    dragOverId = _useState106[0],
+    setDragOverId = _useState106[1];
   var _useState107 = (0, _react.useState)(null),
     _useState108 = _slicedToArray(_useState107, 2),
-    editTrackId = _useState108[0],
-    setEditTrackId = _useState108[1];
-  var _useState109 = (0, _react.useState)(false),
+    highlightTrackId = _useState108[0],
+    setHighlightTrackId = _useState108[1];
+  var _useState109 = (0, _react.useState)(null),
     _useState110 = _slicedToArray(_useState109, 2),
-    gameSpinning = _useState110[0],
-    setGameSpinning = _useState110[1];
-  var _useState111 = (0, _react.useState)(function () {
+    editTrackId = _useState110[0],
+    setEditTrackId = _useState110[1];
+  var _useState111 = (0, _react.useState)(false),
+    _useState112 = _slicedToArray(_useState111, 2),
+    gameSpinning = _useState112[0],
+    setGameSpinning = _useState112[1];
+  var _useState113 = (0, _react.useState)(function () {
       return initialUiState.gameResult || null;
     }),
-    _useState112 = _slicedToArray(_useState111, 2),
-    gameResult = _useState112[0],
-    setGameResult = _useState112[1];
-  var _useState113 = (0, _react.useState)(null),
     _useState114 = _slicedToArray(_useState113, 2),
-    lastSpinDelta = _useState114[0],
-    setLastSpinDelta = _useState114[1];
-  var _useState115 = (0, _react.useState)(function () {
+    gameResult = _useState114[0],
+    setGameResult = _useState114[1];
+  var _useState115 = (0, _react.useState)(null),
+    _useState116 = _slicedToArray(_useState115, 2),
+    lastSpinDelta = _useState116[0],
+    setLastSpinDelta = _useState116[1];
+  var _useState117 = (0, _react.useState)(function () {
       return initialUiState.selectedChip || 1;
     }),
-    _useState116 = _slicedToArray(_useState115, 2),
-    selectedChip = _useState116[0],
-    setSelectedChip = _useState116[1];
-  var _useState117 = (0, _react.useState)(function () {
+    _useState118 = _slicedToArray(_useState117, 2),
+    selectedChip = _useState118[0],
+    setSelectedChip = _useState118[1];
+  var _useState119 = (0, _react.useState)(function () {
       return initialUiState.manualBets || [];
     }),
-    _useState118 = _slicedToArray(_useState117, 2),
-    manualBets = _useState118[0],
-    setManualBets = _useState118[1];
-  var _useState119 = (0, _react.useState)(function () {
+    _useState120 = _slicedToArray(_useState119, 2),
+    manualBets = _useState120[0],
+    setManualBets = _useState120[1];
+  var _useState121 = (0, _react.useState)(function () {
       return initialUiState.lastBets || [];
     }),
-    _useState120 = _slicedToArray(_useState119, 2),
-    lastBets = _useState120[0],
-    setLastBets = _useState120[1];
-  var _useState121 = (0, _react.useState)(null),
     _useState122 = _slicedToArray(_useState121, 2),
-    betResults = _useState122[0],
-    setBetResults = _useState122[1];
-  var _useState123 = (0, _react.useState)([]),
+    lastBets = _useState122[0],
+    setLastBets = _useState122[1];
+  var _useState123 = (0, _react.useState)(null),
     _useState124 = _slicedToArray(_useState123, 2),
-    undoStack = _useState124[0],
-    setUndoStack = _useState124[1];
-  var _useState125 = (0, _react.useState)(null),
+    betResults = _useState124[0],
+    setBetResults = _useState124[1];
+  var _useState125 = (0, _react.useState)([]),
     _useState126 = _slicedToArray(_useState125, 2),
-    animNumber = _useState126[0],
-    setAnimNumber = _useState126[1];
-  var clearTimerRef = React.useRef(null);
-  var _useState127 = (0, _react.useState)(true),
+    undoStack = _useState126[0],
+    setUndoStack = _useState126[1];
+  var _useState127 = (0, _react.useState)(null),
     _useState128 = _slicedToArray(_useState127, 2),
-    liveSelectingWinner = _useState128[0],
-    setLiveSelectingWinner = _useState128[1];
-  var _useState129 = (0, _react.useState)(null),
+    animNumber = _useState128[0],
+    setAnimNumber = _useState128[1];
+  var clearTimerRef = React.useRef(null);
+  var _useState129 = (0, _react.useState)(true),
     _useState130 = _slicedToArray(_useState129, 2),
-    liveWinNumber = _useState130[0],
-    setLiveWinNumber = _useState130[1];
-  var _useState131 = (0, _react.useState)(function () {
+    liveSelectingWinner = _useState130[0],
+    setLiveSelectingWinner = _useState130[1];
+  var _useState131 = (0, _react.useState)(null),
+    _useState132 = _slicedToArray(_useState131, 2),
+    liveWinNumber = _useState132[0],
+    setLiveWinNumber = _useState132[1];
+  var _useState133 = (0, _react.useState)(function () {
       return initialUiState.liveManualBets || [];
     }),
-    _useState132 = _slicedToArray(_useState131, 2),
-    liveManualBets = _useState132[0],
-    setLiveManualBets = _useState132[1];
-  var _useState133 = (0, _react.useState)(function () {
+    _useState134 = _slicedToArray(_useState133, 2),
+    liveManualBets = _useState134[0],
+    setLiveManualBets = _useState134[1];
+  var _useState135 = (0, _react.useState)(function () {
       return initialUiState.liveLastBets || [];
     }),
-    _useState134 = _slicedToArray(_useState133, 2),
-    liveLastBets = _useState134[0],
-    setLiveLastBets = _useState134[1];
-  var _useState135 = (0, _react.useState)(false),
     _useState136 = _slicedToArray(_useState135, 2),
-    clearOpen = _useState136[0],
-    setClearOpen = _useState136[1];
-  var _useState137 = (0, _react.useState)(null),
+    liveLastBets = _useState136[0],
+    setLiveLastBets = _useState136[1];
+  var _useState137 = (0, _react.useState)(false),
     _useState138 = _slicedToArray(_useState137, 2),
-    clearUndo = _useState138[0],
-    setClearUndo = _useState138[1]; // {sessionId, snapshot} while Undo for Clear numbers is offered
+    clearOpen = _useState138[0],
+    setClearOpen = _useState138[1];
   var _useState139 = (0, _react.useState)(null),
     _useState140 = _slicedToArray(_useState139, 2),
-    spinCorrection = _useState140[0],
-    setSpinCorrection = _useState140[1]; // {index} while the number picker for a recent spin is open
+    clearUndo = _useState140[0],
+    setClearUndo = _useState140[1]; // {sessionId, snapshot} while Undo for Clear numbers is offered
+  var _useState141 = (0, _react.useState)(null),
+    _useState142 = _slicedToArray(_useState141, 2),
+    spinCorrection = _useState142[0],
+    setSpinCorrection = _useState142[1]; // {index} while the number picker for a recent spin is open
   var _useBoardPhotoReturn = useBoardPhotoReturn(appState.currentSession, appMode, setAppMode, casinoSync.status, boardDecision, commitBoardAdd, {
       setPrevSessState: setPrevSessState,
       setResult: setResult,
@@ -14687,19 +14899,19 @@ function App() {
       return window.removeEventListener('nexus-account-scope-ready', loadScopedUi);
     };
   }, []);
-  var _useState141 = (0, _react.useState)(null),
-    _useState142 = _slicedToArray(_useState141, 2),
-    liveBetResults = _useState142[0],
-    setLiveBetResults = _useState142[1];
-  var _useState143 = (0, _react.useState)([]),
+  var _useState143 = (0, _react.useState)(null),
     _useState144 = _slicedToArray(_useState143, 2),
-    liveUndoStack = _useState144[0],
-    setLiveUndoStack = _useState144[1];
-  var liveClearTimerRef = React.useRef(null);
-  var _useState145 = (0, _react.useState)(null),
+    liveBetResults = _useState144[0],
+    setLiveBetResults = _useState144[1];
+  var _useState145 = (0, _react.useState)([]),
     _useState146 = _slicedToArray(_useState145, 2),
-    updateAvailable = _useState146[0],
-    setUpdateAvailable = _useState146[1]; // {version, notes}
+    liveUndoStack = _useState146[0],
+    setLiveUndoStack = _useState146[1];
+  var liveClearTimerRef = React.useRef(null);
+  var _useState147 = (0, _react.useState)(null),
+    _useState148 = _slicedToArray(_useState147, 2),
+    updateAvailable = _useState148[0],
+    setUpdateAvailable = _useState148[1]; // {version, notes}
 
   // Check for app updates
   (0, _react.useEffect)(function () {
@@ -14719,46 +14931,46 @@ function App() {
       return clearInterval(iv);
     };
   }, []);
-  var _useState147 = (0, _react.useState)(false),
-    _useState148 = _slicedToArray(_useState147, 2),
-    buyInOpen = _useState148[0],
-    setBuyInOpen = _useState148[1];
   var _useState149 = (0, _react.useState)(false),
     _useState150 = _slicedToArray(_useState149, 2),
-    currencyOpen = _useState150[0],
-    setCurrencyOpen = _useState150[1];
+    buyInOpen = _useState150[0],
+    setBuyInOpen = _useState150[1];
   var _useState151 = (0, _react.useState)(false),
     _useState152 = _slicedToArray(_useState151, 2),
-    changelogOpen = _useState152[0],
-    setChangelogOpen = _useState152[1];
+    currencyOpen = _useState152[0],
+    setCurrencyOpen = _useState152[1];
   var _useState153 = (0, _react.useState)(false),
     _useState154 = _slicedToArray(_useState153, 2),
-    editBankroll = _useState154[0],
-    setEditBankroll = _useState154[1];
+    changelogOpen = _useState154[0],
+    setChangelogOpen = _useState154[1];
   var _useState155 = (0, _react.useState)(false),
     _useState156 = _slicedToArray(_useState155, 2),
-    cashOutOpen = _useState156[0],
-    setCashOutOpen = _useState156[1];
+    editBankroll = _useState156[0],
+    setEditBankroll = _useState156[1];
   var _useState157 = (0, _react.useState)(false),
     _useState158 = _slicedToArray(_useState157, 2),
-    hardResetOpen = _useState158[0],
-    setHardResetOpen = _useState158[1];
+    cashOutOpen = _useState158[0],
+    setCashOutOpen = _useState158[1];
   var _useState159 = (0, _react.useState)(false),
     _useState160 = _slicedToArray(_useState159, 2),
-    feedbackOpen = _useState160[0],
-    setFeedbackOpen = _useState160[1];
-  var _useState161 = (0, _react.useState)(""),
+    hardResetOpen = _useState160[0],
+    setHardResetOpen = _useState160[1];
+  var _useState161 = (0, _react.useState)(false),
     _useState162 = _slicedToArray(_useState161, 2),
-    feedbackText = _useState162[0],
-    setFeedbackText = _useState162[1];
-  var _useState163 = (0, _react.useState)("fibonacci"),
+    feedbackOpen = _useState162[0],
+    setFeedbackOpen = _useState162[1];
+  var _useState163 = (0, _react.useState)(""),
     _useState164 = _slicedToArray(_useState163, 2),
-    pendingTrackType = _useState164[0],
-    setPendingTrackType = _useState164[1];
-  var _useState165 = (0, _react.useState)(defaultFibCfg()),
+    feedbackText = _useState164[0],
+    setFeedbackText = _useState164[1];
+  var _useState165 = (0, _react.useState)("fibonacci"),
     _useState166 = _slicedToArray(_useState165, 2),
-    pendingTrackCfg = _useState166[0],
-    setPendingTrackCfg = _useState166[1];
+    pendingTrackType = _useState166[0],
+    setPendingTrackType = _useState166[1];
+  var _useState167 = (0, _react.useState)(defaultFibCfg()),
+    _useState168 = _slicedToArray(_useState167, 2),
+    pendingTrackCfg = _useState168[0],
+    setPendingTrackCfg = _useState168[1];
   var sessKey = appMode === "game" ? "gameSession" : "currentSession";
   var sess = appState[sessKey] || appState.currentSession;
   var livePauseOffset = livePausedTotal + (livePausedAt ? Date.now() - livePausedAt : 0);
@@ -14771,10 +14983,10 @@ function App() {
   }, [appState]);
 
   // Storage failures surface as a banner, never a blocking browser dialog
-  var _useState167 = (0, _react.useState)(null),
-    _useState168 = _slicedToArray(_useState167, 2),
-    saveError = _useState168[0],
-    setSaveError = _useState168[1];
+  var _useState169 = (0, _react.useState)(null),
+    _useState170 = _slicedToArray(_useState169, 2),
+    saveError = _useState170[0],
+    setSaveError = _useState170[1];
   (0, _react.useEffect)(function () {
     function onSaveError(e) {
       setSaveError(e && e.detail || "Unknown storage error");
@@ -16126,10 +16338,10 @@ function App() {
       l: "JP Profit",
       v: (outcomes.jackpot.profit * (primaryTrack.config.unit || 1) >= 0 ? "+" : "-") + cur.symbol + Math.abs(outcomes.jackpot.profit * (primaryTrack.config.unit || 1)).toFixed(cur.dec),
       c: outcomes.jackpot.profit >= 0 ? "#4ade80" : "#f87171"
-    }].map(function (_ref97) {
-      var l = _ref97.l,
-        v = _ref97.v,
-        c = _ref97.c;
+    }].map(function (_ref98) {
+      var l = _ref98.l,
+        v = _ref98.v,
+        c = _ref98.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -16211,10 +16423,10 @@ function App() {
       l: "Partial Profit",
       v: outcomes ? signChips(outcomes.partial.profit, primaryTrack.config.unit || 1, currency) : "--",
       c: outcomes && outcomes.partial.profit >= 0 ? "#4ade80" : "#f97316"
-    }].map(function (_ref98) {
-      var l = _ref98.l,
-        v = _ref98.v,
-        c = _ref98.c;
+    }].map(function (_ref99) {
+      var l = _ref99.l,
+        v = _ref99.v,
+        c = _ref99.c;
       return /*#__PURE__*/React.createElement("div", {
         key: l,
         style: {
@@ -16456,19 +16668,21 @@ function App() {
       selectedTrackId: selectedTrackId,
       setSelectedTrackId: setSelectedTrackId,
       nonClosedTracks: nonClosedTracks,
-      cur: cur
+      cur: cur,
+      selectedLevel: selectedLevel,
+      setSelectedLevel: setSelectedLevel
     });
   }
 
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
 
   // -- Bankroll Edit --
-  function BankrollEdit(_ref99) {
-    var onClose = _ref99.onClose;
-    var _useState169 = (0, _react.useState)(sess.bankrollCurrent),
-      _useState170 = _slicedToArray(_useState169, 2),
-      val = _useState170[0],
-      setVal = _useState170[1];
+  function BankrollEdit(_ref100) {
+    var onClose = _ref100.onClose;
+    var _useState171 = (0, _react.useState)(sess.bankrollCurrent),
+      _useState172 = _slicedToArray(_useState171, 2),
+      val = _useState172[0],
+      setVal = _useState172[1];
     function save() {
       updSess(function (s) {
         s.bankrollCurrent = val;

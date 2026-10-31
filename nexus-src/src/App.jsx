@@ -38,6 +38,8 @@ export default function App() {
   const simStopRef = React.useRef(false);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [selectedLevel, setSelectedLevel] = useState(null); // {trackId, index}: the Custom Bet level picked on the Full Table; null = the track's current level
+  useEffect(()=>{ setSelectedLevel(null); }, [selectedTrackId]); // a change of selected track clears the level pick (the Game tab sets it too)
   const [result, setResult] = useState(null);
   const [flashNum, setFlashNum] = useState(null);
   const [prevSessState, setPrevSessState] = useState(null);
@@ -743,7 +745,7 @@ export default function App() {
   }
   // Declared inside App for the same reason as GamePage.
   function TablePage() {
-    return <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur}/>;
+    return <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur} selectedLevel={selectedLevel} setSelectedLevel={setSelectedLevel}/>;
   }
 
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
