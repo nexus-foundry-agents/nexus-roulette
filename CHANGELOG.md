@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-10-31
+
 ### Added
 
 - Gold for the coldest number in each dozen and column. On the board, the number with the highest loss level in each of the six sections is gold: gold number text and a small gold corner pip. The F10 outline is unchanged, so gold and the outline read separately. Each section tile shows its coldest number or numbers and their loss level in gold, in a row with a reserved slot, and its detail view lists the section's numbers coldest first with the coldest in gold. The rule is `sectionColdest()` in `nexus-src/src/tlv.js`: ties return every tied number, and nothing is gold when the highest loss level is 0. 0 and 00 are never in a section.
