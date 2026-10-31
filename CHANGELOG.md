@@ -7,6 +7,14 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- The Game page, the Live tracker, the Full Table page and the Edit Bankroll sheet no longer reset when the app updates. Each was declared inside `App` in `nexus-src/src/App.jsx`, so every App render created a new component type and remounted it. A bet, a chip tap or each spin-animation tick therefore returned the recent-numbers strip to its newest 40 chips at scroll position 0, and cleared a bankroll amount being typed. The Game page and the Full Table page now mount their module-scope views directly (`GamePageView` in `nexus-src/src/components/GamePage.jsx`, `TablePageView` in `nexus-src/src/components/TablePage.jsx`). The Live tracker body stays in `App` as `renderTrackerPage()`, and `App` mounts it through a module-scope `TrackerPage` component that receives it as a prop, so the element type no longer changes on each render. Edit Bankroll is a module-scope component in `nexus-src/src/App.jsx` that takes its starting amount and saves through a prop. Nothing else changes: the page bodies are the same, and only the state they hold now survives an App render. `nexus-src/src/App.jsx` goes from 891 to 890 lines. The regression test is `test/page-remount.test.mjs`, which also holds the list of the nested components that remain (three board chips in `nexus-src/src/components/ui.jsx`, kept because they hold no state). No version or service worker cache change; both move at promotion.
+
+### Open
+
+- The visual checks of the strip, the Live page and the Edit Bankroll sheet at 360 and 390 px are UNVERIFIED: no browser suite was run for this change.
+
 ## [0.63.0] - 2026-10-31
 
 ### Added
