@@ -410,7 +410,7 @@ test('catch-up: resumed, then "2 2 2 24 4" enters five spins in that order, each
   // The text the player types, through the same parser the catch-up card calls on every keystroke.
   const typed = app.ctx.json('parseBulkNumbers("2 2 2 24 4", "american", BOARD_MAX_NUMBERS)');
   assert.deepEqual(typed, { ok: true, numbers: ['2', '2', '2', '24', '4'] }, 'the typed entry parses to five numbers, oldest first');
-  app.stats().addCatchUp(typed.numbers);
+  app.stats().addCatchUp(typed.numbers, plain(app.state()).currentSession); // the sheet passes the resumed session as the target (catch-up card, kind by savedSessionMode)
   await app.flush();
 
   // commitBoardAdd is the only producer of a decision, so an accepted decision shows the add went through it.
