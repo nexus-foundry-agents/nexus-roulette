@@ -1,1 +1,1 @@
-{"version":"0.75.0","date":"2026-10-31","notes":"Automatic pause and resume no longer retry endlessly; every Casino call shows its error instead of hanging."}
+{"version":"0.76.0","date":"2026-10-31","notes":"Every Are you sure question and every import message is the app's own dialog, never the browser's pop-up."}

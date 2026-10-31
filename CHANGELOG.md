@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.76.0] - 2026-10-31
+
 ### Changed
 
 - Every confirmation in Roulette is the app's own dialog, never the browser's `window.confirm`. Nine sites now open `ConfirmDialog` (`nexus-src/src/components/ConfirmDialog.jsx`), built on the shared `Modal` in `nexus-src/src/components/ui.jsx`: Undo last tracked spin, Tear this session, End session and save (the Tracker header and the Game page), Close track (the Tracker and the Game page), Abandon progression, Clear all spins from session history, and Restart onboarding. Each confirm button names its action: Undo, Tear, End and save, Close track, Abandon, Clear or Restart. Undo, Tear, Abandon, Clear and Restart are styled as danger.
