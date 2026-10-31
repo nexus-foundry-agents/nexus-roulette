@@ -7,6 +7,24 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- Automatic pause and resume stop retrying on every render (CASINO-AUTO-RETRY-LOOP). The automatic pause the Game or Live view makes when the mode changes, the one it makes when the page opens, and the automatic resume made on return to a mode each try once. A refusal or a throw is not re-armed by renders: the effect in `nexus-src/src/casino-recording.mjs` no longer depends on the one-second tick, and a halt stops the automatic attempts. The halt ends at the next user action (Pause, Resume or Stop) or the next spin. A spin makes at most one automatic attempt before it is queued. The problem line says so: "Casino did not pause the session. It will try again at your next spin." and, for a resume, "Casino did not resume the session. It will try again at your next spin."
+- A Stop whose Casino call throws states the number of unsent spins the discard dropped, in the discard's own wording (for example "1 spin may have been saved to Casino: recording was stopped."), before the failure. The change is in `discardAndStop` in `nexus-src/src/casino-recording.mjs`.
+- Casino calls that throw are caught where they are made. In `nexus-src/src/components/BoardPhoto.jsx`, a throw from `openCasinoReadBoard` or `takeCasinoReadBoard` shows the existing unavailable status and nothing is left unhandled. In `nexus-src/src/casino-sync.mjs`, a throw from `writeState` shows the existing "Casino account sync is unavailable." status, and a throw from `readState` shows the existing "Not saved: Casino account storage is unavailable." status. Neither leaves the sync state on "checking" or "syncing".
+
+### Tests
+
+- Added `test/casino-retry-loop.test.mjs` (9 tests). FIX 1: a refused automatic pause at page open is not re-armed by 30 renders; a thrown one states the same line and is not re-armed; a refused or thrown automatic resume makes one attempt per spin, and the spin is refused as paused until a resume succeeds; a Resume the user presses shows Casino's own refusal and makes no automatic attempt. FIX 3: a photo open, a photo return read, an account read and an account write that each throw show the existing status, and nothing is left unhandled.
+- Updated `test/recording-queue-abandon.test.mjs`, ROUND-5 LOW (the Stop-throw assertion): the line now reads "1 spin may have been saved to Casino: recording was stopped. the Casino bridge refused the stop call. 1 spin was not saved to Casino: recording is stopping."
+
+### Open
+
+- `test/recording-throws.test.mjs`, the test "a Stop whose Casino call throws restores the pause owner, so the next spin carries no pause", asserts the old Stop-throw line exactly (line 291). It fails with this change until that expectation is updated to the line above. The file is outside this item's allowed files, so it is not changed here.
+- The Stop-throw line says "recording was stopped" although the Stop call failed. That is the wording the refusal path already uses; a different wording would be a separate item.
+- The version, `APP_VERSION` (0.73.0) and the `sw.js` CACHE name are not bumped; they move at promotion. The built `index.html` has no `?v=` stamp for this change to bump.
+- The visual check of the status lines is UNVERIFIED: no browser suite was run for this change.
+
 ## [0.74.0] - 2026-10-31
 
 ### Fixed

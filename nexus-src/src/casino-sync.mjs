@@ -255,7 +255,10 @@ export function useCasinoAccountSync(appState,setAppState){
     let next=candidate;
     for(let attempt=0;attempt<4;attempt++){
       setStatus('syncing');
-      const result=await askCasino('writeState',{expectedRevision:revision.current,data:next});
+      let result;
+      // A write that throws is a failed sync: it leaves syncing with the existing unavailable line, and nothing is left unhandled.
+      try{result=await askCasino('writeState',{expectedRevision:revision.current,data:next});}
+      catch(_error){result={ok:false,status:0,error:'Casino account sync is unavailable.'};}
       if(result.ok){
         const stored=stateFromResponse(result);
         if(!stored){setStatus('unavailable');setProblem('Casino returned an invalid sync receipt.');return false;}
@@ -292,7 +295,10 @@ export function useCasinoAccountSync(appState,setAppState){
         if(!cancelled){setStatus('unavailable');setProblem('Open Roulette through a signed-in Casino page to sync devices.');}
         return;
       }
-      const result=await askCasino('readState');
+      let result;
+      // A read that throws is "Not saved" with the existing line, so the state never stays on checking.
+      try{result=await askCasino('readState');}
+      catch(_error){result={ok:false,status:0};}
       if(cancelled)return;
       if(!result.ok){
         const unavailableScope=scopeFromResponse(result);
