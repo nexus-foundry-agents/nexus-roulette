@@ -28,6 +28,7 @@ function newTrack(type, colorIdx, config, color) {
 function clearSpins(sess, now) {
   const next = JSON.parse(JSON.stringify(sess));
   next.spins = [];
+  resetDealerChanges(next);
   next.droughts = initDroughts(next.roulette);
   next.tracks = (next.tracks||[]).map(t => {
     const config = {...(t.config||{})};
@@ -45,6 +46,7 @@ function snapshotSpinState(sess) {
   return JSON.parse(JSON.stringify({
     spins: sess.spins,
     droughts: sess.droughts,
+    dealerChanges: sess.dealerChanges,
     tracks: (sess.tracks||[]).map(t => ({
       id: t.id, bets: t.bets, wins: t.wins, sequences: t.sequences, level: t.level,
       createdAtSpin: t.createdAtSpin, closedAtSpin: t.closedAtSpin,
@@ -61,6 +63,8 @@ function restoreSpinState(sess, snap, now) {
   const next = JSON.parse(JSON.stringify(sess));
   next.spins = JSON.parse(JSON.stringify(snap.spins));
   next.droughts = JSON.parse(JSON.stringify(snap.droughts));
+  if(snap.dealerChanges!==undefined)next.dealerChanges=JSON.parse(JSON.stringify(snap.dealerChanges));
+  else delete next.dealerChanges;
   const saved = {};
   snap.tracks.forEach(s => { saved[s.id] = s; });
   next.tracks = (next.tracks||[]).map(t => {
@@ -171,6 +175,8 @@ function loadApp() {
       if(!d.currentSession.cashOuts) d.currentSession.cashOuts = [];
       if(d.currentSession.sessionStartedAt===undefined) d.currentSession.sessionStartedAt = null;
       if(d.currentSession.sessionEndedAt===undefined) d.currentSession.sessionEndedAt = null;
+      // Venue migration (F11): sessions saved before venues existed have no venue keys and are left as they were.
+      [d.currentSession, d.gameSession].concat(d.savedSessions||[]).forEach(migrateSessionVenue);
       // Auto-recalibrate bankroll from track P&Ls to fix any float drift.
       // Both live sessions have the same shape and the same drift exposure.
       [d.currentSession, d.gameSession].forEach(sess => {
@@ -219,4 +225,194 @@ function computeMetrics(session) {
   return{spins:session.spins.length,netPnL:session.bankrollCurrent+(session.totalCashOut||0)-totalInvested,
     bankrollStart:session.bankroll,bankrollCurrent:session.bankrollCurrent,
     totalBuyIn:session.totalBuyIn||0,perTrack};
+}
+
+// -- Venue (F11): where a session was played --
+// A session's venue is optional, and so is every field in it. kind is 'machine' or 'table'. A machine carries
+// maker, model and version; a table carries table and dealer. dealerChanges is [{fromSpin, dealer}] in spin
+// order: the dealer in effect from spin index fromSpin until the next entry. venue.dealer always equals the
+// dealer of the last entry. Text is trimmed, never truncated.
+const VENUE_FIELDS=['casino','maker','model','version','table','dealer'];
+
+function venueText(value){return typeof value==='string'&&value.trim()?value.trim():null;}
+
+// The venue in its stored shape, or null when nothing is recorded.
+function normalizeVenue(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const out={};
+  const casino=venueText(raw.casino);
+  if(casino)out.casino=casino;
+  if(raw.kind==='machine'||raw.kind==='table'){
+    out.kind=raw.kind;
+    (raw.kind==='machine'?['maker','model','version']:['table','dealer']).forEach(key=>{
+      const text=venueText(raw[key]);
+      if(text)out[key]=text;
+    });
+  }
+  return Object.keys(out).length?out:null;
+}
+
+function sortedDealerChanges(list){
+  return list
+    .filter(e=>!!e&&typeof e==='object'&&Number.isSafeInteger(e.fromSpin)&&e.fromSpin>=0&&(e.dealer===null||typeof e.dealer==='string'))
+    .map(e=>({fromSpin:e.fromSpin,dealer:venueText(e.dealer)}))
+    .sort((a,b)=>a.fromSpin-b.fromSpin);
+}
+
+// Sessions saved before venues existed carry neither key and come back exactly as they were. A malformed
+// venue reads as no venue. Runs on load, for the live sessions and every saved session.
+function migrateSessionVenue(sess){
+  if(!sess||typeof sess!=='object')return sess;
+  if('venue' in sess)sess.venue=normalizeVenue(sess.venue);
+  if('dealerChanges' in sess)sess.dealerChanges=Array.isArray(sess.dealerChanges)?sortedDealerChanges(sess.dealerChanges):[];
+  return sess;
+}
+
+// The dealer recorded last, which is the dealer now at the table, or null.
+function dealerNow(sess){
+  const list=sess.dealerChanges||[];
+  return list.length?list[list.length-1].dealer:null;
+}
+
+// The dealer in effect at spin index i, or null before the first recorded dealer.
+function dealerAtSpin(sess,i){
+  let dealer=null;
+  (sess.dealerChanges||[]).forEach(e=>{if(e.fromSpin<=i)dealer=e.dealer;});
+  return dealer;
+}
+
+// The spans of a session that share one dealer, from spin 0 to spinCount: [{from, to, dealer}], empty spans dropped.
+function dealerSegments(sess,spinCount){
+  const starts=[0].concat((sess.dealerChanges||[]).map(e=>e.fromSpin));
+  const bounds=starts.filter((v,i)=>starts.indexOf(v)===i&&(v<spinCount||v===0)).sort((a,b)=>a-b);
+  return bounds.map((from,i)=>({
+    from,
+    to:i+1<bounds.length?Math.min(bounds[i+1],spinCount):spinCount,
+    dealer:dealerAtSpin(sess,from),
+  })).filter(seg=>seg.to>seg.from);
+}
+
+// Records the dealer from spin index fromSpin, replacing a change already recorded at that index.
+function setDealerAt(sess,dealer,fromSpin){
+  const list=(sess.dealerChanges||[]).filter(e=>e.fromSpin!==fromSpin);
+  list.push({fromSpin,dealer:venueText(dealer)});
+  sess.dealerChanges=list.sort((a,b)=>a.fromSpin-b.fromSpin);
+}
+
+// A live session records a dealer change at the spin it starts from. An ended session records its starting
+// dealer at spin 0.
+function dealerSpinFor(sess,spinCount){return sess.sessionEndedAt?0:spinCount;}
+
+// An ended session whose dealer changed after its start keeps those changes as recorded; its dealer is not
+// edited from the venue picker.
+function dealerLocked(sess){
+  return !!sess.sessionEndedAt&&(sess.dealerChanges||[]).some(e=>e.fromSpin>0);
+}
+
+// A copy of the session with its venue set to venueInput (any shape; normalized here). For a table, a dealer that
+// differs from the one in effect is recorded: the first dealer a session has covers it from spin 0, and a later
+// change starts at spinCount (or at spin 0 for an ended session). A locked dealer is not changed. The input is not mutated.
+function withVenue(sess,venueInput,spinCount){
+  const next=JSON.parse(JSON.stringify(sess));
+  const venue=normalizeVenue(venueInput);
+  next.venue=venue;
+  if(venue&&venue.kind==='table'){
+    const want=venue.dealer||null;
+    const first=!(next.dealerChanges||[]).length;
+    if(want!==dealerNow(next)&&!dealerLocked(next))setDealerAt(next,want,first?0:dealerSpinFor(next,spinCount));
+    const now=dealerNow(next);
+    if(now)venue.dealer=now;
+    else delete venue.dealer;
+  }
+  return next;
+}
+
+// Spin indices restart at zero when the spins are cleared, so the dealer in effect is recorded from spin 0 again.
+function resetDealerChanges(sess){
+  if(!Array.isArray(sess.dealerChanges))return;
+  const now=dealerNow(sess);
+  sess.dealerChanges=now?[{fromSpin:0,dealer:now}]:[];
+}
+
+// The value offered in one venue field's list: each value that saved sessions, the current session (dealers
+// recorded mid-session included) or an entry typed by hand has used, once (case-insensitive, the latest spelling
+// kept), most recent first. A session counts at its last change.
+function venueOptions(field,sessions,entries){
+  const seen={};
+  const put=(value,at)=>{
+    const text=venueText(value);
+    if(!text)return;
+    const key=text.toLowerCase();
+    if(!seen[key]||at>=seen[key].at)seen[key]={value:text,at};
+  };
+  (sessions||[]).forEach(s=>{
+    if(!s||typeof s!=='object')return;
+    const at=Math.max(0,Number(s.modified)||0,Number(s.created)||0);
+    const venue=normalizeVenue(s.venue);
+    if(venue)put(venue[field],at);
+    if(field==='dealer')(s.dealerChanges||[]).forEach(e=>put(e.dealer,at));
+  });
+  (entries||[]).forEach(e=>{if(e&&e.field===field)put(e.value,Number(e.at)||0);});
+  return Object.keys(seen).map(k=>seen[k])
+    .sort((a,b)=>b.at-a.at||a.value.localeCompare(b.value))
+    .map(x=>x.value);
+}
+
+// The choices a field offers: its list without the value already applied, which the trigger shows (rule 78).
+function venueChoiceList(options,current){
+  const applied=(current||'').toLowerCase();
+  return (options||[]).filter(o=>o.toLowerCase()!==applied);
+}
+
+// The settings list of values typed by hand, with each new value added once per field (case-insensitive).
+// The newest spelling and time replace an older entry for the same value.
+function addVenueEntries(entries,added,now){
+  const out=(entries||[]).filter(e=>e&&VENUE_FIELDS.indexOf(e.field)>=0&&typeof e.value==='string');
+  (added||[]).forEach(a=>{
+    const value=venueText(a&&a.value);
+    if(!value||VENUE_FIELDS.indexOf(a.field)<0)return;
+    const key=a.field+'|'+value.toLowerCase();
+    const entry={field:a.field,value,at:now};
+    const i=out.findIndex(e=>e.field+'|'+e.value.toLowerCase()===key);
+    if(i>=0)out[i]=entry;
+    else out.push(entry);
+  });
+  return out;
+}
+
+// The one-line venue shown in the Live header and the session list. Empty when no venue is recorded.
+function venueLine(venue){
+  const v=normalizeVenue(venue);
+  if(!v)return '';
+  const parts=[v.casino];
+  if(v.kind==='machine')parts.push([v.maker,v.model,v.version].filter(Boolean).join(' '));
+  if(v.kind==='table')parts.push(v.table,v.dealer?'Dealer '+v.dealer:null);
+  return parts.filter(Boolean).join(' · ');
+}
+
+function venueMachineLabel(v){return [v.maker,v.model,v.version].filter(Boolean).join(' ')||'No machine details';}
+function venueTableLabel(v,dealer){return (v.table||'No table label')+' · '+(dealer||'no dealer');}
+
+// Spin counts across saved sessions, by casino, machine, and table and dealer. A table session is split at its
+// dealer changes. Spins in sessions with no venue are counted on their own line, so every row reconciles with
+// the total. Counts only.
+function venueSpinCounts(sessions){
+  const out={total:0,noVenue:0,casino:{},machine:{},table:{}};
+  const add=(map,label,n)=>{map[label]=(map[label]||0)+n;};
+  (sessions||[]).forEach(s=>{
+    const spins=Array.isArray(s.spins)?s.spins.length:0;
+    out.total+=spins;
+    const v=normalizeVenue(s.venue);
+    if(!v){out.noVenue+=spins;return;}
+    add(out.casino,v.casino||'No casino name',spins);
+    if(v.kind==='machine')add(out.machine,venueMachineLabel(v),spins);
+    if(v.kind==='table')dealerSegments(s,spins).forEach(seg=>add(out.table,venueTableLabel(v,seg.dealer),seg.to-seg.from));
+  });
+  return out;
+}
+
+// A count map as rows, largest first.
+function venueCountRows(map){
+  return Object.keys(map||{}).map(label=>({label,count:map[label]}))
+    .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label));
 }

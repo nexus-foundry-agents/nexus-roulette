@@ -372,3 +372,23 @@ function HardResetModal({onClose, onExport}) {
     </Modal>
   );
 }
+
+// -- Venue sheet (F11): the one mount of VenuePicker. The Live start step, the edit sheet and the end confirm differ
+// only in their title, their buttons and whether a dealer change is recorded, so they are parameters, not forks.
+// Dismissing the sheet is the secondary action: Skip at the start and at the end, Cancel when editing.
+function VenueModal({title,value,options,locked,dealerFromSpin,saveLabel,secondaryLabel,onSave,onDismiss}) {
+  return (
+    <Modal onClose={onDismiss}>
+      <VenuePicker
+        title={title}
+        value={value}
+        options={options}
+        locked={!!locked}
+        dealerFromSpin={dealerFromSpin==null?null:dealerFromSpin}
+        saveLabel={saveLabel}
+        secondaryLabel={secondaryLabel}
+        onSave={onSave}
+        onSecondary={onDismiss}/>
+    </Modal>
+  );
+}

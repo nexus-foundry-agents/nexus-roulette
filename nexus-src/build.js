@@ -46,6 +46,9 @@ const FILES = [
   'components/TrackPanel.jsx',
   // Modals — depends on ui
   'components/modals.jsx',
+  // Venue picker (F11): the one venue form, mounted by VenueModal (modals.jsx) at the Live start step, the end confirm and the edit sheet.
+  // Depends on session.js (normalizeVenue) and the nf-ui select and menu classes.
+  'components/VenuePicker.jsx',
   // Live-mode spin tools (clear numbers with inline undo) and the recent-numbers strip — depends on ui (Modal) and constants
   'components/SpinTools.jsx',
   // Board photo reader (F3.2) — the photo button's destination, the return-hash parse, the status line and the review.

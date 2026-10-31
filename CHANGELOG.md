@@ -7,6 +7,23 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-10-31
+
+### Added
+
+- A live session can record its venue: the casino, and either a machine (maker, model and version) or a table (table label and dealer). Every field is optional, and a session without a venue behaves exactly as before, including sessions saved by earlier versions.
+- When a Live session starts, a "Where are you playing?" step opens in its own sheet. Each field is a list of values used before, most recent first, with "Add new..." for a value not yet listed. Skip leaves the venue empty.
+- The venue can be edited at any time from the Live header, from the current session on the stats page, and from each saved session. Ending a Live session without a venue asks for one first, and Skip ends the session as before.
+- A dealer change during a live session is recorded with the spin it starts from (`dealerChanges`, each entry `{fromSpin, dealer}`), so spins can later be split by dealer. A dealer on a saved session that already has a later change is shown and kept as recorded.
+- The value lists (casinos, makers, models, versions, tables and dealers) are built from saved sessions and from values entered by hand. Entered values are stored in the device settings, synced with them, and kept across reloads.
+- Export and import carry the venue and the dealer changes unchanged.
+- The session list and the stats page show the venue line. The stats page adds "Spins logged by venue": spin counts per casino, per machine and per table and dealer across saved sessions, with spins that have no venue counted on their own line. These are counts only.
+- Dealer names stay in the account's own sessions, on the device and in the account's own sync. They are not sent to analytics, logs, feedback reports or any shared output.
+
+### Changed
+
+- Clearing the numbers of a session restarts its dealer record at spin 0, with the dealer still at the table, and Undo puts the record back. Clearing the spin history on the stats page does the same.
+
 ## [0.54.0] - 2026-10-31
 
 ### Added
