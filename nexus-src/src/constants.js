@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.50.0";
+const APP_VERSION = "0.51.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,10 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.51.0", date:"Oct 30, 2026", title:"Spins Since Last Hit", changes:[
+    "A small count under every number shows the spins since it last hit; turn it off in Settings",
+    "Head start for unseen numbers (Settings, off by default): a number not seen yet this session starts at the wheel size, shown with a ~",
+  ]},
   { v:"0.50.0", date:"Oct 30, 2026", title:"Read the Board From a Photo", changes:[
     "Read board photo: snap the table's recent-numbers board and the numbers come back for you to check; nothing is added until you press Add",
     "Works standalone and inside Nexus Casino; the reader runs on your own PC, and the first read after a while can take about a minute to warm up",

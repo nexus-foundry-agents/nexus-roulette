@@ -488,7 +488,6 @@ REMOTE_PROD_ROLLBACK
       warn "Production verification did not complete; restoring the release named before the swap."
       rollback_production || warn "Automatic production rollback failed or refused; inspect the named backup."
     fi
-    rm -f "$TAR"
     exit "$rc"
   }
   trap prod_exit_cleanup EXIT
@@ -591,7 +590,7 @@ flock -x 9
 rm -rf "$backup"
 REMOTE_PROD_FINALIZE
   PROD_BACKUP_ACTIVE=0
-  trap 'rm -f "$TAR"' EXIT
+  trap - EXIT
   ok "Independent proof passed; production rollback directory retired"
 
   say ""

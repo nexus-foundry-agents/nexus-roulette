@@ -243,6 +243,14 @@ function SettingsPage({ settings, updSettings, setCurrencyOpen, currency, cur, u
               <span style={{fontSize:13,color:"#94a3b8"}}>📳 Vibration Feedback</span>
               <button onClick={()=>updApp(s=>{s.settings.vibration=!s.settings.vibration;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.vibration!==false?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.vibration!==false?"ON":"OFF"}</button>
             </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
+              <span style={{fontSize:13,color:"#94a3b8"}}>Spins Since Last Hit</span>
+              <button onClick={()=>updApp(s=>{s.settings.showDroughtCounts=s.settings.showDroughtCounts===false;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.showDroughtCounts!==false?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.showDroughtCounts!==false?"ON":"OFF"}</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:10,border:"1px solid #2d4057",background:"#0f1923"}}>
+              <span style={{fontSize:13,color:"#94a3b8"}}>Head start for unseen numbers</span>
+              <button onClick={()=>updApp(s=>{s.settings.headStartUnseen=s.settings.headStartUnseen!==true;})} style={{padding:"6px 16px",borderRadius:8,border:"none",background:settings.headStartUnseen===true?"#16a34a":"#374151",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{settings.headStartUnseen===true?"ON":"OFF"}</button>
+            </div>
           </div>
         </Card>
         <Card>

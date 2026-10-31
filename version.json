@@ -1,1 +1,1 @@
-{"version":"0.50.0","date":"2026-10-30","notes":"Read the board from a photo: the numbers come back for you to check before anything is added. Works standalone and inside Nexus Casino."}
+{"version":"0.51.0","date":"2026-10-30","notes":"Spins since last hit under every number, with an on/off switch in Settings, and an optional head start for numbers not seen yet."}

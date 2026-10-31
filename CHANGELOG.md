@@ -7,6 +7,21 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-30
+
+### Added
+
+- A "Spins Since Last Hit" setting in Settings, beside Vibration, on by default. When it is on, a small muted count under each number shows the spins since that number last hit, the same count the drought panel uses. It covers 0 and 00 on the roulette board and on the progression grid. Off hides the count but keeps its space, so no number moves or resizes. Settings saved before this setting existed read as on.
+- A "Head start for unseen numbers" setting, directly under Spins Since Last Hit, off by default. When it is on, a number that has not come up yet this session shows its count plus the wheel size (38 on an American wheel, 37 on a European one), marked with a leading "~", for example ~41. Once a number hits, it shows its true count again, whether the setting is on or off. This changes only what is displayed: the session's drought counts and every strategy that reads them are unchanged. Settings saved before this setting existed read as off.
+
+### Changed
+
+- The progression grid's number cells use 5px top and bottom padding (was 8px) and its 0 and 00 buttons use 7px (was 11px). This leaves room for the new count, and for the overlay dots on a number a track is on, inside the cell's 42px minimum height, so a cell does not grow when a track lands on it.
+
+### Fixed
+
+- `deploy.sh` no longer references `$TAR`, a variable left over from the old tarball upload and never set. After a successful production deploy it printed "TAR: unbound variable" from its exit trap, and on the failure path the same line would have replaced the deploy's exit code with 1 after the rollback ran.
+
 ## [0.50.0] - 2026-10-30
 
 ### Changed
