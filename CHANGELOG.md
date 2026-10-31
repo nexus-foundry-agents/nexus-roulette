@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.68.0] - 2026-10-31
+
 ### Changed
 
 - Undo last spin is refused after a buy-in, cash-out or bankroll change made after the spin. The Undo button is disabled and the note beneath the track cards reads "Undo is off after a buy-in, cash-out or bankroll change. Fix the number instead." A money move made before the spin is kept by Undo, as before.
