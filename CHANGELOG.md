@@ -7,6 +7,10 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- Account sync: a change made before the account state has loaded (a spin or a settings change) is no longer dropped when the state loads. It is merged over the loaded account state and pushed. The account's active session is never replaced: a session the change would displace is kept in saved sessions. Repeated spin numbers stay separate spins. The rule is in `nexus-src/src/casino-sync.mjs`.
+
 ## [0.63.0] - 2026-10-31
 
 ### Added
@@ -46,10 +50,6 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 - The Nexus Foundry side that sends `;by=` is a separate item.
 - The visual check of the reader line at 360 and 390 px is UNVERIFIED: no browser suite was run for this change.
-
-### Fixed
-
-- Account sync: a change made before the account state has loaded (a spin or a settings change) is no longer dropped when the state loads. It is merged over the loaded account state and pushed. The account's active session is never replaced: a session the change would displace is kept in saved sessions. Repeated spin numbers stay separate spins. The rule is in `nexus-src/src/casino-sync.mjs`.
 
 ## [0.61.0] - 2026-10-31
 
