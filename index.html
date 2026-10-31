@@ -621,7 +621,7 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;}
 <script>
 // Pre-app update check — runs before React, works even when HTML is cached
 (function(){
-  var MY_V="0.50.0";
+  var MY_V="0.51.0";
   try{
     fetch("version.json?t="+Date.now()).then(function(r){return r.json();}).then(function(d){
       if(d.version && d.version!==MY_V && !sessionStorage.getItem("nexus_updating")){
@@ -1049,7 +1049,7 @@ var TRACK_ICONS = {
   custom: "🃏"
 };
 var STORAGE_KEY = "nexus-roulette-v1";
-var APP_VERSION = "0.50.0";
+var APP_VERSION = "0.51.0";
 var ROI_PRESETS = [5, 10, 15, 20, 25, 30];
 var UNITS = [0.25, 0.50, 1.00];
 var CURRENCIES = {
@@ -1153,6 +1153,11 @@ var CURRENCIES = {
   }
 };
 var CHANGELOG = [{
+  v: "0.51.0",
+  date: "Oct 30, 2026",
+  title: "Spins Since Last Hit",
+  changes: ["A small count under every number shows the spins since it last hit; turn it off in Settings", "Head start for unseen numbers (Settings, off by default): a number not seen yet this session starts at the wheel size, shown with a ~"]
+}, {
   v: "0.50.0",
   date: "Oct 30, 2026",
   title: "Read the Board From a Photo",

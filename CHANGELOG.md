@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-30
+
 ### Added
 
 - A "Spins Since Last Hit" setting in Settings, beside Vibration, on by default. When it is on, a small muted count under each number shows the spins since that number last hit, the same count the drought panel uses. It covers 0 and 00 on the roulette board and on the progression grid. Off hides the count but keeps its space, so no number moves or resizes. Settings saved before this setting existed read as on.
