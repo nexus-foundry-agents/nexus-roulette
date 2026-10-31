@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.51.0";
+const APP_VERSION = "0.52.0";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00];
 
@@ -38,6 +38,11 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.52.0", date:"Oct 30, 2026", title:"Streak Percentiles and the Spot Planner", changes:[
+    "Every number, outside bet, dozen and column shows where its current losing streak sits (P50 to P98), from a 1000 x 1,000,000-spin simulation; the Stats page has the full table",
+    "Settings: the counter under each number can show the percentile instead of the spin count",
+    "Custom Bet Full Table: tap a level to see each spot's bet, payout and net, plus the bankroll needed for that level",
+  ]},
   { v:"0.51.0", date:"Oct 30, 2026", title:"Spins Since Last Hit", changes:[
     "A small count under every number shows the spins since it last hit; turn it off in Settings",
     "Head start for unseen numbers (Settings, off by default): a number not seen yet this session starts at the wheel size, shown with a ~",

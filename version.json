@@ -1,1 +1,1 @@
-{"version":"0.51.0","date":"2026-10-30","notes":"Spins since last hit under every number, with an on/off switch in Settings, and an optional head start for numbers not seen yet."}
+{"version":"0.52.0","date":"2026-10-30","notes":"Losing-streak percentiles for every bet up to the 98th, a Percentile option for the number counter, and the per-spot progression planner."}

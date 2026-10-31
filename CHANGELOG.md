@@ -7,6 +7,23 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-30
+
+### Added
+
+- Streak percentiles for every bet, both wheels. `tools/gen-streak-percentiles.mjs` runs a seeded simulation of 1,000 sessions of 1,000,000 spins per wheel and writes `nexus-src/src/streak-percentiles.js`. For each even-money bet, dozen, column, group-bet shape (split, street, corner, six-line, and the basket on American) and single number, it records the streak length at P50, P75, P90, P95 and P98, and the cumulative distribution up to the 99.99% length. A completed losing streak is a run of consecutive spins a bet loses before its next win.
+- `streakPercentile()` in `nexus-src/src/percentile.js` places a current losing streak on that distribution and returns its percentile to one decimal, rounded down.
+- Stats page: a "Streak percentiles" table lists the P50 to P98 streak lengths for every bet on the current wheel, with the simulation size and seed in small print.
+- The even-money, dozen and column drought cards show each count's percentile beside it, for example `P96`, in a reserved row that keeps the same size whether or not a percentile is shown.
+- Settings: a "Counter shows" row, directly under Head start for unseen numbers, chooses Spins (the default, unchanged) or Percentile. In Percentile, the small count under each number on the roulette board and the progression grid shows that number's percentile on the current wheel, for example `P96`. An unseen number with the head start on keeps its `~`.
+- Custom Bet tracks on the Full Table page show a per-spot card above the levels list. It shows the selected level: for each spot its label, the bet on that spot this spin, the payout if that spot hits and the net if it hits. The payout is the gross return of every position that covers the spot's worst number, with overlapping positions counted together. The net is that payout less the bankroll the level needs. Tapping a level row selects it, and the selected row is outlined. The card opens on the track's current level. Its height depends only on the number of positions, so selecting another level moves nothing. Flat-mode Custom Bet tracks, which have one level, show that level in the same card.
+- The per-spot arithmetic is one pure function, `computeSpotBreakdown` in `nexus-src/src/engine.js`. Its hand-computed cases are in `test/progression-planner.test.mjs`.
+
+### Changed
+
+- On Custom Bet tracks, the Full Table column headed "Invested" is headed "Bankroll needed", and the legend says it is the cumulative stake needed to play up to that level. The legend for "Bet" on these tracks says it covers all spots this spin. Other track types keep their existing headings and legend.
+- The selected Custom Bet level is kept in the app, beside the selected track. Choosing a different track, or a track being selected from the Game tab, clears the level pick back to the track's current level.
+
 ## [0.51.0] - 2026-10-30
 
 ### Added

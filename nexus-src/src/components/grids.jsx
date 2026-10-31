@@ -1,9 +1,10 @@
 // -- Number Grids --
-function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOverlays, flashNum, roulette, droughts, showDroughts, spins, headStart}) {
+function FibGrid({onNumber, onGhost, dozenTargets, colTargets, fibRow, trackOverlays, flashNum, roulette, droughts, showDroughts, spins, headStart, counterShows}) {
   const rows = Array.from({length:12}, (_,r) => [r*3+1,r*3+2,r*3+3]);
   const dts = dozenTargets||[0], cts = colTargets||[];
-  // Drought count under every number (NumberDrought). Display only: droughts is read, never written.
-  const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false};
+  // Drought count under every number (NumberDrought). Display only: droughts is read, never written. The Counter
+  // setting picks Spins or Percentile, and the wheel names the table the percentile is read from.
+  const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false, counter:counterMode(counterShows), wheel:roulette};
   const pressTimer = React.useRef(null);
   function numCell(val) {
     const isZ = val==="0"||val==="00";

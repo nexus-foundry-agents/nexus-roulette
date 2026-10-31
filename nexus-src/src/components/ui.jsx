@@ -118,14 +118,16 @@ function ROIStepper({value, onChange, disabled}) {
   );
 }
 
-function DCard({label, range, drought, colorBd, colorTx}) {
+// `pct` is the drought's percentile (PercentTag). The "misses" row has a fixed height and always renders the tag, so
+// a card with a percentile and one without are the same size (rule 82): only the tag's text and visibility differ.
+function DCard({label, range, drought, pct, colorBd, colorTx}) {
   const bd = droughtBadge(drought);
   return (
     <div style={{flex:1,background:"#1e2d3d",borderRadius:12,padding:"9px 5px",border:"1px solid "+colorBd,textAlign:"center"}}>
       <div style={{fontSize:8,color:colorTx,fontWeight:700,textTransform:"uppercase",marginBottom:1}}>{label}</div>
       <div style={{fontSize:7,color:"#475569",marginBottom:4}}>{range}</div>
       <div style={{fontSize:24,fontWeight:900,color:"#e2e8f0",lineHeight:1}}>{drought}</div>
-      <div style={{fontSize:7,color:"#475569",marginBottom:2}}>misses</div>
+      <div style={{fontSize:7,color:"#475569",marginBottom:2,height:10,lineHeight:"10px",whiteSpace:"nowrap"}}>misses<PercentTag pct={pct}/></div>
       <div style={{fontSize:8,fontWeight:700,color:bd.c}}>{bd.t}</div>
     </div>
   );
@@ -145,14 +147,15 @@ function SessionClock({startedAt, endedAt, style, pauseOffset}) {
 }
 
 // -- Roulette Table Board --
-function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart}) {
+function RouletteBoard({roulette, winningNumber, stratBets, spinning, onBet, boardBets, chipColor, betResults, stratChips, landscape, droughts, showDroughts, spins, headStart, counterShows}) {
   const isAmerican = roulette === "american";
   const sb = stratBets || {};
   const bb = boardBets || {};
   const br = betResults || {};
   const sChipsMap = stratChips || {};
-  // Drought count under every number (NumberDrought). Display only: droughts is read, never written.
-  const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false};
+  // Drought count under every number (NumberDrought). Display only: droughts is read, never written. The Counter
+  // setting picks Spins or Percentile, and the wheel names the table the percentile is read from.
+  const droughtView = {droughts:droughts||{}, spins:spins||[], wheelSize:getWheelNumbers(roulette).length, headStart:headStart===true, on:showDroughts!==false, counter:counterMode(counterShows), wheel:roulette};
   const canBet = !!onBet && !spinning && !betResults;
   const BOARD_ROWS = ROULETTE_BOARD_ROWS;
   const g = 2;

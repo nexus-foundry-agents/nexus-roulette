@@ -17,7 +17,7 @@ const NOW = 1700003000000;
 // The files the bundle concatenates ahead of the pieces these tests use, in build.js order.
 const SLICE = [
   'constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'spin-apply.js',
-  'roulette-bets.mjs', 'components/ui.jsx', 'components/SpinTools.jsx',
+  'streak-percentiles.js', 'percentile.js', 'roulette-bets.mjs', 'components/ui.jsx', 'components/SpinTools.jsx',
 ];
 
 // Loads source files the way build.js does: the same concatenation and transforms, in one shared global scope.

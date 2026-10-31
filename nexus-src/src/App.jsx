@@ -38,6 +38,8 @@ export default function App() {
   const simStopRef = React.useRef(false);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [selectedLevel, setSelectedLevel] = useState(null); // {trackId, index}: the Custom Bet level picked on the Full Table; null = the track's current level
+  useEffect(()=>{ setSelectedLevel(null); }, [selectedTrackId]); // a change of selected track clears the level pick (the Game tab sets it too)
   const [result, setResult] = useState(null);
   const [flashNum, setFlashNum] = useState(null);
   const [prevSessState, setPrevSessState] = useState(null);
@@ -191,17 +193,21 @@ export default function App() {
       .sort((a,b)=>(sess.droughts[b]||0)-(sess.droughts[a]||0));
   }, [sess.droughts, primaryTrack, wheelNums]);
 
-  // Even money droughts
+  // Even money droughts, each with its percentile on this wheel (streakPercentile, percentile.js)
   const emDroughts = useMemo(() =>
-    EVEN_MONEY.map(em=>({...em, drought:countDrought(sess.spins, em.pred)})),
-    [sess.spins]);
+    EVEN_MONEY.map(em=>{const drought=countDrought(sess.spins, em.pred); return {...em, drought, pct:streakPercentile(em.key, sess.roulette, drought)};}),
+    [sess.spins, sess.roulette]);
 
-  const {doz:dozD, col:colD} = useMemo(() => {
+  const {doz:dozD, col:colD, dozP, colP} = useMemo(() => {
     const doz=[0,0,0], col=[0,0,0];
     for(let d=0;d<3;d++){let s=0;for(let i=sess.spins.length-1;i>=0;i--){if(dozenOf(sess.spins[i])===d)break;s++;}doz[d]=s;}
     for(let c=0;c<3;c++){let s=0;for(let i=sess.spins.length-1;i>=0;i--){if(columnOf(sess.spins[i])===c)break;s++;}col[c]=s;}
-    return{doz,col};
-  }, [sess.spins]);
+    return{
+      doz, col,
+      dozP: doz.map((d,i)=>streakPercentile("dozen:"+i, sess.roulette, d)),
+      colP: col.map((c,i)=>streakPercentile("column:"+i, sess.roulette, c)),
+    };
+  }, [sess.spins, sess.roulette]);
 
   // Onboarding -- AFTER all hooks so rules of hooks are satisfied
   if(window.parent===window&&new URLSearchParams(window.location.search).get("enableNotifications")==="1") return <NotificationEnablePage/>;
@@ -456,8 +462,8 @@ export default function App() {
     return (
       <GamePageView
         addOpen={addOpen} addTrack={addTrack} animNumber={animNumber} betResults={betResults}
-        clearTimerRef={clearTimerRef} closeTrack={closeTrack} colD={colD} cur={cur}
-        currency={currency} dozD={dozD} editTrackId={editTrackId} emDroughts={emDroughts}
+        clearTimerRef={clearTimerRef} closeTrack={closeTrack} colD={colD} colP={colP} cur={cur}
+        currency={currency} dozD={dozD} dozP={dozP} editTrackId={editTrackId} emDroughts={emDroughts}
         endSession={endSession} recordGameSpin={recordGameSpin} gameResult={gameResult} gameSpinning={gameSpinning}
         isLandscape={isLandscape} lastBets={lastBets} lastSpinDelta={lastSpinDelta} manualBets={manualBets}
         nextColorIdx={nextColorIdx} nonClosedTracks={nonClosedTracks} parkToggle={parkToggle} pendingTrackCfg={pendingTrackCfg}
@@ -541,7 +547,7 @@ export default function App() {
           return (
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               <button onClick={()=>setLiveSelectingWinner(!liveSelectingWinner)} style={{width:"100%",padding:"12px 0",borderRadius:10,border:liveSelectingWinner?"2px solid #fbbf24":"2px solid #2d4057",background:liveSelectingWinner?"linear-gradient(135deg,#92400e,#78350f)":"#0f1923",color:liveSelectingWinner?"#fbbf24":"#94a3b8",fontSize:13,fontWeight:800,cursor:"pointer"}}>{liveSelectingWinner?"👆 Tap the winning number...":"🎯 Choose Winning Number"}</button>
-              <RouletteBoard roulette={sess.roulette} winningNumber={liveWinNumber} stratBets={stratBets} spinning={false} onBet={livePlaceBet} boardBets={liveBoardBets} chipColor={(CHIPS.find(c=>c.val===selectedChip)||CHIPS[0]).color} betResults={liveBetResults} stratChips={computeStratChips(nonClosedTracks)} landscape={isLandscape} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true}/>
+              <RouletteBoard roulette={sess.roulette} winningNumber={liveWinNumber} stratBets={stratBets} spinning={false} onBet={livePlaceBet} boardBets={liveBoardBets} chipColor={(CHIPS.find(c=>c.val===selectedChip)||CHIPS[0]).color} betResults={liveBetResults} stratChips={computeStratChips(nonClosedTracks)} landscape={isLandscape} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true} counterShows={settings.counterShows}/>
               <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap"}}>{CHIPS.map(c=>(<button key={c.val} onClick={()=>{setSelectedChip(c.val);setLiveSelectingWinner(false);}} style={{width:34,height:34,borderRadius:"50%",border:"2px solid "+(selectedChip===c.val&&!liveSelectingWinner?"#fbbf24":c.border),background:c.color,color:c.val>=100?"#fff":c.val<=0.5?"#1e293b":"#1e293b",fontSize:c.val<1?6:8,fontWeight:900,cursor:"pointer",boxShadow:selectedChip===c.val&&!liveSelectingWinner?"0 0 8px #fbbf24":"none",display:"flex",alignItems:"center",justifyContent:"center"}}>{c.label}</button>))}</div>
               <div style={{display:"flex",gap:3}}><button onClick={liveUndoBet} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#60a5fa":"#374151",fontSize:8,fontWeight:700}}>↩Undo</button><button onClick={liveClearBets} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#f87171":"#374151",fontSize:8,fontWeight:700}}>✕Clear</button><button onClick={liveDoubleBets} disabled={liveManualBets.length===0||!!liveBetResults} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveManualBets.length>0&&!liveBetResults?"#fbbf24":"#374151",fontSize:8,fontWeight:700}}>2×</button><button onClick={liveRepeatBets} disabled={liveLastBets.length===0} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #2d4057",background:"#0f1923",color:liveLastBets.length>0?"#86efac":"#374151",fontSize:8,fontWeight:700}}>♻Rpt</button></div>
               {liveTotalBet>0&&<div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fbbf24"}}>Bet: {cur.symbol}{formatNumber(liveTotalBet)}</div>}
@@ -552,7 +558,7 @@ export default function App() {
 
         {/* Drought panel. Its slot is reserved at DROUGHT_PANEL_HEIGHT and hidden, not removed, when there are no numbers, so clearing moves nothing below it. */}
         <div aria-hidden={sess.spins.length===0} style={{minHeight:DROUGHT_PANEL_HEIGHT,visibility:sess.spins.length>0?"visible":"hidden"}}>
-          <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD}/>
+          <DroughtPanel emDroughts={emDroughts} dozD={dozD} colD={colD} dozP={dozP} colP={colP}/>
         </div>
 
         {/* Track cards with drag-to-reorder */}
@@ -668,7 +674,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <FibGrid onNumber={v=>tapNumber(v,true)} onGhost={ghostSpin} dozenTargets={dts} colTargets={cts} fibRow={row} trackOverlays={trackOverlays.filter(o=>o.id!==primaryTrack.id)} flashNum={flashNum} roulette={sess.roulette} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true}/>
+              <FibGrid onNumber={v=>tapNumber(v,true)} onGhost={ghostSpin} dozenTargets={dts} colTargets={cts} fibRow={row} trackOverlays={trackOverlays.filter(o=>o.id!==primaryTrack.id)} flashNum={flashNum} roulette={sess.roulette} droughts={sess.droughts} spins={sess.spins} showDroughts={settings.showDroughtCounts!==false} headStart={settings.headStartUnseen===true} counterShows={settings.counterShows}/>
               <div style={{textAlign:"center",fontSize:9,color:"#374151",marginTop:4}}>Long-press any number to log as ghost spin (no progression)</div>
               {primaryTrack.level>=primFibTbl.length-1&&primFibTbl.length>0 && (
                 <div style={{marginTop:8,background:"#7f1d1d",borderRadius:8,padding:8,textAlign:"center",fontSize:11,color:"#fca5a5"}}>Stop loss reached!</div>
@@ -743,7 +749,7 @@ export default function App() {
   }
   // Declared inside App for the same reason as GamePage.
   function TablePage() {
-    return <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur}/>;
+    return <TablePageView sess={sess} selectedTrackId={selectedTrackId} setSelectedTrackId={setSelectedTrackId} nonClosedTracks={nonClosedTracks} cur={cur} selectedLevel={selectedLevel} setSelectedLevel={setSelectedLevel}/>;
   }
 
   // Secondary Live-mode pages are split out so this stateful coordinator stays below the source ceiling.
