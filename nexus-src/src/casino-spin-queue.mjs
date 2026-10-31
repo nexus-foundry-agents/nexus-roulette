@@ -270,9 +270,10 @@ export function createSpinQueue(deps) {
       const result=head.pauseAfter
         ? await sendCasinoSpinAndPause(payload,deps.send,wait,onRetry,SPIN_ATTEMPTS,head.ambiguous)
         : await sendCasinoSpinUntilReconciled(payload,deps.send,wait,onRetry,SPIN_ATTEMPTS,head.ambiguous);
-      // The send above started, so Casino may hold this spin. A round abandoned after it marks the head ambiguous: the next
-      // round reconciles the same sequence instead of reading Casino's answer as a stale number and renumbering the spin.
-      if(!current()){ head.ambiguous=true; return false; }
+      // The send above started. A round abandoned after it marks the head ambiguous only when Casino may hold the spin: a success,
+      // a timeout or a 5xx. A definitive refusal (a 4xx, such as a stale sequence) means Casino did not record it, so the next round
+      // renumbers it instead of reading Casino's next answer as proof of an earlier record.
+      if(!current()){ if(result.ok||result.ambiguous===true||!isDefinitiveRefusal(result)) head.ambiguous=true; return false; }
       if(!result.ok) {
         // A failure that may have reached Casino marks the head for good, whatever the answer says next.
         head.ambiguous=head.ambiguous||result.ambiguous===true;

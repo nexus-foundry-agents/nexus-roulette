@@ -385,8 +385,11 @@ export function useCasinoRecording(mode,active) {
       pauseOwner.current='none';
       setProblem(withRefusals(notSaved));
       adopt(casinoSession(result.body)||live);
+    }catch(e){
+      setProblem(withRefusals(e.message || 'Stop failed.'));
     }finally{
       discardPending.current=false;
+      stoppingRefusals.current=0;
     }
   },[adopt,setProblem,syncUnsent]);
 
