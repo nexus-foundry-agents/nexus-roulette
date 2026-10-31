@@ -7,6 +7,26 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-10-31
+
+### Added
+
+- Each dozen and column tile on the drought panel, on the Live page and the Game page, shows six readings at once with no tap. The section's current losing streak is the largest number, with a corner badge for the highest percentile tier it has reached (P25, P50, P75, P95 or P98) and its exact percentile in a small label. Below it: the section's total loss level (TLV) with a small sparkline of TLV since the current losing streak began (the last 50 spins when there is no streak); the average loss level, which is TLV divided by 12 to one decimal, with its tier; the maximum single-number loss level in the section, which is its coldest number, with its single-number tier; the count of the section's numbers at or above their single-number P95; and the TLV's own tier. TLV is the sum of the loss levels of the section's 12 numbers.
+- Tapping a dozen or column tile opens the app's shared modal as a detail view of that section: a TLV chart for the whole session with the current losing streak shaded and reference lines at the TLV P50, P75, P95 and P98; the streak, TLV, average and maximum, each with its exact percentile; the section's 12 numbers with their loss levels and single-number percentiles, coldest first; and the count at or above P95. It closes from the backdrop or its Close button.
+- The percentile set for every bet, every single number and both section distributions is P25, P50, P75, P90, P95 and P98. The generator also records, for both wheels, the TLV distribution of the dozen and the column sections, sampled after every spin of the 1,000 sessions of 1,000,000 spins, and the distribution of the average loss level (TLV / 12, to one decimal). The generator prints its own speed.
+- `nexus-src/src/tlv.js` holds the pure functions for the section readings: the TLV update for one spin, the section TLV, average, maximum and count at P95, the TLV history for the sparkline and the detail chart, and the percentile tier mapping.
+
+### Changed
+
+- The dozen and column cards on the drought panel are replaced by the section tiles described above. The panel is taller: its reserved height is recalculated from the tile's fixed row heights.
+- The Stats page's "Streak percentiles" table gains a P25 column, so it lists P25, P50, P75, P90, P95 and P98.
+- The Game page renders the drought panel from the start, with zero values before the first spin, instead of adding it after the first spin, so nothing below it moves.
+
+### Fixed
+
+- While picking the winning number on the Live table, a tap anywhere inside a number's square selects that number. The loss counter under each number sits in the square's lower edge, which the table reads as a split or corner when placing bets, so those taps were silently ignored when picking a hit. Placing bets still reads the tap position as before.
+- The progression grid's zero row shows the wheel's own zeros. A European wheel shows a single 0 and no 00 cell; it was showing 0 and 00 on both wheels.
+
 ## [0.52.0] - 2026-10-30
 
 ### Added

@@ -19,9 +19,9 @@ const NOOP = () => {};
 
 // The files the bundle concatenates ahead of the pieces these tests render, in build.js order.
 const SLICE = [
-  'constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'streak-percentiles.js', 'percentile.js',
+  'constants.js', 'account-storage.mjs', 'engine.js', 'session.js', 'streak-percentiles.js', 'percentile.js', 'tlv.js',
   'roulette-bets.mjs', 'components/NumberDrought.jsx', 'components/ui.jsx', 'components/grids.jsx',
-  'components/DroughtPanel.jsx', 'components/SecondaryPages.jsx',
+  'components/TlvSparkline.jsx', 'components/SectionTile.jsx', 'components/DroughtPanel.jsx', 'components/SecondaryPages.jsx',
 ];
 
 // Loads source files the way build.js does: the same concatenation and transforms, in one shared global scope.
@@ -247,7 +247,7 @@ test('lookup: each percentile length reads at least its percentile, and the leng
 
 test('lookup: a single number at its P98 length reads at least 98.0 and the length before it reads below', async () => {
   const { ctx } = await load();
-  const p98 = ctx.STREAK_PERCENTILE_DATA.american['straight:17'].p[4];
+  const p98 = ctx.STREAK_PERCENTILE_DATA.american['straight:17'].p[5];
   assert.ok(p98 > 100, `the P98 of a single number is a long streak (${p98})`);
   assert.ok(ctx.streakPercentile('straight:17', 'american', p98) >= 98);
   assert.ok(ctx.streakPercentile('straight:17', 'american', p98 - 1) < 98);
@@ -267,7 +267,7 @@ test('a known case: single number 17 on American, the P50 of the reduced run is 
     running += counts[k];
     if (running * 2 >= total) median = k;
   }
-  assert.equal(reduced.american['straight:17'].p[0], median, 'the generator\'s P50 is the reduced run\'s own median');
+  assert.equal(reduced.american['straight:17'].p[1], median, 'the generator\'s P50 is the reduced run\'s own median');
   assert.ok(ctx.streakPercentile('straight:17', 'american', median, reduced) >= 50);
   assert.ok(ctx.streakPercentile('straight:17', 'american', median - 1, reduced) < 50);
   // Theory for a single number on American: each spin loses with chance 37/38, so the median completed streak is
@@ -348,46 +348,45 @@ test('NumberDrought: Percentile mode shows the P-value in the same reserved slot
   assert.match(noWheel, />30<\/div>$/);
 });
 
-// -- DroughtPanel and DCard: the percentile in a reserved slot on each card --
+// -- DroughtPanel and the section tiles: each reading in a reserved slot --
 
-// The markup with only each percentile tag's value and visibility normalised. Two renders that compare equal through
-// this have the same reserved slots, sizes and structure; only the tag values and their visibility differ.
+// The markup with only each value's text and visibility normalised. Two renders that compare equal through this have the
+// same reserved slots, sizes and structure; only the values and their visibility differ.
+// Colours follow the tier (a value), and a tile's aria-label carries its values, so both are normalised too.
 const sameSlots = (h) => h
   .replace(/ aria-hidden="true"/g, '')
+  .replace(/aria-label="[^"]*"/g, '')
+  .replace(/color:#[0-9a-fA-F]{3,6}/g, 'color:#')
   .replace(/visibility:(hidden|visible)/g, 'visibility')
-  .replace(/P\d+<\/span>/g, 'P#</span>');
+  .replace(/P\d+<\/span>/g, 'P#</span>')
+  .replace(/>[^<]*%</g, '>#%<');
 
-test('DroughtPanel: each even-money count and each dozen and column card shows its percentile, and a missing one keeps its slot', async () => {
+test('DroughtPanel: each even-money count shows its percentile, and a missing one keeps its slot', async () => {
   const em = (key, label, drought, pct) => ({ key, label, color: '#ef4444', drought, pct });
   const emWith = [em('red', 'Red', 3, 42.7), em('black', 'Black', 9, 77.1)];
   const emWithout = emWith.map((e) => ({ ...e, pct: null }));
-  const shown = await render('DroughtPanel', {
-    emDroughts: emWith, dozD: [1, 2, 3], colD: [4, 5, 6], dozP: [42.7, 7.2, 99.9], colP: [88.4, null, 12.6],
-  });
-  const hidden = await render('DroughtPanel', {
-    emDroughts: emWithout, dozD: [1, 2, 3], colD: [4, 5, 6], dozP: [null, null, null], colP: [null, null, null],
-  });
+  const shown = await render('DroughtPanel', { emDroughts: emWith, dozD: [1, 2, 3], colD: [4, 5, 6], dozP: [42.7, 7.2, 99.9], colP: [88.4, null, 12.6] });
+  const hidden = await render('DroughtPanel', { emDroughts: emWithout, dozD: [1, 2, 3], colD: [4, 5, 6], dozP: [null, null, null], colP: [null, null, null] });
   assert.match(shown, />3<span style="[^"]*visibility:visible[^"]*">P42<\/span>/, 'even money: the count and its percentile');
   assert.match(shown, />9<span style="[^"]*visibility:visible[^"]*">P77<\/span>/);
-  for (const tag of ['P42', 'P7', 'P99', 'P88', 'P12']) {
-    assert.match(shown, new RegExp(`>misses<span style="[^"]*visibility:visible[^"]*">${tag}<\\/span>`), `card ${tag}`);
-  }
-  assert.match(shown, />misses<span aria-hidden="true" style="[^"]*visibility:hidden[^"]*">P99<\/span>/, 'a missing percentile is hidden, its width kept');
-  assert.equal(shown.match(/height:10px;line-height:10px/g).length, 6, 'every dozen and column card has the reserved row');
-  assert.equal(hidden.match(/height:10px;line-height:10px/g).length, 6);
+  assert.match(hidden, />3<span aria-hidden="true" style="[^"]*visibility:hidden[^"]*">P99<\/span>/, 'a missing percentile is hidden, its width kept');
   assert.equal(sameSlots(hidden), sameSlots(shown), 'with and without percentiles, the same markup apart from the values and visibility');
 });
 
-test('DCard: the percentile sits in a fixed-height row beside "misses", and with or without it the card is the same size', async () => {
-  const card = { label: '1st Dozen', range: '1-12', drought: 3, colorBd: '#f59e0b', colorTx: '#fbbf24' };
-  const withPct = await render('DCard', { ...card, pct: 42.7 });
-  const without = await render('DCard', { ...card, pct: null });
-  const rowOf = (h) => h.match(/<div style="[^"]*;height:10px;[^"]*">misses[\s\S]*?<\/div>/)[0];
-  assert.match(rowOf(withPct), /misses<span style="[^"]*visibility:visible[^"]*">P42<\/span><\/div>$/);
-  assert.match(rowOf(without), /misses<span aria-hidden="true" style="[^"]*visibility:hidden[^"]*">P99<\/span><\/div>$/);
-  assert.equal(withPct.match(/;height:10px;/g).length, 1, 'one reserved row');
-  assert.equal(sameSlots(without), sameSlots(withPct), 'the same card with and without the percentile');
+test('DroughtPanel: each dozen and column tile shows its streak percentile in a reserved row, and a missing one keeps its slot', async () => {
+  const em = (key, label, drought, pct) => ({ key, label, color: '#ef4444', drought, pct });
+  const emWith = [em('red', 'Red', 3, 42.7), em('black', 'Black', 9, 77.1)];
+  const shown = await render('DroughtPanel', { emDroughts: emWith, dozD: [1, 2, 3], colD: [4, 5, 6], dozP: [42.7, 7.2, 99.9], colP: [88.4, null, 12.6] });
+  const hidden = await render('DroughtPanel', { emDroughts: emWith.map((e) => ({ ...e, pct: null })), dozD: [1, 2, 3], colD: [4, 5, 6], dozP: [null, null, null], colP: [null, null, null] });
+  assert.equal(shown.match(/aria-haspopup="dialog"/g).length, 6, 'three dozen tiles and three column tiles, each a button that opens its detail');
+  for (const pct of ['42.7%', '7.2%', '99.9%', '88.4%', '12.6%']) assert.ok(shown.includes('>' + pct + '<'), `tile shows ${pct}`);
+  assert.equal(shown.match(/height:152px;/g).length, 6, 'every tile has the same fixed height');
+  assert.match(shown, /aria-hidden="true" style="[^"]*visibility:hidden[^"]*">P98<\/span>/, 'a missing tier is hidden, its width kept');
+  assert.match(shown, />P98<\/span>/, 'the tier of 99.9 shows its corner badge');
+  assert.match(shown, />P75<\/span>/, 'the tier of 88.4 in a column shows its badge');
+  assert.equal(sameSlots(hidden), sameSlots(shown), 'the same panel with and without the percentiles');
 });
+
 
 test('the Counter setting changes what each number shows, on the roulette board and the progression grid, on both wheels', async () => {
   for (const roulette of WHEELS) {
@@ -419,16 +418,14 @@ test('the Counter setting changes what each number shows, on the roulette board 
       board: { name: 'RouletteBoard', props: (counterShows) => boardProps(sess, { showDroughts: true, headStart: true, counterShows }), pairs: boardPairs },
       grid: { name: 'FibGrid', props: (counterShows) => fibProps(sess, { showDroughts: true, headStart: true, counterShows }), pairs: fibPairs },
     };
-    // The wheel's own pockets only. FibGrid's zeros row draws "0" and "00" on every wheel (grids.jsx, unchanged here),
-    // so a European grid has one counter for a pocket that does not exist. That is pinned below, not fixed here.
+    // The wheel's own pockets only. FibGrid's zeros row takes the wheel's own zeros, so a European grid has no 00 counter.
     const onWheel = (pairs) => pairs.filter(([label]) => nums.includes(label));
     for (const [kind, { name, props, pairs }] of Object.entries(boards)) {
       const htmlSpins = await render(name, props(spinsSetting));
       const htmlPct = await render(name, props(percentileSetting));
       const spinsPairs = pairs(htmlSpins);
       const pctPairs = pairs(htmlPct);
-      const extra = kind === 'grid' && roulette === 'european' ? 1 : 0;
-      assert.equal(spinsPairs.length - onWheel(spinsPairs).length, extra, `${roulette} ${kind}: the pre-existing extra 00 cell, pinned`);
+      assert.equal(spinsPairs.length, nums.length, `${roulette} ${kind}: one counter per pocket of this wheel, and no 00 on European`);
       assert.equal(onWheel(spinsPairs).length, nums.length, `${roulette} ${kind}: one counter per pocket on this wheel`);
       assert.equal(onWheel(pctPairs).length, nums.length, `${roulette} ${kind}: one counter per pocket, Percentile`);
       for (const [label, value] of onWheel(spinsPairs)) assert.equal(value, expected(label, 'spins'), `${roulette} ${kind} ${label}, Spins`);
