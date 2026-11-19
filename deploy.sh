@@ -302,8 +302,8 @@ fi
 [ -d "$ROULETTE_DIR" ]
 cd "$ROULETTE_DIR"
 [ -f version.json ] && [ -f sw.js ] && [ -f index.html ]
-tr -d '\r' < version.json | sed -n 's/.*"version":"\([^"]*\)".*/version=\1/p' | head -1
-tr -d '\r' < sw.js | sed -n "s/^const CACHE = '\(.*\)';$/cache=\1/p" | head -1
+{ tr -d '\r' < version.json; echo; } | sed -n 's/.*"version":"\([^"]*\)".*/version=\1/p' | head -1
+{ tr -d '\r' < sw.js; echo; } | sed -n "s/^const CACHE = '\(.*\)';$/cache=\1/p" | head -1
 md5sum index.html | sed 's/^\([0-9a-f]*\) .*/md5=\1/'
 wc -c < index.html | sed 's/^[[:space:]]*/bytes=/'
 REMOTE_PROBE
