@@ -691,6 +691,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
             </div>
 
             <StreakDistribution kind="loss" rows={stats.lossStreakDist}/>
+            <StreakDistribution kind="raw" rows={stats.rawLossStreakDist}/>
             <StreakDistribution kind="win" rows={stats.winStreakDist}/>
 
             <SessionExplorer sessions={r.sessions} cur={cur}/>

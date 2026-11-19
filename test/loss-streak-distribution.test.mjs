@@ -23,7 +23,7 @@ async function load() {
   sandbox.exports = sandbox.module.exports;
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(code + '\n;this.__x={simRunSession,simNewResults,computeSimStats,computeTableForTrack,flushStreak,streakDist,StreakDistribution,getWheelNumbers};', sandbox);
+  vm.runInContext(code + '\n;this.__x={simRunSession,simNewResults,computeSimStats,computeTableForTrack,flushStreak,flushRawLoss,rawTargetOutcomes,streakDist,StreakDistribution,getWheelNumbers};', sandbox);
   return sandbox.__x;
 }
 
@@ -71,4 +71,37 @@ test('the table renders every row and both kinds share one component', async () 
   const page = await readFile(new URL('components/SimModePage.jsx', SRC), 'utf8');
   assert.ok(page.includes('<StreakDistribution kind="loss"') && page.includes('<StreakDistribution kind="win"'));
   assert.ok(!page.includes('StreakDist.slice('), 'no truncated copy of the distribution remains');
+});
+
+test('raw loss streaks count every miss run on the targets from spin 1, ignoring the drought entry', async () => {
+  const x = await load();
+  const wheel = x.getWheelNumbers('european');
+  const spins = 50, sessions = 3000;
+  const gated = [{ type: 'fibonacci', config: { evenTargets: ['red'], betMode: 'flat', unit: 1, parkRules: { droughtThreshold: 3 } } }];
+  const tables = gated.map((st) => x.computeTableForTrack(st));
+  const results = x.simNewResults(1);
+  for (let i = 0; i < sessions; i++) x.simRunSession(gated, tables, wheel, spins, results, null, null);
+  const r = results[0];
+  const rawSpins = r.rawLossStreaks.reduce((a, b) => a + b, 0);
+  const betSpins = r.lossStreaks.reduce((a, b) => a + b, 0) + r.winStreaks.reduce((a, b) => a + b, 0);
+  assert.ok(betSpins < spins * sessions, 'the drought entry keeps the strategy off some spins');
+  assert.ok(r.rawLossStreaks.length > r.lossStreaks.length, 'raw counts runs the gated strategy never bet');
+  assert.ok(Math.max(...r.rawLossStreaks) <= spins, 'no raw run crosses a session');
+  assert.deepEqual(JSON.parse(JSON.stringify(r.rawOpen)), {}, 'open runs are closed at session end');
+  r.sessions = Array.from({ length: sessions }, () => ({ pnl: 0 }));
+  const dist = x.computeSimStats(r).rawLossStreakDist;
+  // Miss runs on red: P(len=1) = P(hit) = 18/37 ≈ 48.6%.
+  assert.ok(Math.abs(dist[0].pct - 48.6) < 2.5, `raw len-1 share ${dist[0].pct}`);
+  assert.ok(rawSpins > betSpins * 0.3);
+});
+
+test('raw targets: solution follows every number, auto-chase every dozen and column, zero misses all', async () => {
+  const x = await load();
+  const wheel = x.getWheelNumbers('european');
+  assert.equal(x.rawTargetOutcomes({ type: 'solution', config: {} }, '7', wheel).length, wheel.length);
+  const chase = x.rawTargetOutcomes({ type: 'fibonacci', config: { autoChase: true } }, '0', wheel);
+  assert.equal(chase.length, 6);
+  assert.ok(chase.every((o) => !o.hit), 'zero misses every dozen and column');
+  const page = await readFile(new URL('components/SimModePage.jsx', SRC), 'utf8');
+  assert.ok(page.includes('<StreakDistribution kind="raw"'));
 });

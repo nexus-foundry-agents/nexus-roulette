@@ -43,6 +43,7 @@ function simNewResults(strategyCount) {
     sessions:[], totalPnl:0, totalWins:0, totalLosses:0, totalSeqLosses:0,
     stopLossHits:0, winStreaks:[], lossStreaks:[], currentStreak:{type:null,len:0},
     totalSequences:0, pnlHistory:[], totalStaked:0,
+    rawLossStreaks:[], rawOpen:{}, // every miss run on the strategy's targets from spin 1, betting or not
     satOutSessions:0, // sessions where the strategy never placed a single bet
     bankrollStart:null, bankrollCurrent:null, busted:false, bustedAtSession:null, // bankroll mode
   }));
@@ -196,6 +197,17 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
       if(strategyState.pnl>strategyState.peak)strategyState.peak=strategyState.pnl;
     });
 
+    // Raw loss streaks: every spin, whether or not the strategy bet, each
+    // target closes or extends its miss run. Not gated by drought entry or parking.
+    strategies.forEach((strategy,strategyIndex)=>{
+      if(activeMask && activeMask[strategyIndex]===false) return;
+      const r=results[strategyIndex];
+      rawTargetOutcomes(strategy,winningNumber,wheelNums).forEach(({key,hit})=>{
+        if(hit){ if(r.rawOpen[key]>0) r.rawLossStreaks.push(r.rawOpen[key]); r.rawOpen[key]=0; }
+        else r.rawOpen[key]=(r.rawOpen[key]||0)+1;
+      });
+    });
+
     // Droughts update AFTER every strategy has bet against this spin
     Object.keys(droughts).forEach(k=>droughts[k]++);
     droughts[winningNumber]=0;
@@ -203,7 +215,7 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
 
   // A streak never spans two sessions: close whatever run is open when the
   // session ends, so the distribution counts streaks within sessions.
-  results.forEach(r=>flushStreak(r));
+  results.forEach(r=>{ flushStreak(r); flushRawLoss(r); });
 
   return sessionStates.map(strategyState=>({
     pnl:Math.round(strategyState.pnl*100)/100,
@@ -232,6 +244,36 @@ function flushStreak(result) {
     else result.lossStreaks.push(cur.len);
   }
   cur.type=null; cur.len=0;
+}
+
+// The targets a strategy's raw loss streaks follow, and whether this spin hit
+// each. Fibonacci: one combined target (the bet loses only when no target
+// hits); auto-chase: each dozen and column separately, since any can be chased.
+// Solution: every number on the wheel, each its own target.
+function rawTargetOutcomes(strategy, winningNumber, wheelNums) {
+  const config=strategy.config||{};
+  const isZero=winningNumber==="0"||winningNumber==="00";
+  if(strategy.type==="solution") return wheelNums.map(n=>({key:"n"+n,hit:n===winningNumber}));
+  if(config.autoChase){
+    const out=[];
+    for(let d=0;d<3;d++) out.push({key:"d"+d,hit:!isZero&&dozenOf(winningNumber)===d});
+    for(let c=0;c<3;c++) out.push({key:"c"+c,hit:!isZero&&columnOf(winningNumber)===c});
+    return out;
+  }
+  const ev=config.evenTargets||[], dz=config.dozenTargets||[], co=config.colTargets||[];
+  if(!ev.length&&!dz.length&&!co.length) return [];
+  let hit=false;
+  if(!isZero){
+    if(ev.length) hit=ev.some(k=>{const e=EVEN_MONEY.find(x=>x.key===k);return e&&e.pred(+winningNumber);});
+    else hit=dz.includes(dozenOf(winningNumber))||co.includes(columnOf(winningNumber));
+  }
+  return [{key:"t",hit}];
+}
+
+// Closes every open raw miss run at session end.
+function flushRawLoss(result) {
+  Object.keys(result.rawOpen).forEach(k=>{ if(result.rawOpen[k]>0) result.rawLossStreaks.push(result.rawOpen[k]); });
+  result.rawOpen={};
 }
 
 // Every length from 1 to the longest seen: count, share of all streaks of
@@ -285,6 +327,7 @@ function computeSimStats(result) {
     avgWinStreak, avgLossStreak,
     winStreakDist: streakDist(result.winStreaks),
     lossStreakDist: streakDist(result.lossStreaks),
+    rawLossStreakDist: streakDist(result.rawLossStreaks||[]),
     stopLossHits: result.stopLossHits,
     stopLossRate: n > 0 ? result.stopLossHits/n : 0,
     sessionPnls: pnls,
