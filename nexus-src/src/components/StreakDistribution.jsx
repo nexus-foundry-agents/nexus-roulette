@@ -14,7 +14,7 @@ function StreakDistribution({kind, rows}) {
   const bar = isRaw ? "#f97316" : isLoss ? "#ef4444" : "#22c55e";
   const txt = isLoss ? "#f87171" : "#4ade80";
   const total = rows.reduce((a,r)=>a+r.count,0);
-  const peak = Math.max(...rows.map(r=>r.pct)) || 1;
+  const peak = rows.reduce((m,r)=>r.pct>m?r.pct:m,0) || 1;
   const head = {fontSize:8,color:"#64748b",textAlign:"right"};
   const cell = {fontSize:9,textAlign:"right",fontVariantNumeric:"tabular-nums"};
   const grid = {display:"grid",gridTemplateColumns:"22px minmax(0,1fr) 40px 42px 42px 42px",alignItems:"center",gap:6};

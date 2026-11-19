@@ -276,11 +276,15 @@ function flushRawLoss(result) {
   result.rawOpen={};
 }
 
+// Largest value by loop: spreading a streak list (millions of entries in a
+// long Solution run) into Math.max overflows the call stack.
+function arrayMax(arr){ let m=0; for(let i=0;i<arr.length;i++) if(arr[i]>m) m=arr[i]; return m; }
+
 // Every length from 1 to the longest seen: count, share of all streaks of
 // that kind, share at or beyond this length, and share of the spins those
 // streaks took (count × length ÷ total spins in streaks).
 function streakDist(arr){
-  const max=arr.length?Math.max(...arr):0;
+  const max=arrayMax(arr);
   const dist={};
   arr.forEach(l=>{dist[l]=(dist[l]||0)+1;});
   const total=arr.length||1;
@@ -322,8 +326,8 @@ function computeSimStats(result) {
     winRate: result.totalSequences > 0 ? result.totalWins/result.totalSequences : 0,
     p25: pct(25), p50: pct(50), p75: pct(75),
     minPnl: pnls[0], maxPnl: pnls[n-1],
-    longestWinStreak: result.winStreaks.length ? Math.max(...result.winStreaks) : 0,
-    longestLossStreak: result.lossStreaks.length ? Math.max(...result.lossStreaks) : 0,
+    longestWinStreak: arrayMax(result.winStreaks),
+    longestLossStreak: arrayMax(result.lossStreaks),
     avgWinStreak, avgLossStreak,
     winStreakDist: streakDist(result.winStreaks),
     lossStreakDist: streakDist(result.lossStreaks),

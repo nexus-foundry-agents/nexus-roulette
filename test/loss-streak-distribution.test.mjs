@@ -23,7 +23,7 @@ async function load() {
   sandbox.exports = sandbox.module.exports;
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(code + '\n;this.__x={simRunSession,simNewResults,computeSimStats,computeTableForTrack,flushStreak,flushRawLoss,rawTargetOutcomes,streakDist,StreakDistribution,getWheelNumbers};', sandbox);
+  vm.runInContext(code + '\n;this.__x={simRunSession,simNewResults,computeSimStats,computeTableForTrack,flushStreak,flushRawLoss,arrayMax,rawTargetOutcomes,streakDist,StreakDistribution,getWheelNumbers};', sandbox);
   return sandbox.__x;
 }
 
@@ -110,4 +110,23 @@ test('version.json ends with a newline, so the deploy probe reads version and ca
   const raw = await readFile(new URL('../version.json', import.meta.url), 'utf8');
   assert.ok(raw.endsWith('\n'), 'a missing final newline fuses the probe output and blocks every deploy');
   JSON.parse(raw);
+});
+
+test('streak stats survive millions of streaks without overflowing the stack', async () => {
+  const x = await load();
+  const big = new Array(3000000).fill(1); big[5] = 400;
+  assert.equal(x.arrayMax(big), 400);
+  const r = x.simNewResults(1)[0];
+  r.lossStreaks = big; r.winStreaks = big; r.rawLossStreaks = big;
+  r.sessions = [{ pnl: 0 }];
+  const stats = x.computeSimStats(r);
+  assert.equal(stats.longestLossStreak, 400);
+  assert.equal(stats.rawLossStreakDist.length, 400);
+  const src = await readFile(new URL('simulation.js', SRC), 'utf8');
+  assert.ok(!src.includes('Math.max(...arr') && !src.includes('Math.max(...result.'), 'no spread of a streak list into Math.max');
+});
+
+test('the deploy probe appends a newline before parsing version.json and sw.js', async () => {
+  const sh = await readFile(new URL('../deploy.sh', import.meta.url), 'utf8');
+  assert.ok(sh.includes("< version.json; echo; }") && sh.includes("< sw.js; echo; }"));
 });

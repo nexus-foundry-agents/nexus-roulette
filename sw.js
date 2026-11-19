@@ -1,4 +1,4 @@
-const CACHE = 'nexus-roulette-v170';
+const CACHE = 'nexus-roulette-v171';
 const CACHE_PREFIX = 'nexus-roulette-';
 // './' is the manifest's start_url — the URL an installed app actually launches.
 // Both it and index.html are REQUIRED, so activation can never delete a populated
