@@ -105,3 +105,9 @@ test('raw targets: solution follows every number, auto-chase every dozen and col
   const page = await readFile(new URL('components/SimModePage.jsx', SRC), 'utf8');
   assert.ok(page.includes('<StreakDistribution kind="raw"'));
 });
+
+test('version.json ends with a newline, so the deploy probe reads version and cache as separate lines', async () => {
+  const raw = await readFile(new URL('../version.json', import.meta.url), 'utf8');
+  assert.ok(raw.endsWith('\n'), 'a missing final newline fuses the probe output and blocks every deploy');
+  JSON.parse(raw);
+});
