@@ -1,1 +1,1 @@
-{"version":"0.77.0","date":"2026-11-19","notes":"Simulation results list every loss streak length, from 1 spin up to the longest, with its share of the total."}
+{"version":"0.78.0","date":"2026-11-19","notes":"Simulation results add every loss streak on your target numbers from the first spin, bet or not."}
