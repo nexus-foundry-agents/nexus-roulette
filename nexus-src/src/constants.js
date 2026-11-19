@@ -16,7 +16,7 @@ const INSIDE_BET_COLOR = "#c084fc"; // same purple the board uses for covered in
 const TRACK_COLORS = ["#f59e0b","#2dd4bf","#a855f7","#f97316","#38bdf8"];
 const TRACK_ICONS = { fibonacci:"🎲", solution:"🎯", custom:"🃏" };
 const STORAGE_KEY = "nexus-roulette-v1";
-const APP_VERSION = "0.78.0";
+const APP_VERSION = "0.78.1";
 const ROI_PRESETS = [5,10,15,20,25,30];
 const UNITS = [0.25, 0.50, 1.00, 2, 5, 10]; // the quick base-bet presets; any other base is typed in (BaseBetInput.jsx)
 
@@ -38,6 +38,9 @@ const CURRENCIES = {
 };
 
 const CHANGELOG = [
+  { v:"0.78.1", date:"Nov 19, 2026", title:"Simulation Results Fix", changes:[
+    "Simulation results open again after long runs, instead of showing Maximum call stack size exceeded"
+  ]},
   { v:"0.78.0", date:"Nov 19, 2026", title:"Loss Streaks From Spin 1", changes:[
     "Simulation results add All Loss Streaks From Spin 1: every losing run on your target numbers from the first spin, bet or not",
     "The drought entry and park rules do not limit it; the table above still shows only the spins you bet",

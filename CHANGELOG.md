@@ -7,7 +7,12 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.78.1] - 2026-11-19
+
 ### Fixed
+
+- Simulation results no longer crash with "Maximum call stack size exceeded". The longest streak was found by spreading every streak into `Math.max`; a Solution run's from-spin-1 list holds millions of entries. `arrayMax` in `nexus-src/src/simulation.js` now loops instead, and a test runs the stats over three million streaks.
+- The production deploy probe in `deploy.sh` appends a newline before reading `version.json` and `sw.js`, so a live file without a final newline no longer hides the version or cache name and blocks the deploy.
 
 - `version.json` ends with a newline again. Without it the production deploy probe printed the version and the cache name on one line, read no cache name, and refused to deploy. A test in `test/loss-streak-distribution.test.mjs` now fails when the newline is missing.
 
