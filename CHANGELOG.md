@@ -7,6 +7,10 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+### Fixed
+
+- `version.json` ends with a newline again. Without it the production deploy probe printed the version and the cache name on one line, read no cache name, and refused to deploy. A test in `test/loss-streak-distribution.test.mjs` now fails when the newline is missing.
+
 ## [0.78.0] - 2026-11-19
 
 ### Added
