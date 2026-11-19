@@ -1,1 +1,1 @@
-{"version":"0.76.0","date":"2026-10-31","notes":"Every Are you sure question and every import message is the app's own dialog, never the browser's pop-up."}
+{"version":"0.77.0","date":"2026-11-19","notes":"Simulation results list every loss streak length, from 1 spin up to the longest, with its share of the total."}

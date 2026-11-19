@@ -72,6 +72,7 @@ const FILES = [
   'components/BoardPhoto.jsx',
   'board-return.mjs',
   // Sim UI — depends on simulation + ui + engine
+  'components/StreakDistribution.jsx',
   'components/SimModePage.jsx',
   // Sessions browser sheet (F13), mounted by StatsPage. Depends on ui (Modal, FieldLabel), BoardPhoto (BOARD_MAX_NUMBERS), constants (RED) and sessions-browse.js.
   'components/SessionsPage.jsx',

@@ -279,10 +279,7 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
       // A run stopped mid-experiment still finalizes for display, but its partial
       // summary is NOT banked into the experiment history.
       results.forEach((r,si)=>{
-        if(r.currentStreak.len>0){
-          if(r.currentStreak.type)r.winStreaks.push(r.currentStreak.len);
-          else r.lossStreaks.push(r.currentStreak.len);
-        }
+        flushStreak(r);
         r.totalSequences=r.totalWins+r.totalSeqLosses;
         if(bankSummary) history[si].push({
           pnl:Math.round(r.totalPnl*100)/100,
@@ -693,41 +690,8 @@ function SimModePage({simCfg, setSimCfg, simRunning, setSimRunning, simProgress,
               </div>
             </div>
 
-            {/* Win streak distribution */}
-            {stats.winStreakDist.length>0 && (
-              <div style={{marginBottom:8}}>
-                <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Win Streak Distribution</div>
-                <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                  {stats.winStreakDist.slice(0,10).map(({len,pct:p})=>(
-                    <div key={len} style={{display:"flex",alignItems:"center",gap:6}}>
-                      <div style={{fontSize:9,color:"#64748b",width:16,textAlign:"right"}}>{len}</div>
-                      <div style={{flex:1,height:10,background:"#1e2d3d",borderRadius:4,overflow:"hidden"}}>
-                        <div style={{height:"100%",background:"#22c55e",borderRadius:4,width:`${Math.min(100,p)}%`}}/>
-                      </div>
-                      <div style={{fontSize:9,color:"#4ade80",width:36,textAlign:"right"}}>{p.toFixed(1)}%</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Loss streak distribution */}
-            {stats.lossStreakDist.length>0 && (
-              <div>
-                <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Loss Streak Distribution</div>
-                <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                  {stats.lossStreakDist.slice(0,10).map(({len,pct:p})=>(
-                    <div key={len} style={{display:"flex",alignItems:"center",gap:6}}>
-                      <div style={{fontSize:9,color:"#64748b",width:16,textAlign:"right"}}>{len}</div>
-                      <div style={{flex:1,height:10,background:"#1e2d3d",borderRadius:4,overflow:"hidden"}}>
-                        <div style={{height:"100%",background:"#ef4444",borderRadius:4,width:`${Math.min(100,p)}%`}}/>
-                      </div>
-                      <div style={{fontSize:9,color:"#f87171",width:36,textAlign:"right"}}>{p.toFixed(1)}%</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <StreakDistribution kind="loss" rows={stats.lossStreakDist}/>
+            <StreakDistribution kind="win" rows={stats.winStreakDist}/>
 
             <SessionExplorer sessions={r.sessions} cur={cur}/>
           </Card>
