@@ -1,11 +1,20 @@
 # Changelog
 
-Last Updated: 2026-10-31
+Last Updated: 2026-11-19
 
 Notable code and documentation changes are recorded here. Release versions are assigned only when
 `develop` is promoted to `main`; feature-branch work remains under Unreleased.
 
 ## [Unreleased]
+
+### Changed
+
+- Simulation mode's Loss Streak Distribution lists every streak length from 1 spin up to the longest streak in the run, instead of stopping at 10. Each length shows its count, its share of all loss streaks, the share of loss streaks at least that long, and the share of losing spins that fell in streaks of that length. Win Streak Distribution uses the same table (`nexus-src/src/components/StreakDistribution.jsx`, one component with a `kind` parameter).
+- A streak now ends when its session ends (`flushStreak` in `nexus-src/src/simulation.js`), so the distribution counts streaks within sessions and a streak can no longer run on from one simulated session into the next.
+
+### Tests
+
+- Added `test/loss-streak-distribution.test.mjs`: every length from 1 to the longest is listed with correct count and shares; a flat red bet over 4,000 sessions puts every spin in exactly one streak, no streak spans a session, and the 1-spin share lands near the expected 48.6%; the table renders lengths past the old ten-row cap and both distributions mount the one component.
 
 ## [0.76.0] - 2026-10-31
 

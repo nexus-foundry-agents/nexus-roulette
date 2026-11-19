@@ -201,6 +201,10 @@ function simRunSession(strategies, tables, wheelNums, spinsPerSession, results, 
     droughts[winningNumber]=0;
   }
 
+  // A streak never spans two sessions: close whatever run is open when the
+  // session ends, so the distribution counts streaks within sessions.
+  results.forEach(r=>flushStreak(r));
+
   return sessionStates.map(strategyState=>({
     pnl:Math.round(strategyState.pnl*100)/100,
     wins:strategyState.wins, losses:strategyState.losses, seqLosses:strategyState.seqLosses, stopLossHits:strategyState.stopLossHits,
@@ -220,20 +224,40 @@ function pushStreak(result, isWin) {
   }
 }
 
+// Closes the open streak (if any) into winStreaks/lossStreaks and resets it.
+function flushStreak(result) {
+  const cur = result.currentStreak;
+  if(cur.len>0){
+    if(cur.type) result.winStreaks.push(cur.len);
+    else result.lossStreaks.push(cur.len);
+  }
+  cur.type=null; cur.len=0;
+}
+
+// Every length from 1 to the longest seen: count, share of all streaks of
+// that kind, share at or beyond this length, and share of the spins those
+// streaks took (count × length ÷ total spins in streaks).
+function streakDist(arr){
+  const max=arr.length?Math.max(...arr):0;
+  const dist={};
+  arr.forEach(l=>{dist[l]=(dist[l]||0)+1;});
+  const total=arr.length||1;
+  const spins=arr.reduce((a,b)=>a+b,0)||1;
+  let remaining=arr.length;
+  return Array.from({length:max},(_,i)=>{
+    const len=i+1, count=dist[len]||0;
+    const row={len,count,pct:count/total*100,atLeastPct:remaining/total*100,spinPct:count*len/spins*100};
+    remaining-=count;
+    return row;
+  });
+}
+
 function computeSimStats(result) {
   const sessions = result.sessions;
   if(!sessions.length) return null;
   const pnls = sessions.map(s=>s.pnl).sort((a,b)=>a-b);
   const n = pnls.length;
   const pct = p => pnls[Math.floor(p*n/100)]||0;
-
-  function streakDist(arr){
-    const max=arr.length?Math.max(...arr):0;
-    const dist={};
-    arr.forEach(l=>{dist[l]=(dist[l]||0)+1;});
-    const total=arr.length||1;
-    return Array.from({length:max},(_,i)=>({len:i+1,count:dist[i+1]||0,pct:((dist[i+1]||0)/total*100)}));
-  }
 
   const avgWinStreak = result.winStreaks.length ? result.winStreaks.reduce((a,b)=>a+b,0)/result.winStreaks.length : 0;
   const avgLossStreak = result.lossStreaks.length ? result.lossStreaks.reduce((a,b)=>a+b,0)/result.lossStreaks.length : 0;
