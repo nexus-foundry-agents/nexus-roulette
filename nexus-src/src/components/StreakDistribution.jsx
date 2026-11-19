@@ -5,8 +5,13 @@
 // length, and share of the spins spent inside streaks of this kind.
 function StreakDistribution({kind, rows}) {
   if(!rows || !rows.length) return null;
-  const isLoss = kind==="loss";
-  const bar = isLoss ? "#ef4444" : "#22c55e";
+  const isRaw = kind==="raw";
+  const isLoss = kind==="loss" || isRaw;
+  const title = isRaw ? "All Loss Streaks From Spin 1" : (isLoss?"Loss":"Win")+" Streak Distribution";
+  const note = isRaw
+    ? "Every losing run on this strategy's target numbers, counted from the first spin of each session whether or not a bet was placed (drought entry and park rules ignored)."
+    : "Counted only on spins the strategy bet.";
+  const bar = isRaw ? "#f97316" : isLoss ? "#ef4444" : "#22c55e";
   const txt = isLoss ? "#f87171" : "#4ade80";
   const total = rows.reduce((a,r)=>a+r.count,0);
   const peak = Math.max(...rows.map(r=>r.pct)) || 1;
@@ -16,10 +21,10 @@ function StreakDistribution({kind, rows}) {
   return (
     <div style={{marginBottom:10}} data-streak-dist={kind}>
       <div style={{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>
-        {isLoss?"Loss":"Win"} Streak Distribution
+        {title}
       </div>
       <div style={{fontSize:9,color:"#475569",marginBottom:6,lineHeight:1.4}}>
-        {total} {isLoss?"loss":"win"} streaks across all sessions, lengths 1 to {rows.length} in a row. Streaks end at the session end.
+        {total} {isLoss?"loss":"win"} streaks across all sessions, lengths 1 to {rows.length} in a row. {note} Streaks end at the session end.
       </div>
       <div style={{...grid,marginBottom:3}}>
         <div style={head}>Len</div><div/>

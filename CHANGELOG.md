@@ -7,6 +7,17 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.78.0] - 2026-11-19
+
+### Added
+
+- Simulation results show a third table, All Loss Streaks From Spin 1. It counts every losing run on the strategy's target numbers from the first spin of each session, whether or not a bet was placed: the min-drought entry and the park rules do not gate it. The Loss Streak Distribution above it still counts only the spins the strategy bet.
+- Targets per strategy (`rawTargetOutcomes` in `nexus-src/src/simulation.js`): a dozen, column or even-money strategy follows its chosen targets as one bet (a spin is a loss when none of them hits); auto-chase follows each of the three dozens and three columns separately; Solution follows every number on the wheel separately. Zero is a loss for every outside target. Runs end at the session end.
+
+### Tests
+
+- `test/loss-streak-distribution.test.mjs`: with a min-drought entry on red, the from-spin-1 table counts runs the strategy never bet, no run crosses a session, and the 1-spin share lands near 48.6%; Solution follows every number and auto-chase all six dozens and columns.
+
 ## [0.77.0] - 2026-11-19
 
 ### Changed
