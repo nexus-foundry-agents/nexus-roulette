@@ -7,6 +7,8 @@ Notable code and documentation changes are recorded here. Release versions are a
 
 ## [Unreleased]
 
+## [0.77.0] - 2026-11-19
+
 ### Changed
 
 - Simulation mode's Loss Streak Distribution lists every streak length from 1 spin up to the longest streak in the run, instead of stopping at 10. Each length shows its count, its share of all loss streaks, the share of loss streaks at least that long, and the share of losing spins that fell in streaks of that length. Win Streak Distribution uses the same table (`nexus-src/src/components/StreakDistribution.jsx`, one component with a `kind` parameter).
